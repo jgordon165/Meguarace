@@ -1,0 +1,28 @@
+# Build output
+build/
+out/
+.vs/
+*.user
+
+# Original game data is NEVER committed. Point the engine at your own CD copy
+# with --data <path>. These patterns are a safety net in case files get
+# copied into the tree by accident.
+data/
+gamedata/
+cd/
+*.EXE
+*.exe
+*.HNM
+*.hnm
+*.DAT
+*.dat
+*.CUE
+*.cue
+*.BIN
+*.bin
+*.ISO
+*.iso
+
+# Reverse-engineering output may contain decompiled original code; keep local.
+re/output/
+re/ghidra_project/
