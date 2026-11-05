@@ -67,8 +67,8 @@ GitHub Actions (same layout as the Aleph One fork):
 
 | Workflow | When | What |
 |---|---|---|
-| `CI-build` | every push | Linux (GCC, Clang), macOS x64 + arm64, Windows x64 + x86; build and test |
-| `code-analysis` | push/PR to `master` | CodeQL security-and-quality on our C++ |
+| `CI-build` | every push, or manually (choose all / linux / mac-osx / windows) | Linux (GCC, Clang), macOS x64 + arm64, Windows x64 + x86; build and test |
+| `code-analysis` | push/PR to `master`, or manually | CodeQL security-and-quality on our C++ |
 | `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx` |
 | `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
 

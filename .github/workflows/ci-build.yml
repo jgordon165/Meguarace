@@ -1,14 +1,27 @@
 name: CI-build
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  # Manual runs: Actions -> CI-build -> Run workflow (pick a branch and platforms).
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to build
+        type: choice
+        default: all
+        options: [all, linux, mac-osx, windows]
 
 # Same rule as the Aleph One fork: build pushes, and pull requests only when
 # they come from another repository (a same-repo PR is already built by its push).
+# Manual runs build the platforms picked in the form.
 jobs:
   linux:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'linux')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -22,9 +35,11 @@ jobs:
         uses: ./.github/actions/run-tests
 
   linux-clang:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'linux')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -40,9 +55,11 @@ jobs:
         uses: ./.github/actions/run-tests
 
   mac-osx-x64:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'mac-osx')
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v5
@@ -54,9 +71,11 @@ jobs:
         uses: ./.github/actions/run-tests
 
   mac-osx-arm:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'mac-osx')
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -68,9 +87,11 @@ jobs:
         uses: ./.github/actions/run-tests
 
   windows-x64:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'windows')
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
@@ -83,9 +104,11 @@ jobs:
         uses: ./.github/actions/run-tests
 
   windows-x86:
-    if: github.event_name != 'pull_request' ||
+    if: (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name !=
-      github.event.pull_request.base.repo.full_name
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'windows')
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
