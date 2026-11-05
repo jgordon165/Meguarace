@@ -20,7 +20,8 @@ local PLAYER_AHEAD = 1    -- sections between the camera and the player's car
 local MAXSPEED = 3.0      -- sections per video frame (12.5 fps); >1 skips frames
 local STEER = 140         -- screen pixels per second
 
-local C_TEXT, C_EDGE, C_TILE_BONUS, C_TILE_MALUS, C_MASK = 249, 250, 251, 252, 254
+-- Overlay colours in 112..127, unused during a race (rival cars use 192-255).
+local C_TEXT, C_EDGE, C_TILE_BONUS, C_TILE_MALUS, C_MASK = 120, 123, 124, 125, 126
 
 function S:enter(name)
     ui.install()

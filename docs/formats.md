@@ -333,9 +333,76 @@ Projected y gets the per-track offset `[0x426]` = `DS:0x2B0[track] + 3`: −21
 on every track except LST (−45). Track order in the EXE: NS1 MV1 FC1 NGL SUB
 NS2 MV2 PAR FC2 JNK MV3 FC3 NS3 LST TOKY HOLD.
 
+## Race rules (RACEPRG.EXE)
+
+Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
+
+### Scenery and speed
+
+- The race loop fetches the next video frame whenever speed > 0 (0x0739 →
+  0xCBBE). Fetching is paced only by the CD stream, not by speed, so the
+  scenery moves at a fixed rate and stops at speed 0. This port uses the
+  videos' 12.5 fps.
+- Speed `[0xC9E]` runs 0–180; the dashboard shows it ÷ 10 (`[0xC9A]`). Above
+  180 it drops 5 per tick.
+- Keyboard throttle (0x2CC9): +4 per tick accelerating, −4 braking, −1
+  coasting. Joystick and mouse set a target (0x2959, 0x2A37).
+- Speed decides who gains on whom: the rival's section is `[0xDFC]`, the
+  camera's is `[0x6957]` = video frame − 1.
+- Game time is `[0x7038]` ticks. The tick rate isn't confirmed; the port
+  uses 25 per second.
+
+### Lanes and tiles
+
+- Lane = the screen band under the car's x `[0xCB6]` (0x2031): 0–59, 60–114,
+  115–194, 195–249, 250–320. It is not measured across the road.
+- The ZNN buffer is at `[0x696C]`; the lap length in rows is `[0x8FA]`. The
+  row under the car is copied to `0xCE2–0xCE6`, and the effect dispatcher at
+  0x1D94 applies it.
+- Sound per code: `DS:0xE47` (word index, −1 = none) into the name table at
+  `DS:0x56A6`.
+
+| Code | Sound | Effect (variable) |
+|---|---|---|
+| 1 | MALUS9 | energy − drain size `[0x68DB]` (then drain size = 50) |
+| 2 | MALUS11 | `[0x690D]` − 10 (if ≥ 10); called "points" here |
+| 3 | — | forced braking until speed ≤ 130 (`[0x68CF]`) |
+| 4 | — | spin: steering sequence + 5 px/tick drift (speed > 15), else as 7 |
+| 5 | PLUARME | weapon lost, energy 0 |
+| 6 | MALUS7 | timer `[0x68EB]` for `[0x812]` ticks (effect not traced yet) |
+| 7 | — | skid: steering sequence + 2 px/tick drift (speed ≥ 8) |
+| 8 | BONUS16 | flag `[0x68DD]` (not traced yet) |
+| 9 | MALUS6 | timer `[0x68E7]` for `[0x812]` ticks (not traced yet) |
+| 10 | MALUS2 | timer `[0x68FB]`, 800 ticks (not traced yet) |
+| 17 | ENERGYP | energy + `[0x68DB]` (then 70) |
+| 18 | BONUS1 | `[0x690D]` + 10 |
+| 19 | BONUS11 | super speed: speed held at 280 for 400 ticks (`[0x6903]`) |
+| 20 | BONUS10 | weapon 1 |
+| 21 | BONUS10 | weapon 3, energy + 120 |
+| 22 | BONUS10 | weapon 2, energy + 60 |
+| 23 | BONUS15 | flag `[0x68E1]` if the car allows it (`[0x810]`) |
+| 24 | BONUS14 | flag `[0x68EF]` if the car allows it (`[0x80E]`) |
+| 25 | — | boost: speed 280 for 100 ticks, resets the slide state |
+
+Energy `[0x6911]` is the EN gauge, max 450 (0x117A). Firing costs energy
+(0x2D1B): `[0x80A]` ÷ 2, more for some weapons.
+
+★ `MALUS2.VOC`, `MALUS7.VOC` and `BONUS15.VOC` declare a time constant of
+6 (4 kHz). Every other effect is 7.5–9.6 kHz, so this port plays those three
+at 8 kHz.
+
+### Dashboard tile scanner
+
+0x10C7–0x115D draws the next three ZNN rows as `ZONES` icons, 10 px apart.
+The icon is `code − 1` for codes 1–10 and `code − 7` for 17–25. The panel's
+position on each car's dashboard isn't read yet; the port draws it in the
+left box.
+
 ## Still to decode
 
-- `.ZNN` code meanings (which bonus/penalty each value is).
+- What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
+- Per-car values (`[0x800]`–`[0x812]`: weapons allowed, timer lengths, fire cost).
+- Weapons, rival AI and collisions (the port's are placeholders).
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.

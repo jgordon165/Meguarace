@@ -61,7 +61,7 @@ function S:update(dt)
     if input.pressed("Return") then
         local base = f.path:upper():match("^(.+)%.HNM$")
         if base and dat.exists(base .. ".ZNN") then
-            scenes.push(require("scenes.trackview"), base)     -- race track: drive it
+            scenes.push(require("scenes.race"), base)          -- race track: race on it
         elseif base then
             scenes.push(require("scenes.player"), f.path, { hud = true })
         else
@@ -69,6 +69,10 @@ function S:update(dt)
         end
     end
     if input.pressed("V") then scenes.push(require("scenes.rawview"), f, self.src) end
+    if input.pressed("D") then                                  -- track debug viewer
+        local base = f.path:upper():match("^(.+)%.HNM$")
+        if base and dat.exists(base .. ".ZNN") then scenes.push(require("scenes.trackview"), base) end
+    end
 end
 
 function S:draw()
@@ -90,7 +94,7 @@ function S:draw()
         gfx.text(196, y, ui.human(f.size), ui.DIM)
         gfx.text(236, y, f.kind, ui.DIM)
     end
-    ui.footer("ENTER PLAY/DRIVE/HEX   V RAW IMAGE   ESC QUIT")
+    ui.footer("ENTER PLAY/RACE/HEX  D TRACK DEBUG  V RAW  ESC QUIT")
 end
 
 return S
