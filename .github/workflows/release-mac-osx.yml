@@ -1,0 +1,60 @@
+name: release-mac-osx
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Build
+      uses: ./.github/actions/build-mac-osx   # universal: arm64 + x86_64
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    # Signing and notarization run only when the signing secrets are set on
+    # the repository (same secret names as the Aleph One fork). Without them
+    # the release is unsigned: macOS users right-click > Open the first time.
+    - name: Codesign
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+        MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        MACOS_CI_KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+      if: env.MACOS_CERTIFICATE != ''
+      run: |
+        echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+        security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime "$GITHUB_WORKSPACE/build/megarace" -v
+
+    - name: Notarize
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        PROD_MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
+        PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+        PROD_MACOS_NOTARIZATION_PWD: ${{ secrets.PROD_MACOS_NOTARIZATION_PWD }}
+      if: env.MACOS_CERTIFICATE != '' && env.PROD_MACOS_NOTARIZATION_APPLE_ID != ''
+      run: |
+        xcrun notarytool store-credentials "notarytool-profile" --apple-id "$PROD_MACOS_NOTARIZATION_APPLE_ID" --team-id "$PROD_MACOS_NOTARIZATION_TEAM_ID" --password "$PROD_MACOS_NOTARIZATION_PWD"
+        ditto -c -k --keepParent "$GITHUB_WORKSPACE/build/megarace" megarace-notarize.zip
+        xcrun notarytool submit megarace-notarize.zip --keychain-profile "notarytool-profile" --wait
+
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-macos-universal
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-macos-release
+        if-no-files-found: error
+        path: dist/*.zip

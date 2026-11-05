@@ -18,6 +18,7 @@ struct Engine {
     Audio audio;
     Input input;
     bool  quit = false;
+    int   exitCode = 0;
     std::string dataArg;
     std::string musicArg;
 };
