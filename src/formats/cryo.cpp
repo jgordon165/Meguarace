@@ -110,6 +110,61 @@ std::vector<uint8_t> unHsq(const uint8_t* d, size_t n) {
     return out;
 }
 
+// ======================================================== sprites ==========
+
+bool SpriteSet::load(const std::vector<uint8_t>& d) {
+    images_.clear();
+    palette_.clear();
+    auto u16 = [&](size_t at) -> unsigned {
+        if (at + 2 > d.size()) throw std::runtime_error("sprite set truncated");
+        return d[at] | d[at + 1] << 8;
+    };
+    size_t tbl = u16(0);
+    if (tbl < 2 || tbl + 2 > d.size()) return false;
+    palette_.assign(d.begin() + 2, d.begin() + long(tbl));
+    size_t first = u16(tbl);
+    size_t n = first / 2;
+    if (n == 0 || tbl + first > d.size()) return false;
+    std::vector<size_t> offs(n);
+    for (size_t i = 0; i < n; ++i) offs[i] = tbl + u16(tbl + 2 * i);
+    images_.resize(n);
+    for (size_t i = 0; i < n; ++i) {
+        size_t o = offs[i];
+        size_t end = i + 1 < n ? offs[i + 1] : d.size();
+        if (o + 4 > d.size() || end > d.size() || end < o + 4) continue;
+        unsigned wf = u16(o);
+        int w = int(wf & 0x7FFF), h = d[o + 2];
+        bool packed = wf & 0x8000;
+        if (w == 0 || h == 0) continue;               // data table, not an image
+        const size_t want = size_t(w) * size_t(h);
+        const uint8_t* p = d.data() + o + 4;
+        const uint8_t* e = d.data() + end;
+        Image& img = images_[i];
+        if (!packed) {
+            if (size_t(e - p) < want) continue;       // not a raw image either
+            img.pixels.assign(p, p + want);
+        } else {
+            // PackBits: n < 0x80 -> copy n+1 bytes; n >= 0x80 -> repeat next byte 257-n times.
+            img.pixels.reserve(want);
+            while (p < e && img.pixels.size() < want) {
+                uint8_t c = *p++;
+                if (c & 0x80) {
+                    if (p >= e) break;
+                    img.pixels.insert(img.pixels.end(), size_t(257 - c), *p++);
+                } else {
+                    size_t k = std::min<size_t>(size_t(c) + 1, size_t(e - p));
+                    img.pixels.insert(img.pixels.end(), p, p + k);
+                    p += k;
+                }
+            }
+            img.pixels.resize(want, 0);
+        }
+        img.w = w;
+        img.h = h;
+    }
+    return true;
+}
+
 // ============================================================ HNM ==========
 //
 // Overlay method 173 ("0xAD"), verified on every MegaRace video:

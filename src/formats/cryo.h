@@ -35,6 +35,28 @@ bool isHsq(const uint8_t* d, size_t n);
 // Throws std::runtime_error on malformed input.
 std::vector<uint8_t> unHsq(const uint8_t* d, size_t n);
 
+// ---- Sprite sets (most graphics .HSQ files, after unpacking) ---------------
+//   u16 table_offset
+//   palette ranges (as in HNM) from byte 2 up to table_offset
+//   u16 entry offsets, relative to table_offset; count = first offset / 2
+//   entry: u16 width (bit 15 = PackBits-compressed), u8 height, u8 (0xFF), pixels
+// Index 0 is transparent. Entries with width 0 are data tables, not images.
+class SpriteSet {
+public:
+    struct Image { int w = 0, h = 0; std::vector<uint8_t> pixels; };
+
+    bool load(const std::vector<uint8_t>& unpacked);   // throws on malformed data
+    size_t count() const { return images_.size(); }
+    const Image* image(size_t i) const {                // nullptr for data entries
+        return i < images_.size() && images_[i].w > 0 ? &images_[i] : nullptr;
+    }
+    const std::vector<uint8_t>& paletteBlock() const { return palette_; }   // raw 6-bit ranges
+
+private:
+    std::vector<Image> images_;
+    std::vector<uint8_t> palette_;
+};
+
 // ---- HNM (1) video ---------------------------------------------------------
 class HnmVideo {
 public:

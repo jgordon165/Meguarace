@@ -177,8 +177,8 @@ single video. Lap lengths in sections: NS1 476, FC1 806, SUB 809, NGL 858,
 MV1 802, TOKY 801 (= rows in the `.ZNN`).
 
 Every track frame is a full 320×152 keyframe (mode 0xFE), so frames can be
-skipped freely at speed. The game draws the video at y=24 on the
-320×200 screen.
+skipped freely at speed. The game draws the video at y=0 with the dashboard
+below it, and adds a per-track offset to projected y (see Screen layout).
 
 ### `pt`: sections
 
@@ -207,7 +207,7 @@ X  = (-dx·f3 + dy·f4) / 16384
 Y  = (-dx·f5 - dy·f6 + dz·f7) / 16384
 Z  = (-dx·f8 - dy·f9 - dz·f10) / 16384 + f11/8
 X' = (f13·X - f12·Y) / 4096        Y' = (f12·X + f13·Y) / 4096
-sx = 160 + X'·2.3·88 / Z           sy = (131 - Y'·230 / Z)·200/262 + shake(DS:0x426)
+sx = 160 + X'·2.3·88 / Z           sy = (131 - Y'·230 / Z)·200/262 + [0x426]  (per-track, see Screen layout)
 ```
 
 Car sprites are placed by evaluating this for a point on a road section
@@ -251,9 +251,94 @@ Values fall in two families, 1–10 and 17–25 (bit 4 set). They match the
 on-track bonus/penalty tiles (sounds `BONUS*.VOC`, `MALUS*.VOC`); the exact
 meaning of each code still has to be read from the EXE.
 
+## Graphics (sprite sets)
+
+Most `.HSQ` graphics files unpack to the same container:
+
+```
+u16 table_offset
+palette ranges, bytes 2 .. table_offset (same encoding as HNM: start, count, 6-bit RGB; FF FF ends)
+u16 offsets[n], relative to table_offset; n = offsets[0] / 2
+entry: u16 width (bit 15 = PackBits), u8 height, u8 (always 0xFF), pixels
+```
+
+- Raw entries are `width × height` bytes. Packed entries use PackBits: a byte
+  `n < 0x80` copies the next `n + 1` bytes, and `n ≥ 0x80` repeats the next
+  byte `257 − n` times.
+- Index 0 is transparent.
+- Entries with width 0 are data tables, not images. The 9 tables in each
+  `_XXX.HSQ` (195 bytes each) look like sprite-scaling tables.
+- ★ A sprite palette sets colour 0 too. Ignore that: the videos draw black
+  with colour 0.
+
+The files in RACEPRG.EXE's own name table that use a different layout,
+with the table near the end (`DETRITUS`, `ALARME`, `LENNY`, `MAEVA`,
+`NEWSAN`, `PAGA`), are not decoded yet.
+
+### Palette layout during a race
+
+| Colours | Owner |
+|---|---|
+| 0 | black (video) / transparent (sprites) |
+| 1–64 | track video (checked on every track) |
+| 65–71 | shared car shading |
+| 72–111 | dashboard (`T<XX>_2`, `T<XX>`) |
+| 128–191 | the player's car (`<XX>_A/B/C`) |
+| 192–255 | rival cars (`_XXX`): the same model's `<XX>_A` palette moved up by 64 |
+
+So one player car and one rival model can be on screen together: all rivals
+on a track are the same car.
+
+### Cars
+
+Codes in game order: `JO` Jose, `RA` Ramon, `OU` Ouzbel, `PA` Paloma, `LU` Luis,
+`OM` Omega, `HO` Hooper, `MA` Maria.
+
+| File | Contents |
+|---|---|
+| `<XX>_A` | 17 body images, from straight behind (0) round to head-on (16), plus the palette |
+| `<XX>_B`, `<XX>_C` | wheel frames drawn over the body, alternated to spin the wheels. Bottom-left aligned on images 0–10; offsets for 11–16 are not decoded yet |
+| `_JOS _RAM _OUZ _PAL _LUI _OME _HOO _MAR` | rival version: 11 rear views (0–10) in colours 192–255, plus 9 data tables |
+| `T<XX>_2` | dashboard: two 160×47/48 halves, drawn at y = 152 |
+| `T<XX>` | dashboard gauge pieces |
+| `I_<NAME>.HNM` | showcase video of each car |
+
+Image choice (RACEPRG 0x1B45): `angle` = (160 − car x) / 8, eased one step per
+tick, minus the turn and skid values. The image is `DS:0x93C[|angle|]` (96
+entries, 0..16), mirrored when `angle` is negative.
+
+Player car placement (RACEPRG 0x1882, 0x1A89):
+- 1 section ahead of the camera (`DS:0x42C` per track: 1 section, 0/8).
+- Bottom edge on the line between the projected inner road edges
+  (cross-section points 1 and 2) at the car's screen x.
+- Full size.
+
+### Other graphics
+
+| File | Contents |
+|---|---|
+| `CASQUE` | the racer in a helmet: two 160×152 halves |
+| `CONTROL`, `KONTROL`, `QONTROL` | options menu in different languages |
+| `PANEL2` | car selection: car thumbnails, buttons, bars (full palette) |
+| `EXPLOSE` | explosion animation (24 frames, own palette) |
+| `FUMEE` | smoke and debris |
+| `ZONES`, `ZONES_` | 21 lane-tile icons |
+| `PALOMBRE` | car shadow |
+| `FONTOPT`, `FONTHALL`, `FONTEOPT`… | fonts, 9×9 |
+
+### Screen layout during a race
+
+The video is drawn at y = 0 (rows 0–151) and the dashboard at rows 152–199.
+Projected y gets the per-track offset `[0x426]` = `DS:0x2B0[track] + 3`: −21
+on every track except LST (−45). Track order in the EXE: NS1 MV1 FC1 NGL SUB
+NS2 MV2 PAR FC2 JNK MV3 FC3 NS3 LST TOKY HOLD.
+
 ## Still to decode
 
 - `.ZNN` code meanings (which bonus/penalty each value is).
+- Wheel-frame offsets for car images 11–16.
+- The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
+- The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).
 - HSQ graphics (`_JOS.HSQ`, `CASQUE.HSQ`, `PANEL2.HSQ`...): sprite/image layouts.
 - `.SUB` subtitle timing (text is plain; a header of offsets precedes it).

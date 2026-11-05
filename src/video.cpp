@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -129,6 +130,59 @@ void Video::setPalette(const uint8_t* rgb, size_t len, int first, bool sixBit) {
             b = uint8_t((b & 63) << 2 | (b & 63) >> 4);
         }
         setColor(first + int(n / 3), r, g, b);
+    }
+}
+
+void Video::applyPaletteBlocks(const uint8_t* p, size_t n, int shift) {
+    size_t i = 0;
+    while (i + 2 <= n) {
+        int start = p[i], count = p[i + 1];
+        i += 2;
+        if (start == 0xFF && count == 0xFF) break;
+        if (count == 0) count = 256;
+        for (int k = 0; k < count && i + 3 <= n; ++k, i += 3) {
+            auto x = [](uint8_t v) { v &= 63; return uint8_t(v << 2 | v >> 4); };
+            // Colour 0 is "transparent" in sprites, but the videos draw black
+            // with it, so sprite palettes must not change it.
+            if (start + k == 0) continue;
+            int at = start + k + (start >= 128 ? shift : 0);
+            if (at > 255) continue;
+            setColor(at, x(p[i]), x(p[i + 1]), x(p[i + 2]));
+        }
+    }
+}
+
+void Video::setClip(std::vector<std::vector<int>> rows, int yOffset) {
+    clip_ = std::move(rows);
+    clipY_ = yOffset;
+    clipOn_ = true;
+}
+
+bool Video::visible(int x, int y) const {
+    if (!clipOn_) return true;
+    int r = y - clipY_;
+    if (r < 0 || r >= int(clip_.size())) return false;
+    const auto& s = clip_[size_t(r)];
+    for (size_t k = 0; k + 1 < s.size(); k += 2)
+        if (x >= s[k] && x < s[k + 1]) return true;
+    return false;
+}
+
+void Video::sprite(const uint8_t* px, int w, int h, int x, int y, double scale, bool flip) {
+    if (w <= 0 || h <= 0 || scale <= 0) return;
+    int dw = std::max(1, int(w * scale + 0.5)), dh = std::max(1, int(h * scale + 0.5));
+    for (int dy = 0; dy < dh; ++dy) {
+        int Y = y + dy;
+        if (Y < 0 || Y >= h_) continue;
+        int sy = dy * h / dh;
+        for (int dx = 0; dx < dw; ++dx) {
+            int X = x + dx;
+            if (X < 0 || X >= w_) continue;
+            int sx = dx * w / dw;
+            if (flip) sx = w - 1 - sx;
+            uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
+            if (c && visible(X, Y)) fb_[size_t(Y) * w_ + X] = c;
+        }
     }
 }
 

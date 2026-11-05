@@ -38,10 +38,11 @@ file inside the archive. Enter plays a video, opens a race track in the
 **track viewer**, or hex-views a file (HSQ files shown decompressed); V shows
 a file as raw 8-bit pixels.
 
-The track viewer drives along a track video using its decoded data: Up/Down
-for speed, Left/Right for lane, A/Z to move the stand-in car further ahead
-or closer, and E/T/M to toggle the road edges, lane tiles and occlusion mask
-overlays. Esc or Enter skips a
+The track viewer drives along a track video with the game's own cars: your
+car (with its dashboard) and three rivals that hide behind scenery the way
+they do in the game. Up/Down for speed, Left/Right to steer, C to change your
+car, R to change the rivals, and E/T/M/H to toggle the road edges, lane
+tiles, occlusion mask and info line. Esc or Enter skips a
 video. Set `MEGARACE_SKIP_INTRO=1` to skip the boot sequence.
 
 Tested against the US v1.0.1 CD. The disc has no CD audio tracks; music and
@@ -80,7 +81,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | HSQ decompression | Done (all 91 files) |
 | HNM video + soundtrack | Done (all 109 videos, 65,234 frames) |
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
-| Sprites / UI graphics (HSQ contents), fonts, subtitles, VOC effects | To do |
+| Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
+| Menus, fonts, subtitles, VOC effects, explosions | To do |
 | Menus, racing, AI, weapons | To do (Lua) |
 
 Format notes: [docs/formats.md](docs/formats.md).
@@ -93,7 +95,8 @@ src/formats/    C++ decoders: MEGARACE.DAT, HSQ, HNM video
 scripts/        Lua game code
   main.lua        entry point (game.init/update/draw)
   core/           scene stack, binary reader, UI helpers, asset manifest
-  formats/        track.lua (sections, projection, masks, lane tiles); sniff.lua identifies files
+  formats/        track.lua (sections, projection, masks, lane tiles), cars.lua (car sprites,
+                  dashboards, rivals); sniff.lua identifies files
   scenes/         video player, track viewer, explorer, hex view, raw image view, no-data screen
 tools/          identify_exe.py, cryo.py (archive/HSQ), hnm.py (reference video decoder)
 docs/           formats.md: everything verified about the file formats
@@ -105,9 +108,10 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | Table | Functions |
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
-| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)` |
+| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)` |
 | `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played()`, optional `music(track)` for WAV tracks |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
+| `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
 | `input` | `down(key) pressed(key) released(key)`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
 | `sys` | `ticks() quit() log(v)` and `data_path music_path music_mounted` |
