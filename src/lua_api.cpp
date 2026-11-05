@@ -9,6 +9,9 @@ extern "C" {
 
 #include <cstdio>
 #include <string>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static Engine& E(lua_State* L) {
     return *static_cast<Engine*>(lua_touserdata(L, lua_upvalueindex(1)));
@@ -146,6 +149,51 @@ static int input_pressed(lua_State* L)  { lua_pushboolean(L, E(L).input.pressed(
 static int input_released(lua_State* L) { lua_pushboolean(L, E(L).input.released(luaL_checkstring(L, 1))); return 1; }
 
 // --------------------------------------------------------------- sys ------
+
+// sys.save(name, text) / sys.load(name) -> text|nil: small files in the
+// per-user preferences folder (settings, high scores). Names are plain
+// file names; anything else is refused.
+static std::string prefFile(const char* name) {
+    std::string n = name;
+    if (n.empty() || n.find_first_of("/\\:") != std::string::npos || n[0] == '.') return {};
+    char* base = SDL_GetPrefPath("Meguarace", "Meguarace");
+    if (!base) return {};
+    std::string path = std::string(base) + n;
+    SDL_free(base);
+    return path;
+}
+static int sys_save(lua_State* L) {
+    size_t len = 0;
+    std::string path = prefFile(luaL_checkstring(L, 1));
+    const char* data = luaL_checklstring(L, 2, &len);
+    bool ok = false;
+    if (!path.empty()) {
+        int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        if (fd >= 0) {
+            FILE* f = fdopen(fd, "wb");
+            if (f) {
+                ok = std::fwrite(data, 1, len, f) == len;
+                ok = (std::fclose(f) == 0) && ok;
+            } else {
+                close(fd);
+            }
+        }
+    }
+    lua_pushboolean(L, ok);
+    return 1;
+}
+static int sys_load(lua_State* L) {
+    std::string path = prefFile(luaL_checkstring(L, 1));
+    FILE* f = path.empty() ? nullptr : std::fopen(path.c_str(), "rb");
+    if (!f) { lua_pushnil(L); return 1; }
+    std::string out;
+    char buf[4096];
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.append(buf, n);
+    std::fclose(f);
+    lua_pushlstring(L, out.data(), out.size());
+    return 1;
+}
 
 static int sys_ticks(lua_State* L) { lua_pushinteger(L, SDL_GetTicks64()); return 1; }
 static int sys_quit(lua_State* L)  { E(L).quit = true; E(L).exitCode = int(luaL_optinteger(L, 1, 0)); return 0; }
@@ -439,7 +487,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
         {nullptr, nullptr}};
     static const luaL_Reg sys[] = {
-        {"ticks", sys_ticks}, {"quit", sys_quit}, {"log", sys_log}, {nullptr, nullptr}};
+        {"ticks", sys_ticks}, {"quit", sys_quit}, {"log", sys_log},
+        {"save", sys_save}, {"load", sys_load}, {nullptr, nullptr}};
 
     addLib(L, e, "fs", fs);
     addLib(L, e, "gfx", gfx);

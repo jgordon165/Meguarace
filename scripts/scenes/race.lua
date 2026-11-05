@@ -33,10 +33,14 @@ function S:enter(name, opts)
     self.car = cars.open(opts.car or "JO")
     self.rival = cars.open_rival(opts.rival or "RA")
     self.zones = spr.open("ZONES")
+    -- Rival speeds are this port's placeholders; HARDENED makes them quicker.
+    local scale = (opts.level == "HARDENED") and 1.06 or 0.94
     self.rivals = {}
     for k, def in ipairs({ { 6, 0.25, 150 }, { 14, 0.75, 162 }, { 26, 0.5, 172 } }) do
-        self.rivals[k] = { ahead = def[1], u = def[2], speed = def[3], bump = 0 }
+        self.rivals[k] = { ahead = def[1], u = def[2], speed = def[3] * scale, bump = 0 }
     end
+    self.title = opts.title
+    self.on_done = opts.on_done
     self.ticks = 0
     self.clock = -COUNTDOWN
     self.last_section = nil
@@ -57,7 +61,11 @@ function S:update(dt)
     if input.pressed("Escape") then scenes.pop(); return end
     self.clock = self.clock + dt
     if self.finished then
-        if input.pressed("Return") or input.pressed("Space") then scenes.pop() end
+        if input.pressed("Return") or input.pressed("Space") then
+            local cb, result = self.on_done, { place = self.result, points = self.rules.points }
+            scenes.pop()
+            if cb then cb(result) end
+        end
         return
     end
     if self.clock < 0 then return end                     -- countdown
@@ -217,16 +225,19 @@ function S:draw()
 
     if self.clock < 0 then
         local t = "GET READY"
-        gfx.fill(120, 70, 80, 13, 0)
+        gfx.fill(100, 70, 120, 13 + (self.title and 10 or 0), 0)
         gfx.text(160 - #t * 2, 74, t, C_TEXT)
+        if self.title then gfx.text(160 - #self.title * 2, 84, self.title, C_GOOD) end
     elseif self.clock < 1 then
         gfx.text(156, 74, "GO", C_GOOD)
     end
     if self.finished then
         local t1, t2 = "END OF RACE", string.format("YOU FINISHED %d OF %d", self.result, #self.rivals + 1)
-        gfx.fill(90, 64, 140, 28, 0)
+        local t3 = "PRESS ENTER"
+        gfx.fill(90, 64, 140, 38, 0)
         gfx.text(160 - #t1 * 2, 68, t1, C_TEXT)
         gfx.text(160 - #t2 * 2, 80, t2, self.result == 1 and C_GOOD or C_WARN)
+        gfx.text(160 - #t3 * 2, 92, t3, C_TEXT)
     end
 end
 
