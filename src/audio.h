@@ -4,6 +4,7 @@
 // decoded from the game's data files.
 
 #include <SDL.h>
+#include "resampler.h"
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -32,6 +33,7 @@ public:
     double streamQueuedSeconds();
     uint64_t streamPlayedFrames();   // sample frames played since reset (A/V clock)
     int deviceRate() const { return spec_.freq; }
+    bool available() const { return dev_ != 0; }
 
 private:
     struct Source {
@@ -46,13 +48,14 @@ private:
     static void callback(void* user, Uint8* stream, int len);
     void mix(int16_t* out, int frames);
     bool convertToDevice(const uint8_t* data, size_t len, SDL_AudioFormat fmt,
-                         int channels, int rate, std::vector<int16_t>& out);
+                         int channels, int rate, std::vector<int16_t>& out);   // WAV files
 
     SDL_AudioDeviceID dev_ = 0;
     SDL_AudioSpec spec_{};
     std::mutex mtx_;
     Source music_;
     Source stream_;
+    Resampler streamResampler_;     // persists across pushes (exact A/V timing)
     uint64_t streamPlayed_ = 0;
     std::vector<Source> voices_ = std::vector<Source>(16);
     int nextId_ = 1;

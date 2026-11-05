@@ -292,6 +292,7 @@ static int hnm_open(lua_State* L) {
 }
 
 // audio.stream_reset() / stream_push(bytes, rate[, bits, ch]) / stream_queued() / stream_played()
+static int audio_available(lua_State* L) { lua_pushboolean(L, E(L).audio.available()); return 1; }
 static int audio_stream_reset(lua_State* L) { E(L).audio.streamReset(); return 0; }
 static int audio_stream_push(lua_State* L) {
     size_t len = 0;
@@ -329,6 +330,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"pcm", audio_pcm}, {"stop", audio_stop}, {"stop_all", audio_stop_all},
         {"stream_reset", audio_stream_reset}, {"stream_push", audio_stream_push},
         {"stream_queued", audio_stream_queued}, {"stream_played", audio_stream_played},
+        {"available", audio_available},
         {nullptr, nullptr}};
     static const luaL_Reg dat[] = {
         {"open", dat_open}, {"list", dat_list}, {"exists", dat_exists}, {"size", dat_size},

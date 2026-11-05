@@ -41,7 +41,10 @@ function S:decodeAhead()
         local i = self.decoded + 1
         local info = self.v:decode(i)
         self.bytesBefore[i] = self.queuedBytes
-        if info.sound_bytes > 0 then
+        if info.sound_bytes > 0 and audio.available() then
+            -- With an audio device, the sound is the clock. Without one
+            -- (no sound card, or it failed to open), fall back to the timer
+            -- instead of waiting for audio that will never play.
             self.sound = true
             local rate = self.v:sound_rate()
             audio.stream_push(self.v:sound(), rate > 0 and rate or 11111)

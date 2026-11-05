@@ -74,7 +74,11 @@ int main(int argc, char** argv) {
     eng.music.mount(eng.musicArg);
 
     const bool headless = maxFrames >= 0;
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
+    // Audio is optional: without a working sound device the game runs silent
+    // (videos then run on the timer instead of the sound clock).
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+        std::fprintf(stderr, "audio unavailable: %s\n", SDL_GetError());
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
