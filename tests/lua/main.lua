@@ -81,6 +81,17 @@ test("projection: straight-ahead camera", function()
     check(track.project(nil, cam, 100, 0, 0) == nil, "behind the camera is culled")
 end)
 
+-- cars ---------------------------------------------------------------------
+
+test("cars: angle to image, mirroring", function()
+    local cars = require("formats.cars")
+    check(#cars.ANGLE_FRAME == 96, "96 angle steps")
+    local f, flip = cars.frame_for(0);    check(f == 0 and not flip, "straight behind")
+    f, flip = cars.frame_for(-5);         check(f == 2 and flip, "negative angle mirrors")
+    f = cars.frame_for(20);               check(f == 8, "angle 20 -> image 8")
+    f = cars.frame_for(500);              check(f == 16, "clamped to head-on")
+end)
+
 -- bytes reader ----------------------------------------------------------------
 
 test("core.bytes reader", function()
@@ -110,6 +121,20 @@ test("[data] archive and intro videos", function()
             end
             check(ok, n .. " decodes")
         end
+    end
+end)
+
+test("[data] car sprites", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local cars = require("formats.cars")
+    for _, code in ipairs(cars.CODES) do
+        local c = cars.open(code)
+        check(c.body:count() == 17, code .. "_A has 17 views")
+        local w, h = c.body:size(0)
+        check(w and w > 40 and h > 20, code .. " rear view has a sensible size")
+        check(c.dash and c.dash:size(0) == 160, "T" .. code .. "_2 dashboard half is 160 wide")
+        local r = cars.open_rival(code)
+        check(r.body:size(10) ~= nil, cars.RIVAL_FILE[code] .. " has 11 rear views")
     end
 end)
 

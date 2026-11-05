@@ -214,6 +214,44 @@ static void testHnmCorrupt() {
     CHECK(!ok);
 }
 
+// Sprite set: palette block, a raw image, a PackBits image and a data entry.
+static void testSpriteSet() {
+    Bytes pal = {128, 1, 63, 0, 0, 0xFF, 0xFF};              // colour 128 = red
+    Bytes raw = {2, 0, 2, 0xFF, 1, 2, 3, 4};                  // 2x2 raw
+    Bytes packed = {3, 0x80, 2, 0xFF, 0xFE, 7, 0x02, 8, 9, 10}; // 3x2: 7,7,7 + 8,9,10
+    Bytes data = {0, 0, 0xBF, 0, 1, 2, 3};                    // width 0: not an image
+    Bytes f;
+    size_t tbl = 2 + pal.size();
+    put16(f, unsigned(tbl));
+    f.insert(f.end(), pal.begin(), pal.end());
+    size_t first = 6;                                          // 3 entries x 2 bytes
+    put16(f, unsigned(first));
+    put16(f, unsigned(first + raw.size()));
+    put16(f, unsigned(first + raw.size() + packed.size()));
+    f.insert(f.end(), raw.begin(), raw.end());
+    f.insert(f.end(), packed.begin(), packed.end());
+    f.insert(f.end(), data.begin(), data.end());
+
+    SpriteSet s;
+    CHECK(s.load(f));
+    CHECK(s.count() == 3);
+    const auto* a = s.image(0);
+    CHECK(a && a->w == 2 && a->h == 2 && (a->pixels == Bytes{1, 2, 3, 4}));
+    const auto* b = s.image(1);
+    CHECK(b && b->w == 3 && b->h == 2 && (b->pixels == Bytes{7, 7, 7, 8, 9, 10}));
+    CHECK(s.image(2) == nullptr);
+    CHECK(s.image(9) == nullptr);
+    CHECK(s.paletteBlock().size() == pal.size() && s.paletteBlock()[0] == 128);
+
+    // Truncated PackBits data is padded, never read past the end.
+    Bytes cut = f;
+    cut.resize(cut.size() - data.size() - 3);
+    SpriteSet t;
+    bool ok = true;
+    try { ok = t.load(cut); } catch (const std::exception&) { ok = false; }
+    CHECK(!ok || (t.image(1) == nullptr || t.image(1)->pixels.size() == 6));
+}
+
 // Video soundtracks arrive one small chunk per frame. Resampling them chunk by
 // chunk must give the same output as one big conversion, with the expected
 // length; otherwise speech drifts away from the picture.
@@ -259,7 +297,7 @@ static void testResamplerChunks() {
 }
 
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testResamplerChunks}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }

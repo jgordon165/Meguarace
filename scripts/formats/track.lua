@@ -10,7 +10,14 @@
 local M = {}
 M.__index = M
 
-M.VIDEO_Y = 24          -- the 152-line video sits centred on the 200-line screen
+M.VIDEO_Y = 0           -- the 152-line video sits at the top; the dashboard fills rows 152..199
+
+-- Vertical offset added to every projected y (RACEPRG [0x426], set per track
+-- from DS:0x2B0 + 3). Game track order, from the HNM name table in the EXE.
+M.ORDER = { "NS1", "MV1", "FC1", "NGL", "SUB", "NS2", "MV2", "PAR",
+            "FC2", "JNK", "MV3", "FC3", "NS3", "LST", "TOKY", "HOLD" }
+M.Y_OFFSET = { LST = -45 }   -- every other track: -21
+M.DEFAULT_Y_OFFSET = -21
 M.LANES   = 5
 M.WINDOW  = 100         -- sections the game keeps ahead of the camera
 
@@ -37,6 +44,8 @@ end
 function M.open(name)
     local video = assert(hnm.open(name .. ".HNM"))
     local T = setmetatable({ name = name, video = video, sections = {}, frames = video:frames() }, M)
+    local key = name:upper():gsub("[12]$", "", 1)        -- NS11 -> NS1, LST1 -> LST, TOKY -> TOKY
+    T.y_offset = M.Y_OFFSET[key] or M.DEFAULT_Y_OFFSET
 
     -- Frame 0 carries the first 100 sections; every later frame appends one.
     for i = 0, T.frames - 1 do
@@ -58,7 +67,8 @@ end
 function M:camera(i) return self.sections[i + 1] end
 
 -- The game's own transform (RACEPRG.EXE 0x6D58-0x6FD2). Returns screen x, y
--- on the 320x200 screen and the depth, or nil if behind the camera.
+-- on the 320x200 screen (video at the top) and the depth, or nil if behind
+-- the camera.
 function M:project(c, px, py, pz)
     local dx, dy, dz = px - c.x, py - c.y, pz - c.z
     local m = c.m
@@ -68,7 +78,8 @@ function M:project(c, px, py, pz)
     if Z <= 1 then return nil end
     local Xr = (c.roll_cos * X - c.roll_sin * Y) / 4096
     local Yr = (c.roll_sin * X + c.roll_cos * Y) / 4096
-    return 160 + Xr * 2.3 * 88 / Z, (131 - Yr * 230 / Z) * 200 / 262, Z
+    local yo = (self and self.y_offset) or 0
+    return 160 + Xr * 2.3 * 88 / Z, (131 - Yr * 230 / Z) * 200 / 262 + yo, Z
 end
 
 -- World point across the road at section s: u = 0 (left inner edge) .. 1

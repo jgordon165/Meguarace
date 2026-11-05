@@ -291,6 +291,96 @@ static int hnm_open(lua_State* L) {
     return 1;
 }
 
+// --------------------------------------------------------------- spr ------
+// local s = spr.open("JO_A")        -- JO_A.HSQ from MEGARACE.DAT (unpacked)
+// s:count()  s:size(i) -> w, h (nil for data entries)  s:apply_palette([shift])
+// s:draw(i, x, y [, scale=1 [, flip=false]])   (i is 0-based, x/y top-left)
+// s:pixels(i) -> bytes
+
+struct SprUd { SpriteSet set; Engine* eng; };
+static const char* kSprMeta = "megarace.spr";
+static SprUd* checkSpr(lua_State* L) { return static_cast<SprUd*>(luaL_checkudata(L, 1, kSprMeta)); }
+
+static int spr_gc(lua_State* L) { checkSpr(L)->~SprUd(); return 0; }
+static int spr_count(lua_State* L) { lua_pushinteger(L, lua_Integer(checkSpr(L)->set.count())); return 1; }
+
+static int spr_size(lua_State* L) {
+    const auto* img = checkSpr(L)->set.image(size_t(luaL_checkinteger(L, 2)));
+    if (!img) { lua_pushnil(L); return 1; }
+    lua_pushinteger(L, img->w);
+    lua_pushinteger(L, img->h);
+    return 2;
+}
+
+static int spr_apply_palette(lua_State* L) {
+    SprUd* s = checkSpr(L);
+    const auto& p = s->set.paletteBlock();
+    s->eng->video.applyPaletteBlocks(p.data(), p.size(), int(luaL_optinteger(L, 2, 0)));
+    return 0;
+}
+
+static int spr_draw(lua_State* L) {
+    SprUd* s = checkSpr(L);
+    const auto* img = s->set.image(size_t(luaL_checkinteger(L, 2)));
+    if (!img) return 0;
+    s->eng->video.sprite(img->pixels.data(), img->w, img->h,
+                         int(luaL_checknumber(L, 3)), int(luaL_checknumber(L, 4)),
+                         luaL_optnumber(L, 5, 1.0), lua_toboolean(L, 6));
+    return 0;
+}
+
+static int spr_pixels(lua_State* L) {
+    const auto* img = checkSpr(L)->set.image(size_t(luaL_checkinteger(L, 2)));
+    if (!img) { lua_pushnil(L); return 1; }
+    pushBytes(L, img->pixels);
+    return 1;
+}
+
+static int spr_open(lua_State* L) {
+    Engine& e = E(L);
+    std::string name = luaL_checkstring(L, 1);
+    if (name.find('.') == std::string::npos) name += ".HSQ";
+    auto d = e.dat.read(name);
+    if (!d) { lua_pushnil(L); lua_pushstring(L, "not found"); return 2; }
+    try {
+        if (isHsq(d->data(), d->size())) *d = unHsq(d->data(), d->size());
+        auto* s = static_cast<SprUd*>(lua_newuserdatauv(L, sizeof(SprUd), 0));
+        new (s) SprUd();
+        s->eng = &e;
+        luaL_setmetatable(L, kSprMeta);
+        if (!s->set.load(*d)) { lua_pushnil(L); lua_pushstring(L, "not a sprite set"); return 2; }
+    } catch (const std::exception& ex) {
+        lua_pushnil(L); lua_pushstring(L, ex.what()); return 2;
+    }
+    return 1;
+}
+
+// gfx.clip(lines [, y_offset=0]): lines[row] = {x0,x1, ...} (rows 0-based);
+// sprites are drawn only inside the spans. gfx.unclip() removes the mask.
+static int gfx_clip(lua_State* L) {
+    luaL_checktype(L, 1, LUA_TTABLE);
+    std::vector<std::vector<int>> rows(256);
+    lua_pushnil(L);
+    while (lua_next(L, 1)) {
+        if (lua_isinteger(L, -2) && lua_istable(L, -1)) {
+            lua_Integer r = lua_tointeger(L, -2);
+            if (r >= 0 && r < 256) {
+                auto& v = rows[size_t(r)];
+                lua_Integer n = luaL_len(L, -1);
+                for (lua_Integer k = 1; k <= n; ++k) {
+                    lua_rawgeti(L, -1, k);
+                    v.push_back(int(lua_tointeger(L, -1)));
+                    lua_pop(L, 1);
+                }
+            }
+        }
+        lua_pop(L, 1);
+    }
+    E(L).video.setClip(std::move(rows), int(luaL_optinteger(L, 2, 0)));
+    return 0;
+}
+static int gfx_unclip(lua_State* L) { E(L).video.clearClip(); return 0; }
+
 // audio.stream_reset() / stream_push(bytes, rate[, bits, ch]) / stream_queued() / stream_played()
 static int audio_available(lua_State* L) { lua_pushboolean(L, E(L).audio.available()); return 1; }
 static int audio_stream_reset(lua_State* L) { E(L).audio.streamReset(); return 0; }
@@ -321,7 +411,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"read", fs_read}, {"read_range", fs_read_range}, {"list", fs_list}, {nullptr, nullptr}};
     static const luaL_Reg gfx[] = {
         {"width", gfx_width}, {"height", gfx_height}, {"clear", gfx_clear}, {"pset", gfx_pset},
-        {"pget", gfx_pget}, {"fill", gfx_fill}, {"line", gfx_line}, {"text", gfx_text}, {"blit", gfx_blit},
+        {"pget", gfx_pget}, {"fill", gfx_fill}, {"line", gfx_line},
+        {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
@@ -336,6 +427,10 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"open", dat_open}, {"list", dat_list}, {"exists", dat_exists}, {"size", dat_size},
         {"read", dat_read}, {"read_range", dat_read_range}, {nullptr, nullptr}};
     static const luaL_Reg hnmlib[] = {{"open", hnm_open}, {nullptr, nullptr}};
+    static const luaL_Reg sprlib[] = {{"open", spr_open}, {nullptr, nullptr}};
+    static const luaL_Reg sprMethods[] = {
+        {"count", spr_count}, {"size", spr_size}, {"apply_palette", spr_apply_palette},
+        {"draw", spr_draw}, {"pixels", spr_pixels}, {nullptr, nullptr}};
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
@@ -353,6 +448,16 @@ void registerLuaApi(lua_State* L, Engine& e) {
     addLib(L, e, "sys", sys);
     addLib(L, e, "dat", dat);
     addLib(L, e, "hnm", hnmlib);
+    addLib(L, e, "spr", sprlib);
+
+    luaL_newmetatable(L, kSprMeta);
+    lua_newtable(L);
+    lua_pushlightuserdata(L, &e);
+    luaL_setfuncs(L, sprMethods, 1);
+    lua_setfield(L, -2, "__index");
+    lua_pushcfunction(L, spr_gc);
+    lua_setfield(L, -2, "__gc");
+    lua_pop(L, 1);
 
     luaL_newmetatable(L, kHnmMeta);
     lua_newtable(L);

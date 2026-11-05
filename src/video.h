@@ -32,6 +32,20 @@ public:
     // to expand them to 8-bit.
     void setPalette(const uint8_t* rgb, size_t len, int first, bool sixBit);
 
+    // Cryo palette ranges: { u8 start, u8 count (0=256), rgb[count] 6-bit } until FF FF.
+    // Colour 0 is left alone (transparent in sprites, black in the videos).
+    // `shift` moves ranges starting at 128+ up (rival cars use the player
+    // car's colours moved from 128..191 to 192..255).
+    void applyPaletteBlocks(const uint8_t* p, size_t n, int shift = 0);
+
+    // Sprite drawing: index 0 transparent, nearest-neighbour scaling, optional
+    // horizontal mirror, and clipping to the current span mask (if any).
+    void sprite(const uint8_t* px, int w, int h, int x, int y, double scale, bool flip);
+    // Span mask: rows[r] = {x0,x1, x0,x1, ...} drawable spans for screen row
+    // r + yOffset. Rows with no entry are fully hidden while the mask is set.
+    void setClip(std::vector<std::vector<int>> rows, int yOffset);
+    void clearClip() { clipOn_ = false; clip_.clear(); }
+
     void present();
     bool saveBmp(const std::string& path);
 
@@ -43,5 +57,9 @@ private:
     std::vector<uint8_t> fb_;
     std::array<uint32_t, 256> pal_{};
     std::vector<uint32_t> rgba_;
+    std::vector<std::vector<int>> clip_;
+    int clipY_ = 0;
+    bool clipOn_ = false;
+    bool visible(int x, int y) const;
     void convert();
 };
