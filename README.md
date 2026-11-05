@@ -34,9 +34,14 @@ build\Release\megarace.exe --data V:\
 
 It plays the original boot sequence (Mindscape, Cryo, the intro with Lance
 Boyle) straight from `MEGARACE.DAT`, then opens the **asset explorer**: every
-file inside the archive. Enter plays a video, opens a race track in the
-**track viewer**, or hex-views a file (HSQ files shown decompressed); V shows
-a file as raw 8-bit pixels.
+file inside the archive. Enter plays a video, starts a **race** on a track
+video (e.g. `NS11.HNM`), or hex-views a file (HSQ files shown decompressed);
+D opens a track in the debug **track viewer**; V shows a file as raw 8-bit
+pixels.
+
+In a race: Up accelerates, Down brakes, Left/Right steer. Drive over the
+lane tiles for their effects (energy, points, weapons, super speed, skids,
+spins), overtake the three rivals, and finish three laps.
 
 The track viewer drives along a track video with the game's own cars: your
 car (with its dashboard) and three rivals that hide behind scenery the way
@@ -83,7 +88,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
 | Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
 | Menus, fonts, subtitles, VOC effects, explosions | To do |
-| Menus, racing, AI, weapons | To do (Lua) |
+| Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
+| Weapons, rival AI, collisions, dashboard gauges, menus | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
@@ -96,8 +102,9 @@ scripts/        Lua game code
   main.lua        entry point (game.init/update/draw)
   core/           scene stack, binary reader, UI helpers, asset manifest
   formats/        track.lua (sections, projection, masks, lane tiles), cars.lua (car sprites,
-                  dashboards, rivals); sniff.lua identifies files
-  scenes/         video player, track viewer, explorer, hex view, raw image view, no-data screen
+                  dashboards, rivals), voc.lua (sound effects); sniff.lua identifies files
+  race/           rules.lua: race rules from RACEPRG.EXE (pure Lua, unit-tested)
+  scenes/         race, video player, track viewer, explorer, hex view, raw image view, no-data screen
 tools/          identify_exe.py, cryo.py (archive/HSQ), hnm.py (reference video decoder)
 docs/           formats.md: everything verified about the file formats
 re/             Ghidra headless pipeline (output stays local, git-ignored)

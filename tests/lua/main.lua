@@ -92,6 +92,80 @@ test("cars: angle to image, mirroring", function()
     f = cars.frame_for(500);              check(f == 16, "clamped to head-on")
 end)
 
+-- race rules -------------------------------------------------------------------
+
+test("rules: lanes are fixed screen bands", function()
+    local rules = require("race.rules")
+    check(rules.lane_for_x(0) == 0 and rules.lane_for_x(59) == 0, "0-59 lane 0")
+    check(rules.lane_for_x(60) == 1 and rules.lane_for_x(114) == 1, "60-114 lane 1")
+    check(rules.lane_for_x(160) == 2, "centre lane 2")
+    check(rules.lane_for_x(249) == 3 and rules.lane_for_x(250) == 4, "250+ lane 4")
+end)
+
+test("rules: throttle, coasting, cap", function()
+    local rules = require("race.rules")
+    local s = rules.new()
+    for _ = 1, 10 do rules.step(s, { accel = true }) end
+    check(s.speed == 40, "+4 per tick accelerating")
+    rules.step(s, {})
+    check(s.speed == 39, "-1 per tick coasting")
+    rules.step(s, { brake = true })
+    check(s.speed == 35, "-4 per tick braking")
+    for _ = 1, 100 do rules.step(s, { accel = true }) end
+    check(s.speed == rules.MAX_SPEED, "capped at 180")
+    for _ = 1, 100 do rules.step(s, { brake = true }) end
+    check(s.speed == 0, "never below 0")
+end)
+
+test("rules: tiles", function()
+    local rules = require("race.rules")
+    local s = rules.new()
+    s.energy = 100
+    check(rules.apply_tile(s, 17) == "ENERGYP" and s.energy == 150, "17: energy +50, then +70")
+    check(rules.apply_tile(s, 17) and s.energy == 220, "second 17: +70")
+    check(rules.apply_tile(s, 1) == "MALUS9" and s.energy == 150, "1: drain 70 (last size), then 50")
+    rules.apply_tile(s, 18); rules.apply_tile(s, 18)
+    check(s.points == 20, "18: points +10")
+    rules.apply_tile(s, 2)
+    check(s.points == 10, "2: points -10")
+    rules.apply_tile(s, 21)
+    check(s.weapon == 3, "21: weapon 3")
+    check(rules.apply_tile(s, 5) == "PLUARME" and s.weapon == 0 and s.energy == 0, "5: weapon and energy lost")
+    s.speed = 100
+    rules.apply_tile(s, 19)
+    rules.step(s, {})
+    check(s.speed == rules.BOOST_SPEED, "19: super speed")
+    for _ = 1, 398 do rules.step(s, {}) end         -- ticks 2..399 after the tile
+    check(s.speed == rules.BOOST_SPEED, "super speed holds for 400 ticks")
+    for _ = 1, 25 do rules.step(s, {}) end
+    check(s.speed <= rules.MAX_SPEED, "then bleeds back under the cap (5 per tick)")
+    s.speed = 170
+    rules.apply_tile(s, 3)
+    for _ = 1, 3 do rules.step(s, { accel = true }) end
+    check(s.speed < 170, "3: forced braking even while accelerating")
+    check(rules.apply_tile(s, 0) == nil, "0: nothing")
+end)
+
+test("rules: rivals gain or drop back by speed difference", function()
+    local rules = require("race.rules")
+    check(rules.rival_relative(12.5, 180, 150) < 0, "faster player: rival drops back")
+    check(rules.rival_relative(12.5, 100, 150) > 0, "slower player: rival pulls away")
+    check(rules.rival_relative(12.5, 150, 150) == 0, "same speed: no change")
+end)
+
+test("voc: decodes a type-1 block", function()
+    local voc = require("formats.voc")
+    local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)
+    local pcm = string.char(128, 200, 50, 128)
+    local blk = string.char(1, #pcm + 2, 0, 0, 166, 0) .. pcm
+    local out, rate = voc.decode(hdr .. blk .. string.char(0))
+    check(out == pcm, "samples")
+    check(rate == 11111, "rate from time constant 166")
+    check(voc.decode("nope") == nil, "rejects non-VOC")
+    local _, low = voc.decode(hdr .. string.char(1, #pcm + 2, 0, 0, 6, 0) .. pcm .. string.char(0))
+    check(low == voc.FALLBACK_RATE, "implausible 4 kHz rate replaced")
+end)
+
 -- bytes reader ----------------------------------------------------------------
 
 test("core.bytes reader", function()
@@ -135,6 +209,15 @@ test("[data] car sprites", function()
         check(c.dash and c.dash:size(0) == 160, "T" .. code .. "_2 dashboard half is 160 wide")
         local r = cars.open_rival(code)
         check(r.body:size(10) ~= nil, cars.RIVAL_FILE[code] .. " has 11 rear views")
+    end
+end)
+
+test("[data] tile sounds exist", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local rules, voc = require("race.rules"), require("formats.voc")
+    for code, name in pairs(rules.TILE_SOUND) do
+        local pcm, rate = voc.decode(dat.read(name .. ".VOC", false))
+        check(pcm and #pcm > 100 and rate > 5000, name .. ".VOC (tile " .. code .. ")")
     end
 end)
 
