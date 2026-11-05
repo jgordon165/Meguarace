@@ -26,3 +26,7 @@ cd/
 # Reverse-engineering output may contain decompiled original code; keep local.
 re/output/
 re/ghidra_project/
+
+# Python
+__pycache__/
+*.pyc
