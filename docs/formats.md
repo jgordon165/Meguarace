@@ -333,6 +333,41 @@ Projected y gets the per-track offset `[0x426]` = `DS:0x2B0[track] + 3`: −21
 on every track except LST (−45). Track order in the EXE: NS1 MV1 FC1 NGL SUB
 NS2 MV2 PAR FC2 JNK MV3 FC3 NS3 LST TOKY HOLD.
 
+## Menus
+
+| Asset | Use |
+|---|---|
+| `PANEL1.HNM` | main-menu backdrop (one frame): eight monitors with red bars, globe, three buttons |
+| `PANEL2.HSQ` | overlays: 0–7 car thumbnails, 8–15 lit bars, 16–23 bars as on the backdrop, 24–26 buttons highlighted, 27–29 buttons as on the backdrop, 30 palette strip |
+| `I_<NAME>.HNM` | car showcase videos |
+| `HALL1.HNM` | Hall of Fame backdrop |
+| `CONTROL.HSQ` | options: 0 OPTIONS panel, 1 LEVEL panel, then (off, lit) pairs NOVICE 2/3, HARDENED 4/5, LOAD 6/7, SAVE 8/9, KEYBOARD 10/11, JOYSTICK 12/13, MOUSE 14/15, QUIT 16/17. `KONTROL`/`QONTROL` are other languages |
+| `FONTHALL.HSQ` | 9×9 font, glyph index = ASCII code (96 glyphs; DOS arrows at 24–27) |
+| `VWBT*.HNM` | channel idents (played before each race in this port) |
+
+Overlay positions on `PANEL1`, found by matching `PANEL2`'s images against
+the backdrop pixel for pixel (bars and buttons match exactly):
+
+| | Slot 1–8 (left, right per row, top to bottom) |
+|---|---|
+| bar | (102,4) (206,4) (84,33) (223,33) (80,65) (226,65) (92,100) (213,100) |
+| thumbnail | (47,3) (222,3) (26,33) (237,33) (20,65) (242,65) (27,99) (230,99) |
+| buttons | green (58,146), yellow (133,146), blue (211,146) |
+
+Monitor order = thumbnail order = showcase videos: JOSE, HOOPER, LUIS,
+OUZBEL, MARIA, PALOMA, OMEGA, RAMON (confirmed by comparing each
+thumbnail with its video).
+
+From RACEPRG.EXE (read at runtime from the player's copy):
+- **Default Hall of Fame:** 8 × { u16 score, name[18], "00000 ", track[10],
+  level[4] }, starting 2 bytes before "BIG BOB".
+- **Track display names:** 16 × 16 bytes after "EASYHARD": NEW SAN-1,
+  MAEVA -1, NEW FAC-1, NG LOOP, SUB-URB 1, NEW SAN 2, MAEVA 2, PARTICLE,
+  NEW FAC 2, JUNKYARD, MAEVA3, NEWFAC3, NEW SAN 3, LASTDRIVE, TOKYO, HOLDER.
+- **Rival order:** `_RAM _JOS _OME _OUZ _PAL _LUI _HOO _MAR`.
+- **Second file set:** a parallel `_RAF _JOF … _MAF` set is named in the
+  EXE; only `_LUF.HSQ` is on the disc.
+
 ## Race rules (RACEPRG.EXE)
 
 Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
@@ -403,6 +438,7 @@ left box.
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - Per-car values (`[0x800]`–`[0x812]`: weapons allowed, timer lengths, fire cost).
 - Weapons, rival AI and collisions (the port's are placeholders).
+- The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.

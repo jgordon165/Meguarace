@@ -166,6 +166,29 @@ test("voc: decodes a type-1 block", function()
     check(low == voc.FALLBACK_RATE, "implausible 4 kHz rate replaced")
 end)
 
+-- save file / menu state -------------------------------------------------
+
+test("save: serialize and parse round trip", function()
+    local save = require("game.save")
+    local st = { level = "HARDENED", car = 3, round = 5, total = 4200,
+                 hall = { { name = "BIG BOB", score = 8000, track = "NEW FAC-1", level = "HARD" } } }
+    local back = save.parse(save.serialize(st))
+    check(back and back.level == "HARDENED" and back.round == 5 and back.total == 4200, "fields survive")
+    check(back.hall[1].name == "BIG BOB" and back.hall[1].score == 8000, "hall survives")
+    check(save.parse("os.exit()") == nil, "code in a save file is not run")
+    check(save.parse("{ x = os }") == nil or save.parse("{ x = os }").x == nil, "no globals in a save file")
+end)
+
+test("save: hall of fame keeps the top 8", function()
+    local save = require("game.save")
+    local st = { hall = {} }
+    for i = 1, 8 do save.add_score(st, { name = "R" .. i, score = i * 100 }) end
+    local rank = save.add_score(st, { name = "NEW", score = 450 })
+    check(rank == 5, "450 ranks 5th")
+    check(#st.hall == 8 and st.hall[8].score == 200, "lowest dropped")
+    check(save.add_score(st, { name = "LOW", score = 1 }) == nil, "too low: not entered")
+end)
+
 -- bytes reader ----------------------------------------------------------------
 
 test("core.bytes reader", function()
@@ -219,6 +242,20 @@ test("[data] tile sounds exist", function()
         local pcm, rate = voc.decode(dat.read(name .. ".VOC", false))
         check(pcm and #pcm > 100 and rate > 5000, name .. ".VOC (tile " .. code .. ")")
     end
+end)
+
+test("[data] game data from RACEPRG.EXE", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local gd = require("game.data")
+    local names = gd.track_names()
+    check(names[1] == "NEW SAN-1" and names[16] == "HOLDER", "track display names")
+    local hall = gd.default_hall()
+    check(#hall == 8 and hall[1].name == "LANCE BOYLE" and hall[1].score == 12000, "default Hall of Fame")
+    for _, c in ipairs(gd.MENU_CARS) do check(dat.exists(c.video .. ".HNM"), c.video .. ".HNM exists") end
+    local p = spr.open("PANEL2")
+    check(p and p:count() == 31, "PANEL2 has 31 entries")
+    local f = require("ui.font").open("FONTHALL")
+    check(f and f:glyph("A") == 65, "FONTHALL is ASCII-indexed")
 end)
 
 test("[data] track NS11", function()

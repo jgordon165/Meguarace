@@ -33,11 +33,20 @@ build\Release\megarace.exe --data V:\
 ```
 
 It plays the original boot sequence (Mindscape, Cryo, the intro with Lance
-Boyle) straight from `MEGARACE.DAT`, then opens the **asset explorer**: every
-file inside the archive. Enter plays a video, starts a **race** on a track
-video (e.g. `NS11.HNM`), or hex-views a file (HSQ files shown decompressed);
-D opens a track in the debug **track viewer**; V shows a file as raw 8-bit
-pixels.
+Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
+
+- Arrows move between the eight car monitors and the three buttons; Enter on
+  a monitor picks that car and plays its showcase video.
+- Green starts the next round of the championship (16 tracks in the game's
+  order, a channel ident first, then the race). Win a round to move on.
+- Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
+  `RACEPRG.EXE`). Blue (or Esc) opens the **options**: Novice/Hardened, save,
+  load, quit.
+- F12 opens the **asset explorer** (every file in the archive: play videos,
+  race any track, D for the track debug viewer, V for raw pixels).
+
+Settings, progress and high scores are saved in your user preferences folder
+(`meguarace.sav`).
 
 In a race: Up accelerates, Down brakes, Left/Right steer. Drive over the
 lane tiles for their effects (energy, points, weapons, super speed, skids,
@@ -89,7 +98,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
 | Menus, fonts, subtitles, VOC effects, explosions | To do |
 | Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
-| Weapons, rival AI, collisions, dashboard gauges, menus | To do |
+| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
+| Weapons, rival AI, dashboard gauges, subtitles | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
@@ -104,7 +114,10 @@ scripts/        Lua game code
   formats/        track.lua (sections, projection, masks, lane tiles), cars.lua (car sprites,
                   dashboards, rivals), voc.lua (sound effects); sniff.lua identifies files
   race/           rules.lua: race rules from RACEPRG.EXE (pure Lua, unit-tested)
-  scenes/         race, video player, track viewer, explorer, hex view, raw image view, no-data screen
+  game/           data.lua (track names, default Hall of Fame from your EXE), save.lua
+  ui/             font.lua (the game's sprite fonts)
+  scenes/         menu, race, hall, options, video player, track viewer, explorer, hex view,
+                  raw image view, no-data screen
 tools/          identify_exe.py, cryo.py (archive/HSQ), hnm.py (reference video decoder)
 docs/           formats.md: everything verified about the file formats
 re/             Ghidra headless pipeline (output stays local, git-ignored)
@@ -121,5 +134,5 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
 | `input` | `down(key) pressed(key) released(key)`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
-| `sys` | `ticks() quit() log(v)` and `data_path music_path music_mounted` |
+| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted` |
 

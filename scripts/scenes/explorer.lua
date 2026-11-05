@@ -40,6 +40,7 @@ end
 
 function S:enter(report)
     ui.install()
+    report = report or { dat = true, files = {} }
     self.src = report.dat and datSource() or folderSource(report)
     self.files = self.src.files
     self.total = 0
@@ -48,6 +49,10 @@ function S:enter(report)
 end
 
 function S:update(dt)
+    if input.pressed("Escape") then
+        if scenes.depth() > 1 then scenes.pop() else sys.quit() end
+        return
+    end
     local n = #self.files
     if n == 0 then return end
     if ui.repeating("Down", dt)     then self.sel = math.min(n, self.sel + 1) end
@@ -94,7 +99,7 @@ function S:draw()
         gfx.text(196, y, ui.human(f.size), ui.DIM)
         gfx.text(236, y, f.kind, ui.DIM)
     end
-    ui.footer("ENTER PLAY/RACE/HEX  D TRACK DEBUG  V RAW  ESC QUIT")
+    ui.footer("ENTER PLAY/RACE/HEX  D TRACK DEBUG  V RAW  ESC BACK")
 end
 
 return S

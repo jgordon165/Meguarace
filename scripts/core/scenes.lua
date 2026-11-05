@@ -1,6 +1,7 @@
 -- Scene stack. A scene is a table with optional enter(...), leave(),
--- update(dt), draw(). push() overlays (e.g. a hex viewer over the file list),
--- switch() replaces everything.
+-- resume() (called when the scene above it is popped), update(dt), draw().
+-- push() overlays, switch() replaces everything. A scene with
+-- `overlay = true` is drawn on top of the scene below it.
 
 local M = {}
 local stack = {}
@@ -22,15 +23,19 @@ end
 
 function M.pop()
     call(table.remove(stack), "leave")
+    call(stack[#stack], "resume")
 end
 
 function M.depth() return #stack end
+function M.top() return stack[#stack] end
 
 function M.update(dt) call(stack[#stack], "update", dt) end
 
 function M.draw()
-    -- Draw the top scene only; overlays redraw what they need.
-    call(stack[#stack], "draw")
+    local n = #stack
+    if n == 0 then return end
+    if stack[n].overlay and n > 1 then call(stack[n - 1], "draw") end
+    call(stack[n], "draw")
 end
 
 return M

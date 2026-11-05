@@ -38,16 +38,17 @@ function game.init()
         return
     end
 
-    -- Until menus and racing are reimplemented, the explorer is the hub.
-    -- Skip the intro with --scripts tweaks or by pressing a key.
-    scenes.switch(require("scenes.explorer"), report)
+    -- Main menu (F12 there opens the asset explorer). The boot videos play
+    -- on top of it; any key skips one. MEGARACE_SKIP_INTRO=1 skips them all.
+    local menu = require("scenes.menu")
+    menu.report = report
+    scenes.switch(menu)
     if not os.getenv("MEGARACE_SKIP_INTRO") then
         playSequence(manifest.archive.intro)
     end
 end
 
 function game.update(dt)
-    if input.pressed("Escape") and scenes.depth() <= 1 then sys.quit() end
     scenes.update(dt)
 end
 

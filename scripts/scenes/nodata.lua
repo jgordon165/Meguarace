@@ -5,6 +5,10 @@ local S = {}
 
 function S:enter(report) self.report = report; ui.install() end
 
+function S:update()
+    if input.pressed("Escape") then sys.quit() end
+end
+
 function S:draw()
     gfx.clear(ui.BG)
     ui.header("MEGARACE PORT")
