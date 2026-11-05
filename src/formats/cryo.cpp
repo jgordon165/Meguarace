@@ -264,6 +264,34 @@ void HnmVideo::addSound(const uint8_t* p, size_t n, std::vector<uint8_t>& out) {
     out.insert(out.end(), p, p + n);
 }
 
+bool HnmVideo::dataChunks(int i, std::map<std::string, std::vector<uint8_t>>& out) const {
+    out.clear();
+    if (i < 0 || i >= frameCount()) return false;
+    size_t p = offsets_[size_t(i)];
+    size_t end = p + (d_[p] | d_[p + 1] << 8);
+    p += 2;
+    while (p + 4 <= end) {
+        char tag[3] = {char(d_[p]), char(d_[p + 1]), 0};
+        size_t sz = d_[p + 2] | d_[p + 3] << 8;
+        bool known = !std::strcmp(tag, "pl") || !std::strcmp(tag, "sd") ||
+                     !std::strcmp(tag, "pt") || !std::strcmp(tag, "kl");
+        if (!known) {
+            unsigned width = (d_[p] | d_[p + 1] << 8) & 0x1FF;
+            if (width > 320 && sz >= 4 && p + sz < end) {   // damaged 'kl' tag (see decode)
+                out["kl"].assign(d_.begin() + long(p + 4), d_.begin() + long(p + sz));
+                p += sz;
+                continue;
+            }
+            break;
+        }
+        if (sz < 4 || p + sz > end) return false;
+        if (tag[0] == 'p' && tag[1] == 't') out["pt"].assign(d_.begin() + long(p + 4), d_.begin() + long(p + sz));
+        if (tag[0] == 'k' && tag[1] == 'l') out["kl"].assign(d_.begin() + long(p + 4), d_.begin() + long(p + sz));
+        p += sz;
+    }
+    return true;
+}
+
 bool HnmVideo::decode(int i, Frame& f) {
     if (i < 0 || i >= frameCount()) return false;
     if (i == 0) vocHeaderSeen_ = false;
@@ -284,7 +312,12 @@ bool HnmVideo::decode(int i, Frame& f) {
             // US v1.0.1 disc has one chunk with a damaged tag (NGL1.HNM frame
             // 2185, a 'kl' tagged f8 4b); skip such chunks by their size.
             unsigned width = (d_[p] | d_[p + 1] << 8) & 0x1FF;
-            if (width > 320 && sz >= 4 && p + sz < end) { p += sz; continue; }
+            if (width > 320 && sz >= 4 && p + sz < end) {
+                auto& v = f.chunks["kl"];   // its size and contents are a normal 'kl' mask
+                v.assign(d_.begin() + long(p + 4), d_.begin() + long(p + sz));
+                p += sz;
+                continue;
+            }
             break;
         }
         if (sz < 4 || p + sz > end) return false;

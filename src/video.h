@@ -21,6 +21,7 @@ public:
     void pset(int x, int y, uint8_t idx);
     uint8_t pget(int x, int y) const;
     void fill(int x, int y, int w, int h, uint8_t idx);
+    void line(int x0, int y0, int x1, int y1, uint8_t idx);
     // Blit an indexed image (row-major, `w*h` bytes). If `transparent` is
     // 0..255, that index is skipped (sprite colour key).
     void blit(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent);

@@ -72,6 +72,7 @@ static int gfx_clear(lua_State* L)  { E(L).video.clear(static_cast<uint8_t>(luaL
 static int gfx_pset(lua_State* L)   { E(L).video.pset(ci(L, 1), ci(L, 2), idx(L, 3)); return 0; }
 static int gfx_pget(lua_State* L)   { lua_pushinteger(L, E(L).video.pget(ci(L, 1), ci(L, 2))); return 1; }
 static int gfx_fill(lua_State* L)   { E(L).video.fill(ci(L, 1), ci(L, 2), ci(L, 3), ci(L, 4), idx(L, 5)); return 0; }
+static int gfx_line(lua_State* L)   { E(L).video.line(ci(L, 1), ci(L, 2), ci(L, 3), ci(L, 4), idx(L, 5)); return 0; }
 static int gfx_text(lua_State* L)   { E(L).video.text(ci(L, 1), ci(L, 2), luaL_checkstring(L, 3), static_cast<uint8_t>(luaL_optinteger(L, 4, 15))); return 0; }
 
 // gfx.blit(x, y, w, h, pixels [, transparentIndex])
@@ -263,6 +264,16 @@ static int hnm_apply_palette(lua_State* L) {
     return 0;
 }
 
+// v:chunks(i) -> { pt = bytes, kl = bytes } without decoding the picture
+static int hnm_chunks(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    std::map<std::string, std::vector<uint8_t>> c;
+    if (!h->video.dataChunks(int(luaL_checkinteger(L, 2)), c)) { lua_pushnil(L); return 1; }
+    lua_createtable(L, 0, 2);
+    for (const auto& [tag, body] : c) { pushBytes(L, body); lua_setfield(L, -2, tag.c_str()); }
+    return 1;
+}
+
 static int hnm_pixels(lua_State* L) { pushBytes(L, checkHnm(L)->frame.pixels); return 1; }
 static int hnm_sound(lua_State* L) { pushBytes(L, checkHnm(L)->frame.sound); return 1; }
 
@@ -309,7 +320,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"read", fs_read}, {"read_range", fs_read_range}, {"list", fs_list}, {nullptr, nullptr}};
     static const luaL_Reg gfx[] = {
         {"width", gfx_width}, {"height", gfx_height}, {"clear", gfx_clear}, {"pset", gfx_pset},
-        {"pget", gfx_pget}, {"fill", gfx_fill}, {"text", gfx_text}, {"blit", gfx_blit},
+        {"pget", gfx_pget}, {"fill", gfx_fill}, {"line", gfx_line}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
@@ -326,7 +337,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
-        {"sound", hnm_sound}, {nullptr, nullptr}};
+        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
         {nullptr, nullptr}};

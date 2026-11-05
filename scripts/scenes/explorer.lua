@@ -59,7 +59,10 @@ function S:update(dt)
 
     local f = self.files[self.sel]
     if input.pressed("Return") then
-        if f.path:upper():match("%.HNM$") then
+        local base = f.path:upper():match("^(.+)%.HNM$")
+        if base and dat.exists(base .. ".ZNN") then
+            scenes.push(require("scenes.trackview"), base)     -- race track: drive it
+        elseif base then
             scenes.push(require("scenes.player"), f.path, { hud = true })
         else
             scenes.push(require("scenes.hexview"), f, self.src)
@@ -87,7 +90,7 @@ function S:draw()
         gfx.text(196, y, ui.human(f.size), ui.DIM)
         gfx.text(236, y, f.kind, ui.DIM)
     end
-    ui.footer("ENTER PLAY/HEX   V RAW IMAGE   ESC QUIT")
+    ui.footer("ENTER PLAY/DRIVE/HEX   V RAW IMAGE   ESC QUIT")
 end
 
 return S

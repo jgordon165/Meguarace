@@ -55,6 +55,9 @@ public:
     // Decodes frame i (sequential access is cheapest; frames are independent
     // except overlays, which the caller composites onto its screen).
     bool decode(int i, Frame& out);
+    // Reads only the game-data chunks ("pt", "kl") of frame i, without
+    // decoding the picture or sound. Cheap; used to index whole tracks.
+    bool dataChunks(int i, std::map<std::string, std::vector<uint8_t>>& out) const;
 
 private:
     std::vector<uint8_t> d_;

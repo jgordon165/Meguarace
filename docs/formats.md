@@ -101,8 +101,9 @@ typed chunk: char tag[2], u16 size (including the 4-byte header), data
 |---|---|
 | `pl` | Palette ranges |
 | `sd` | Sound: the chunks together form one VOC file. 8-bit unsigned mono; rate from the VOC block (`sr` 0xA6 = 11,111 Hz) |
-| `pt` | ★ Track videos only. 58–5,800 bytes per frame; per-frame track geometry for gameplay (next to decode) |
-| `kl` | ★ Track videos only. Roughly 200–600 bytes per frame; probably collision/zones |
+| `pt` | ★ Track videos only: track sections with camera and road geometry (see Track data) |
+| `kl` | ★ Track videos only: occlusion masks for car sprites (see Track data) |
+| `mm` | ★ Recognised by RACEPRG.EXE (0xCFE7); not seen in any MegaRace video |
 
 Frame rate: ★ about 12.5 fps (sound bytes / 11,111 Hz across a video).
 Track videos have no sound and are advanced by gameplay speed in the game.
@@ -161,9 +162,99 @@ while out < frame_size:
 Validation: all 109 videos, 65,234 frames decode, using up their data exactly
 (0–2 bytes of padding).
 
+## Track data
+
+Verified by projecting the data onto the video frames, and by reading the
+game's own code in RACEPRG.EXE (code offsets below are within the MZ load
+image; the data segment is paragraph 0x0F44).
+
+### Track videos
+
+Each track has a race video (`NS11`, `FC11`, `SUB1`, …: three laps) and a
+single-lap video (`NS12`, `FC12`, `SUB2`, …). Both follow the same camera
+path: one video frame = one track **section**. `HOLD` and `TOKY` have a
+single video. Lap lengths in sections: NS1 476, FC1 806, SUB 809, NGL 858,
+MV1 802, TOKY 801 (= rows in the `.ZNN`).
+
+Every track frame is a full 320×152 keyframe (mode 0xFE), so frames can be
+skipped freely at speed. The game draws the video at y=24 on the
+320×200 screen.
+
+### `pt`: sections
+
+58-byte records (29 × s16). Frame 0 carries 100 records (sections 0–99);
+every later frame carries one more. The game keeps a 100-section window
+(RACEPRG 0xCF5E: shift down by 58 bytes, append), so at frame *f* the
+camera is at section *f* and the window holds sections *f*..*f*+99.
+
+| Field | Meaning |
+|---|---|
+| 0–2 | Camera position x, y, z (z up) |
+| 3–10 | Rotation, 16384 = 1.0 (see transform) |
+| 11 | Depth bias; the transform adds field/8 |
+| 12, 13 | View roll sin, cos; 4096 = 1.0 |
+| 14–25 | Road cross-section: 4 points (x,y,z) outer-left, inner-left, inner-right, outer-right |
+| 26 | Bank angle, 1/50 degree (wraps at 18000); tilts car sprites |
+| 27 | Heading, 2880 per turn |
+| 28 | Pitch, 1/8 degree |
+
+World → screen, exactly as RACEPRG 0x6D58–0x6FD2 (per-track world scale
+at DS:0x3E6 is 1/1 for every track):
+
+```
+d  = P - cam
+X  = (-dx·f3 + dy·f4) / 16384
+Y  = (-dx·f5 - dy·f6 + dz·f7) / 16384
+Z  = (-dx·f8 - dy·f9 - dz·f10) / 16384 + f11/8
+X' = (f13·X - f12·Y) / 4096        Y' = (f12·X + f13·Y) / 4096
+sx = 160 + X'·2.3·88 / Z           sy = (131 - Y'·230 / Z)·200/262 + shake(DS:0x426)
+```
+
+Car sprites are placed by evaluating this for a point on a road section
+ahead (RACEPRG 0x6D58 takes the section index and a cross-section point).
+
+### `kl`: occlusion masks
+
+Copied to DS:0x15D8 each frame; used by RACEPRG 0xB520 / 0xB11A when
+drawing a car. Spans are where a car may be drawn; gaps are scenery in
+front of it (e.g. the inner barrier of a hairpin).
+
+```
+u8 count (1-3)
+count × { u8 section, u8 first_row, u8 last_row (inclusive), u16 start (row·320), u16 data_offset }
+```
+
+For a car *n* sections ahead, use the last layer whose `section` ≤ *n*;
+if *n* is below the first layer's `section`, the car is not masked.
+
+Layer data is a list of opcodes, each describing 1–16 rows of the same shape:
+
+```
+op: bits 0-1 = boundaries per row: 0 (row has no spans), 2, 4, 6
+    bit 2    = first boundary explicit (else x=0)
+    bit 3    = last boundary explicit (else x=320)
+    bits 4-7 = row count (0 = 16)
+explicit boundaries: cumulative deltas from x=0, one byte each
+                     (0 means: next byte + 256)
+boundaries pair up as [x0,x1) spans
+```
+
+All 31,277 `kl` chunks on the disc decode with no bytes left over. One
+chunk (`NGL1.HNM` frame 2185) has a damaged tag (`f8 4b`) but is a normal
+`kl` mask.
+
+### `.ZNN`: lane tiles
+
+One row of 5 bytes per section of a lap: the five lanes across the road
+between the inner edges (cross-section points 1 and 2). 0 = nothing.
+Values fall in two families, 1–10 and 17–25 (bit 4 set). They match the
+on-track bonus/penalty tiles (sounds `BONUS*.VOC`, `MALUS*.VOC`); the exact
+meaning of each code still has to be read from the EXE.
+
 ## Still to decode
 
-- `pt` / `kl` chunks and `.ZNN`: track geometry and collision for gameplay.
+- `.ZNN` code meanings (which bonus/penalty each value is).
+- Lane direction (is lane 0 left or right).
 - HSQ graphics (`_JOS.HSQ`, `CASQUE.HSQ`, `PANEL2.HSQ`...): sprite/image layouts.
 - `.SUB` subtitle timing (text is plain; a header of offsets precedes it).
 - `.RAW` fonts.

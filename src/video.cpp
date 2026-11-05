@@ -1,6 +1,7 @@
 #include "video.h"
 
 #include <cctype>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 
@@ -76,6 +77,19 @@ uint8_t Video::pget(int x, int y) const {
 void Video::fill(int x, int y, int w, int h, uint8_t idx) {
     for (int yy = y; yy < y + h; ++yy)
         for (int xx = x; xx < x + w; ++xx) pset(xx, yy, idx);
+}
+
+void Video::line(int x0, int y0, int x1, int y1, uint8_t idx) {
+    int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    for (int guard = 0; guard < 4096; ++guard) {
+        pset(x0, y0, idx);
+        if (x0 == x1 && y0 == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
 }
 
 void Video::blit(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent) {

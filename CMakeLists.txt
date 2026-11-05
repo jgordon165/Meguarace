@@ -54,7 +54,10 @@ else()
     target_compile_options(megarace PRIVATE -Wall -Wextra)
 endif()
 
-# Copy Lua scripts next to the binary so it runs out of the build folder.
-add_custom_command(TARGET megarace POST_BUILD
+# Copy Lua scripts next to the binary on every build (not only when the C++
+# changes), so script edits are picked up by a plain rebuild.
+add_custom_target(copy_scripts ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/scripts $<TARGET_FILE_DIR:megarace>/scripts)
+            ${CMAKE_SOURCE_DIR}/scripts $<TARGET_FILE_DIR:megarace>/scripts
+    COMMENT "Copying Lua scripts")
+add_dependencies(copy_scripts megarace)
