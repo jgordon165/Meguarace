@@ -5,8 +5,10 @@
 // a MegaRace CD (see tests/lua/main.lua).
 
 #include "formats/cryo.h"
+#include "resampler.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -212,8 +214,52 @@ static void testHnmCorrupt() {
     CHECK(!ok);
 }
 
+// Video soundtracks arrive one small chunk per frame. Resampling them chunk by
+// chunk must give the same output as one big conversion, with the expected
+// length; otherwise speech drifts away from the picture.
+static void testResamplerChunks() {
+    const int N = 886, CHUNKS = 500;
+    std::vector<uint8_t> all;
+    for (int i = 0; i < N * CHUNKS; ++i) all.push_back(uint8_t(128 + 100 * ((i / 7) % 2 ? 1 : -1)));
+
+    Resampler whole;
+    std::vector<int16_t> a;
+    whole.push(all.data(), all.size(), 8, 1, 11111, 44100, a);
+
+    Resampler chunked;
+    std::vector<int16_t> b;
+    for (int c = 0; c < CHUNKS; ++c) chunked.push(all.data() + size_t(c) * N, N, 8, 1, 11111, 44100, b);
+
+    const double expect = double(N) * CHUNKS * 44100.0 / 11111.0;
+    CHECK(a.size() == b.size());
+    bool same = a.size() == b.size();
+    for (size_t i = 0; same && i < a.size(); ++i) same = std::abs(a[i] - b[i]) <= 1;   // rounding only
+    CHECK(same);
+    // The tail can't interpolate past the last input sample: at most
+    // dst/src (~4) frames short over the whole stream.
+    CHECK(std::abs(double(b.size() / 2) - expect) <= 5.0);
+
+    // 16-bit stereo, downsampling, odd chunk sizes.
+    std::vector<uint8_t> st;
+    for (int i = 0; i < 9001; ++i) { int16_t v = int16_t(i * 3); st.push_back(uint8_t(v)); st.push_back(uint8_t(v >> 8)); st.push_back(uint8_t(-v)); st.push_back(uint8_t((-v) >> 8)); }
+    Resampler r2;
+    std::vector<int16_t> c2;
+    for (size_t off = 0; off < st.size(); off += 4 * 37) r2.push(st.data() + off, std::min<size_t>(4 * 37, st.size() - off), 16, 2, 48000, 44100, c2);
+    CHECK(std::abs(double(c2.size() / 2) - 9001.0 * 44100 / 48000) <= 5.0);
+    CHECK(c2[0] == 0 && c2[2] > 0 && c2[3] < 0);   // left rises, right falls
+
+    // 8-bit unsigned centre (128) is silence.
+    uint8_t mid[4] = {128, 128, 128, 128};
+    std::vector<int16_t> sil;
+    Resampler r3;
+    r3.push(mid, 4, 8, 1, 11025, 44100, sil);
+    bool silent = true;
+    for (auto v : sil) silent = silent && v == 0;
+    CHECK(silent && !sil.empty());
+}
+
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testResamplerChunks}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }

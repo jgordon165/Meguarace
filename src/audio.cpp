@@ -5,6 +5,7 @@
 #include <cstring>
 
 bool Audio::init() {
+    if (!SDL_WasInit(SDL_INIT_AUDIO)) return false;
     SDL_AudioSpec want{};
     want.freq = 44100;
     want.format = AUDIO_S16SYS;
@@ -63,9 +64,11 @@ void Audio::setMusicVolume(float v) { std::lock_guard<std::mutex> lk(mtx_); musi
 
 int Audio::playPcm(const uint8_t* data, size_t len, int rate, int bits, int channels,
                    float volume, bool loop) {
+    if (!dev_) return 0;
     std::vector<int16_t> pcm;
-    SDL_AudioFormat fmt = bits == 16 ? AUDIO_S16LSB : AUDIO_U8;
-    if (!convertToDevice(data, len, fmt, channels, rate, pcm)) return 0;
+    Resampler rs;
+    rs.push(data, len, bits, channels, rate, spec_.freq, pcm);
+    rs.finish(pcm);
     std::lock_guard<std::mutex> lk(mtx_);
     auto it = std::find_if(voices_.begin(), voices_.end(), [](const Source& s) { return !s.active; });
     if (it == voices_.end()) it = voices_.begin();   // steal the oldest slot
@@ -89,12 +92,15 @@ void Audio::streamReset() {
     stream_ = Source{};
     stream_.active = true;
     streamPlayed_ = 0;
+    streamResampler_.reset();
 }
 
 void Audio::streamPush(const uint8_t* data, size_t len, int rate, int bits, int channels) {
     if (!dev_ || len == 0 || rate <= 0) return;
     std::vector<int16_t> pcm;
-    if (!convertToDevice(data, len, bits == 16 ? AUDIO_S16LSB : AUDIO_U8, channels, rate, pcm)) return;
+    // One resampler for the whole stream: per-chunk conversion loses samples
+    // at every chunk boundary and makes the sound run ahead of the video.
+    streamResampler_.push(data, len, bits, channels, rate, spec_.freq, pcm);
     std::lock_guard<std::mutex> lk(mtx_);
     // Drop what's already played so the buffer doesn't grow forever.
     if (stream_.pos > 0) {
