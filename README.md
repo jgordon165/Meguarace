@@ -1,5 +1,8 @@
 # MegaRace port
 
+[![CI-build](https://github.com/jgordon165/Meguarace/actions/workflows/ci-build.yml/badge.svg)](https://github.com/jgordon165/Meguarace/actions/workflows/ci-build.yml)
+[![code-analysis](https://github.com/jgordon165/Meguarace/actions/workflows/code-analysis.yml/badge.svg)](https://github.com/jgordon165/Meguarace/actions/workflows/code-analysis.yml)
+
 A modern reimplementation host for Cryo's *MegaRace* (1993, DOS): a C++ engine
 (SDL2) running game logic written in Lua.
 
@@ -45,6 +48,29 @@ Tested against the US v1.0.1 CD. The disc has no CD audio tracks; music and
 speech are inside the videos.
 
 Headless test run: `--frames 60 --screenshot out.bmp`.
+
+## Tests and CI
+
+```
+ctest --test-dir build -C Release --output-on-failure
+```
+
+runs the format decoders against hand-built inputs, the Lua modules (run by
+the engine headless), and a boot check. None of them need game data. To
+also run the tests against your CD, set `MEGARACE_DATA` before configuring:
+
+```
+MEGARACE_DATA=V:\ cmake -S . -B build      # PowerShell: $env:MEGARACE_DATA="V:\"
+```
+
+GitHub Actions (same layout as the Aleph One fork):
+
+| Workflow | When | What |
+|---|---|---|
+| `CI-build` | every push | Linux (GCC, Clang), macOS x64 + arm64, Windows x64 + x86; build and test |
+| `code-analysis` | push/PR to `master` | CodeQL security-and-quality on our C++ |
+| `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx` |
+| `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
 
 ## Status
 
