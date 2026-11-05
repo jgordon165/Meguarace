@@ -1,0 +1,40 @@
+name: code-analysis
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  CodeQL-Build:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Configure
+        uses: ./.github/actions/configure-linux
+        with:
+          # Analyse our code, not SDL's and Lua's: build those before CodeQL starts.
+          configure_options: -DMEGARACE_TESTS=ON
+
+      - name: Build third-party libraries
+        run: cmake --build build --parallel --target SDL2-static SDL2main lua_static
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: cpp
+          queries: security-and-quality
+          build-mode: manual
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4

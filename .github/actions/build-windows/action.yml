@@ -1,0 +1,33 @@
+name: windows
+description: template used to build for windows
+
+inputs:
+  platform:
+    description: "x64 or x86"
+    required: true
+  configurations:
+    description: "comma separated list of CMake configurations we want to build"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set Image Version
+      run: echo "runner_image_version=$Env:ImageVersion" >> $Env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Cache fetched dependencies
+      uses: actions/cache@v5
+      with:
+        path: .deps
+        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.platform}}-deps-${{hashFiles('CMakeLists.txt')}}
+
+    - name: Configure
+      run: |
+        $arch = if ("${{inputs.platform}}" -eq "x86") { "Win32" } else { "x64" }
+        cmake -S . -B build -G "Visual Studio 17 2022" -A $arch -DFETCHCONTENT_BASE_DIR="$Env:GITHUB_WORKSPACE/.deps"
+      shell: pwsh
+
+    - name: Build
+      run: foreach ($configuration in "${{inputs.configurations}}".Split(",").Trim()) { cmake --build build --config $configuration --parallel }
+      shell: pwsh

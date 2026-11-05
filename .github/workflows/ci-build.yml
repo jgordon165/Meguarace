@@ -1,0 +1,98 @@
+name: CI-build
+
+on: [push, pull_request]
+
+# Same rule as the Aleph One fork: build pushes, and pull requests only when
+# they come from another repository (a same-repo PR is already built by its push).
+jobs:
+  linux:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        uses: ./.github/actions/configure-linux
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests
+
+  linux-clang:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        uses: ./.github/actions/configure-linux
+        with:
+          configure_options: -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests
+
+  mac-osx-x64:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-mac-osx
+        with:
+          osx_arch: x86_64
+      - name: Run Tests
+        uses: ./.github/actions/run-tests
+
+  mac-osx-arm:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-mac-osx
+        with:
+          osx_arch: arm64
+      - name: Run Tests
+        uses: ./.github/actions/run-tests
+
+  windows-x64:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-windows
+        with:
+          platform: x64
+          configurations: Release
+      - name: Run Tests
+        uses: ./.github/actions/run-tests
+
+  windows-x86:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-windows
+        with:
+          platform: x86
+          configurations: Release
+      - name: Run Tests
+        uses: ./.github/actions/run-tests

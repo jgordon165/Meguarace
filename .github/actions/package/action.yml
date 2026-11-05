@@ -1,0 +1,42 @@
+name: package
+description: install the build into a staging folder and archive it (no game data)
+
+inputs:
+  name:
+    description: archive base name, e.g. meguarace-windows-x64
+    required: true
+  configuration:
+    required: false
+    default: Release
+  format:
+    description: zip or tar.gz
+    required: false
+    default: zip
+
+outputs:
+  path:
+    description: path of the archive
+    value: ${{steps.archive.outputs.path}}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install to staging folder
+      run: cmake --install build --config ${{inputs.configuration}} --prefix "stage/Meguarace"
+      shell: bash
+
+    - name: Archive
+      id: archive
+      run: |
+        version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+        mkdir -p dist
+        out="dist/${{inputs.name}}-$version.${{inputs.format}}"
+        case "${{inputs.format}}" in
+          zip)
+            if command -v 7z >/dev/null; then (cd stage && 7z a -tzip "../$out" Meguarace >/dev/null)
+            else (cd stage && zip -qr "../$out" Meguarace); fi ;;
+          tar.gz) tar -C stage -czf "$out" Meguarace ;;
+        esac
+        echo "path=$out" >> "$GITHUB_OUTPUT"
+        ls -l dist
+      shell: bash

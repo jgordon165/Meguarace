@@ -148,7 +148,7 @@ static int input_released(lua_State* L) { lua_pushboolean(L, E(L).input.released
 // --------------------------------------------------------------- sys ------
 
 static int sys_ticks(lua_State* L) { lua_pushinteger(L, SDL_GetTicks64()); return 1; }
-static int sys_quit(lua_State* L)  { E(L).quit = true; return 0; }
+static int sys_quit(lua_State* L)  { E(L).quit = true; E(L).exitCode = int(luaL_optinteger(L, 1, 0)); return 0; }
 static int sys_log(lua_State* L) {
     std::fprintf(stdout, "[lua] %s\n", luaL_tolstring(L, 1, nullptr));
     std::fflush(stdout);

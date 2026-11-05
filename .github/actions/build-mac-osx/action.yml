@@ -1,0 +1,47 @@
+name: mac-osx
+description: template used to build for mac osx
+
+inputs:
+  osx_arch:
+    description: "x86_64 or arm64, or empty for a universal binary (both)"
+    required: false
+    default: ""
+  build_type:
+    required: false
+    default: Release
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install tools
+      run: brew install ninja
+      shell: bash
+
+    - name: Set Image Version
+      run: echo "runner_image_version=$ImageVersion" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Cache fetched dependencies
+      uses: actions/cache@v5
+      with:
+        path: .deps
+        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.osx_arch || 'universal'}}-deps-${{hashFiles('CMakeLists.txt')}}
+
+    - name: Switch to Xcode 16.4
+      run: sudo xcode-select --switch /Applications/Xcode_16.4.app
+      shell: bash
+
+    - name: Configure
+      run: |
+        archs="${{inputs.osx_arch}}"
+        [ -z "$archs" ] && archs="arm64;x86_64"
+        cmake -S . -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{inputs.build_type}} \
+          -DCMAKE_OSX_ARCHITECTURES="$archs" \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+          -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+      shell: bash
+
+    - name: Build
+      run: cmake --build build --parallel
+      shell: bash

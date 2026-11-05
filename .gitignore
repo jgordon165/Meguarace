@@ -30,3 +30,8 @@ re/ghidra_project/
 # Python
 __pycache__/
 *.pyc
+
+# CI / packaging output
+stage/
+dist/
+.deps/

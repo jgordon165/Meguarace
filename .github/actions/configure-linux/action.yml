@@ -1,0 +1,44 @@
+name: configure-linux
+description: install build dependencies and configure CMake on Linux
+
+inputs:
+  configure_options:
+    description: extra arguments passed to cmake at configure time
+    required: false
+    default: ""
+  build_type:
+    required: false
+    default: Release
+
+runs:
+  using: "composite"
+  steps:
+    - run: sudo apt-get update -y
+      shell: bash
+
+    # SDL2 is built from source (static) by CMake; these headers let it
+    # compile in its X11, Wayland, OpenGL and audio back ends. SDL loads the
+    # matching system libraries at runtime, so the binary has no hard
+    # dependency on any of them.
+    - name: Install dependencies
+      run: >
+        sudo apt-get install -y ninja-build
+        libasound2-dev libpulse-dev libpipewire-0.3-dev
+        libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev
+        libxkbcommon-dev libwayland-dev libdecor-0-dev libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev
+        libdbus-1-dev libudev-dev libdrm-dev libgbm-dev
+      shell: bash
+
+    - name: Cache fetched dependencies
+      uses: actions/cache@v5
+      with:
+        path: .deps
+        key: ${{runner.os}}-${{runner.arch}}-deps-${{hashFiles('CMakeLists.txt')}}-${{inputs.configure_options}}
+
+    - name: Configure
+      run: >
+        cmake -S . -B build -G Ninja
+        -DCMAKE_BUILD_TYPE=${{inputs.build_type}}
+        -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+        ${{inputs.configure_options}}
+      shell: bash

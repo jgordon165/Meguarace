@@ -97,6 +97,13 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (!callLua(L, "init", 0, false)) return 1;
+    if (eng.quit) {                     // init may finish everything (test runs)
+        lua_close(L);
+        eng.audio.shutdown();
+        eng.video.shutdown();
+        SDL_Quit();
+        return eng.exitCode;
+    }
 
     Uint64 last = SDL_GetPerformanceCounter();
     const double freq = static_cast<double>(SDL_GetPerformanceFrequency());
@@ -129,5 +136,5 @@ int main(int argc, char** argv) {
     eng.audio.shutdown();
     eng.video.shutdown();
     SDL_Quit();
-    return 0;
+    return eng.exitCode;
 }

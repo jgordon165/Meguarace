@@ -1,0 +1,39 @@
+name: release-linux
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release:
+    # Oldest supported runner, so the binary runs on older glibc versions too.
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Configure
+      uses: ./.github/actions/configure-linux
+
+    - name: Build
+      run: cmake --build build --parallel
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-linux-x64
+        format: tar.gz
+
+    - name: Source archive
+      run: |
+        version=$(git describe --tags --always)
+        git archive --format=tar.gz --prefix="meguarace-$version/" -o "dist/meguarace-src-$version.tar.gz" HEAD
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-linux-release
+        if-no-files-found: error
+        path: dist/*.tar.gz

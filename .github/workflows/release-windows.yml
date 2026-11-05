@@ -1,0 +1,73 @@
+name: release-windows
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release-x64:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Build
+      uses: ./.github/actions/build-windows
+      with:
+        platform: x64
+        configurations: Release
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    - name: Build archive
+      id: package
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-windows-x64
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-windows-release-x64
+        if-no-files-found: error
+        path: dist/*.zip
+
+    - name: Upload debugging symbols
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-windows-symbols-x64
+        path: build/Release/*.pdb
+
+  release-x86:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Build
+      uses: ./.github/actions/build-windows
+      with:
+        platform: x86
+        configurations: Release
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-windows-x86
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-windows-release-x86
+        if-no-files-found: error
+        path: dist/*.zip
+
+    - name: Upload debugging symbols
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-windows-symbols-x86
+        path: build/Release/*.pdb
