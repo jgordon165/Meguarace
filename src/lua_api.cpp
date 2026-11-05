@@ -9,6 +9,9 @@ extern "C" {
 
 #include <cstdio>
 #include <string>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static Engine& E(lua_State* L) {
     return *static_cast<Engine*>(lua_touserdata(L, lua_upvalueindex(1)));
@@ -165,9 +168,15 @@ static int sys_save(lua_State* L) {
     const char* data = luaL_checklstring(L, 2, &len);
     bool ok = false;
     if (!path.empty()) {
-        if (FILE* f = std::fopen(path.c_str(), "wb")) {
-            ok = std::fwrite(data, 1, len, f) == len;
-            ok = (std::fclose(f) == 0) && ok;
+        int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        if (fd >= 0) {
+            FILE* f = fdopen(fd, "wb");
+            if (f) {
+                ok = std::fwrite(data, 1, len, f) == len;
+                ok = (std::fclose(f) == 0) && ok;
+            } else {
+                close(fd);
+            }
         }
     }
     lua_pushboolean(L, ok);
