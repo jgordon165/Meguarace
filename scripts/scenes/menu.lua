@@ -69,7 +69,7 @@ function S:start_round()
     local me = self
     scenes.push(require("scenes.player"), ident, { on_done = function()
         scenes.push(require("scenes.race"), round.video, {
-            car = car, rival = rival, level = st.level,
+            car = car, rival = rival, level = st.level, total = st.total,
             title = data.track_names()[st.round],
             on_done = function(result) me:race_done(result) end,
         })

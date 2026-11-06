@@ -406,10 +406,10 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | 3 | — | forced braking until speed ≤ 130 (`[0x68CF]`) |
 | 4 | — | spin: steering sequence + 5 px/tick drift (speed > 15), else as 7 |
 | 5 | PLUARME | weapon lost, energy 0 |
-| 6 | MALUS7 | timer `[0x68EB]` for `[0x812]` ticks (effect not traced yet) |
+| 6 | MALUS7 | radar jammed: `[0x68EB]` for `[0x812]` ticks (the radar blinks instead of showing the rival) |
 | 7 | — | skid: steering sequence + 2 px/tick drift (speed ≥ 8) |
 | 8 | BONUS16 | flag `[0x68DD]` (not traced yet) |
-| 9 | MALUS6 | timer `[0x68E7]` for `[0x812]` ticks (not traced yet) |
+| 9 | MALUS6 | gauges out: `[0x68E7]` for `[0x812]` ticks (every dashboard gauge reads 0) |
 | 10 | MALUS2 | timer `[0x68FB]`, 800 ticks (not traced yet) |
 | 17 | ENERGYP | energy + `[0x68DB]` (then 70) |
 | 18 | BONUS1 | `[0x690D]` + 10 |
@@ -481,8 +481,17 @@ Every car starts with weapon 1 (DS:0xD66 is all zero, raised to 1).
 - **Damage bar** (0x0FC3): 52 × 6 in colour 74, with (100 − damage) ÷ 2
   pixels of 77 (first 16) and 76, every 4th pixel 74.
 
-The rival fires back with the same machinery (`[0xD50]`/`[0xD54]`,
-`[0xDAC]`); its hit costs your armour 20 (0x4801). Not in the port yet.
+**The rival fires back** (0x4711, 0x4779, 0x491A) with the same frames
+(`[0xD50]`/`[0xD54]`, flag `[0xDAC]`). It fires from 3–10 sections behind you
+(`[0xE0B]` −3…−10, a few AI states use −4) when its x is inside your car's
+span `[0xCC4]`–`[0xCC6]` and none of its shots is in flight; firing takes 1
+from *your* energy. The bolt hits if the rival is then 5–9 sections behind
+and still lined up; at the end of the impact you lose 20 armour (0x4801).
+At 0 armour (0x1940) `EXPLOD2` plays, `EXPLOSE` plays over your car (gone
+after frame 15) and the race is lost (`[0x68CB]` = −2).
+
+Other armour losses, not in the port yet: −8 at the end of some slides
+(0x2136, `[0x6933]`) and −1 per smoke cycle while `[0x68FF]` is set (0x3098).
 
 This port runs shot and explosion frames at 12.5 per second, applies a hit's
 damage at once, uses 12 sections as the range, draws the damage bar over the
@@ -492,12 +501,60 @@ rival, and takes a rival out of the race once its explosion has played.
 6 (4 kHz). Every other effect is 7.5–9.6 kHz, so this port plays those three
 at 8 kHz.
 
-### Dashboard tile scanner
+### Dashboard
 
-0x10C7–0x115D draws the next three ZNN rows as `ZONES` icons, 10 px apart.
-The icon is `code − 1` for codes 1–10 and `code − 7` for 17–25. The panel's
-position on each car's dashboard isn't read yet; the port draws it in the
-left box.
+Every dashboard image is drawn by the sprite routine 0x7041, which centres
+on x; y is the top. Dashboard positions are relative to row 152.
+
+**Gauges** (0x1283) are strips of frames in the car's `T<XX>.HSQ`. Each has
+a table of 8 cars × { x, y, first frame, frame count } (car order JO RA OU
+PA LU OM HO MA), and shows frame `first + value × (count − 1) / max`, with
+the value clamped to 0…max. While tile 9's timer `[0x68E7]` runs, every
+gauge reads 0.
+
+| Table | Gauge | Value | Max |
+|---|---|---|---|
+| DS:0x530 | SP, speed | `[0xC9A]` (speed ÷ 10) | 22 |
+| DS:0x570 | EN, energy | `[0x6911]` | 450 |
+| DS:0x4F0 | DM, armour | `[0xD2E]` | the car's armour `[0x808]` |
+| DS:0x4B0 | THRILL | `[0xD32]` | 128 |
+| DS:0x630 | weapon | `[0xD5A]` | 3 |
+| DS:0x670, 0x6B0 | two lamps | lit unless weapon 1 is charged `[0xD5E]` | 1 |
+| DS:0x5B0 | one-frame badge | `[0x68E1]`, code 23's flag (count 1: always the same frame) | 1 |
+
+**THRILL** `[0xD32]` (the TV audience's excitement) starts at 60. Pending
+amounts in `[0xD34]` raise it 1 a tick (capped: 127 → 124); otherwise it
+sinks 1 a tick (0x1C19). Bumps set 10–50 (0x3BB3…0x3C60), your hit on a
+rival adds 64 (0x2FEC), a destroyed rival sets 5 (0x3EAD).
+
+**Radar** (0x12F7, DS:0x770: { x, y, first frame, width }): frame first + 2
+is the screen. On it, the rival's blip: frame first + 3 + d, d = sections
+ahead (0–4) or 5 + sections behind (capped at 9), at x + (rival x − road
+left − road width / 2) × width / road width (`[0x68F7]`, `[0x68F9]`),
+kept inside the screen. While tile 6's timer `[0x68EB]` runs it blinks
+frames first + 0/1 instead; for 50 ticks after a rival is destroyed (`[0x68EB]`
+= 1) it shows no blip.
+
+**Tile scanner** (0x0EA2, 0x10A6, DS:0x730: { x, y }): `ZONES_` frame 20 is
+the panel, its left edge at x. The next three ZNN rows are `ZONES_` icons
+centred at x + 9 + 10 × lane, rows at y + 20, + 10 and + 0. The icon is
+`code − 1` for codes 1–10 and `code − 7` for 17–25.
+
+**Opponents** (DS:0x6F0: { x, y }, x = 0 for none): `[0x68C7]` in the 6×6
+font. Not drawn on the last track. `[0x68C7]` starts at DS:0x846[round]
+(4, 5, 5, 5, 6, 6, then 7): the number of rivals to beat. The original
+races them one at a time and you win when it reaches 0 (0x3FE8,
+`[0x68CB]` = −3); the port still has three on the road at once.
+
+**Status line** (0x150A), in the RAW fonts, over the picture: `LAPS:` at
+(2, 6), the laps left `[0x68C5]` (3; 2 on HOLD) at (50, 6), and the score
+`[0x6A02]` + `[0x690D]` in six digits at (250, 6).
+
+**RAW fonts** (0x1600): 320-pixel-wide strips. `FONTE1` (digits) and
+`FONTE2` (`:` onwards, so letters) are 8 × 12 glyphs, glyph *k* at column
+8*k* − 1 (0 for *k* = 0), 10 pixels apart; `FONTE6_6` is 6 × 6 digits at
+column 6*k*, 6 apart. Pixels are colours 79 and 255; over the dashboard the
+glyph box is cleared to black first.
 
 ## Music
 
@@ -566,7 +623,8 @@ header as described above.
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
-- Rival AI, the rival's shots at you, and collisions (the port's are placeholders).
+- Rival AI (the state machine around 0x34C5…0x37C7) and collisions (the port's are placeholders).
+- One rival at a time and the opponents count as the way to win (see Dashboard).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.

@@ -1,5 +1,5 @@
 -- A race: the game's rules (race/rules.lua) on a track video.
---   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   ESC quit
+--   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   F1 debug line   ESC quit
 --
 -- From RACEPRG.EXE: the video advances at a fixed rate whenever you're
 -- moving; your speed decides how you gain on the rivals. The lane is the
@@ -12,6 +12,8 @@ local track  = require("formats.track")
 local cars   = require("formats.cars")
 local voc    = require("formats.voc")
 local rules  = require("race.rules")
+local hud    = require("race.hud")
+local font   = require("ui.rawfont")
 local music  = require("game.music")
 local S = {}
 
@@ -37,7 +39,7 @@ function S:enter(name, opts)
     self.carx, self.view, self.steer = 160, 0, 0
     self.car = cars.open(opts.car or "JO")
     self.rival = cars.open_rival(opts.rival or "RA")
-    self.zones = spr.open("ZONES")
+    self.zones = spr.open("ZONES_") or spr.open("ZONES")   -- scanner panel + icons
     self.fx = spr.open("FUMEE")              -- muzzle flash, bolt, impact
     self.boom = spr.open("EXPLOSE")          -- destroyed rival
     self.fx_t = 0
@@ -48,6 +50,9 @@ function S:enter(name, opts)
         self.rivals[k] = { ahead = def[1], u = def[2], speed = def[3] * scale, bump = 0, damage = 0 }
     end
     self.title = opts.title
+    self.last_round = name == "HOLD"          -- no opponents digit on the last track
+    self.total = opts.total or 0              -- championship score before this race
+    self.debug = false
     self.on_done = opts.on_done
     self.ticks = 0
     self.clock = -COUNTDOWN
@@ -68,6 +73,7 @@ end
 
 function S:update(dt)
     if input.pressed("Escape") then scenes.pop(); return end
+    if input.pressed("F1") then self.debug = not self.debug end
     self.clock = self.clock + dt
     if self.finished then
         if input.pressed("Return") or input.pressed("Space") then
@@ -80,15 +86,16 @@ function S:update(dt)
     if self.clock < 0 then return end                     -- countdown
 
     local s = self.rules
+    local alive = not s.destroyed
     self.steer = 0
-    if input.down("Left") then self.carx = self.carx - STEER * dt; self.steer = 1 end
-    if input.down("Right") then self.carx = self.carx + STEER * dt; self.steer = -1 end
+    if alive and input.down("Left") then self.carx = self.carx - STEER * dt; self.steer = 1 end
+    if alive and input.down("Right") then self.carx = self.carx + STEER * dt; self.steer = -1 end
 
     -- Game ticks.
     self.ticks = self.ticks + dt * rules.TICKS_PER_SECOND
     while self.ticks >= 1 do
         self.ticks = self.ticks - 1
-        local _, drift = rules.step(s, { accel = input.down("Up"), brake = input.down("Down") })
+        local _, drift = rules.step(s, { accel = alive and input.down("Up"), brake = not alive or input.down("Down") })
         self.carx = self.carx + drift
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
@@ -104,11 +111,7 @@ function S:update(dt)
     if moving then self.pos = self.pos + TRACK_FPS * dt end
     if self.pos >= self.T.frames - 1 then
         self.pos = self.T.frames - 1
-        self.finished = true
-        self.result = self:place()
-        self.entrants = 1
-        for _, r in ipairs(self.rivals) do if not r.out then self.entrants = self.entrants + 1 end end
-        voc.play(self.result == 1 and "BONUS11" or "MALUS2")
+        self:finish(false)
         return
     end
 
@@ -124,8 +127,17 @@ function S:update(dt)
         end
     end
 
-    if input.pressed("Space") or input.pressed("Left Ctrl") or input.pressed("Right Ctrl") then
+    if alive and (input.pressed("Space") or input.pressed("Left Ctrl") or input.pressed("Right Ctrl")) then
         if rules.fire(s) then voc.play("LASER") end
+    end
+    -- A rival 3..10 sections behind you, lined up with your car, fires.
+    for _, r in ipairs(self.rivals) do
+        if not r.destroyed and not r.out and self:lined_up(r, rules.RIVAL_FIRE_BEHIND) then
+            if rules.rival_fire(s) then
+                s.rshot.from = r
+                voc.play("LASER", 0.5)
+            end
+        end
     end
     self.fx_t = self.fx_t + dt
     while self.fx_t >= 1 / FX_FPS do
@@ -137,8 +149,9 @@ function S:update(dt)
     for _, r in ipairs(self.rivals) do
         r.ahead = r.ahead + rules.rival_relative(TRACK_FPS, s.speed, r.speed) * dt
         r.bump = math.max(0, r.bump - dt)
-        if not r.destroyed and r.ahead > 0.5 and r.ahead < 2.5 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
+        if alive and not r.destroyed and r.ahead > 0.5 and r.ahead < 2.5 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
             s.speed = math.max(0, s.speed - 40)
+            rules.bump(s)
             r.ahead = r.ahead + 1.5
             r.bump = 0.6
             voc.play("CHOC4")
@@ -147,6 +160,15 @@ function S:update(dt)
 
     self.spin_t = self.spin_t + dt * (s.speed / 60)
     if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
+end
+
+-- Is rival r `behind` = { min, max } sections behind your car and lined up
+-- with it (its place across the road inside your car's width)?
+function S:lined_up(r, behind)
+    local rel = r.ahead - PLAYER_AHEAD
+    if rel > -behind[1] or rel < -behind[2] then return false end
+    if not self.carbox or not r.x_lane then return false end
+    return r.x_lane >= self.carbox[1] and r.x_lane <= self.carbox[1] + self.carbox[3]
 end
 
 -- Where the shot is this frame: muzzle and centre bolt (nil before the
@@ -184,6 +206,20 @@ function S:effects_frame()
             end
         end
     end
+    -- The rival's shot at you.
+    if s.rshot then
+        local res = rules.rival_shot_step(s)
+        if res == "hit" then voc.play("CHOC4")
+        elseif res == "destroyed" then self:wreck() end
+    end
+    if s.rshot and not s.rshot.hit and self:lined_up(s.rshot.from, rules.RIVAL_HIT_BEHIND) then
+        rules.rival_hit(s)
+        voc.play("CHOCTIR")
+    end
+    if self.wreck_frame then
+        self.wreck_frame = self.wreck_frame + 1
+        if self.wreck_frame >= rules.EXPLOSION_FRAMES then self:finish(true) end
+    end
     for _, r in ipairs(self.rivals) do
         if r.boom and not r.out then
             r.boom = r.boom + 1
@@ -193,12 +229,30 @@ function S:effects_frame()
     end
 end
 
+-- Your armour ran out (RACEPRG 0x1940): EXPLOD2 and the explosion over your
+-- car, which is gone after frame 15; then the race is lost ([0x68CB] = -2).
+function S:wreck()
+    if self.wreck_frame then return end
+    self.wreck_frame = 0
+    voc.play("EXPLOD2")
+end
+
+function S:finish(wrecked)
+    self.finished = true
+    self.wrecked = wrecked
+    self.entrants = 1
+    for _, r in ipairs(self.rivals) do if not r.out then self.entrants = self.entrants + 1 end end
+    self.result = wrecked and self.entrants or self:place()
+    voc.play(self.result == 1 and "BONUS11" or "MALUS2")
+end
+
 -- A rival at full damage blows up and falls back (RACEPRG 0x3E98: EXPLOD2,
 -- its speed set to yours - 20); after the explosion it is out of the race.
 function S:destroy(r)
     if r.boom then return end
     r.destroyed, r.damage, r.boom = true, rules.RIVAL_HEALTH, 0
     r.speed = math.max(0, self.rules.speed - 20)
+    self.radar_quiet_until = self.rules.tick + 50       -- [0x68EB] = 1 for 50 ticks
     voc.play("EXPLOD2")
 end
 
@@ -223,20 +277,98 @@ local function edges(T, cam, si)
     return lx, ly, rx, ry
 end
 
--- Tile scanner on the dashboard: the next three rows ahead, five lanes,
--- drawn with the game's ZONES icons (RACEPRG 0x10C7..0x115D).
+-- Draws sprite i of a set centred on x with its top at y (how the game
+-- places every dashboard image: RACEPRG 0x7041 centres on x).
+local function draw_top(set, i, x, y)
+    local w = set:size(i)
+    if w then set:draw(i, math.floor(x - w // 2), math.floor(y)) end
+end
+
+-- Tile scanner: the next three rows ahead, five lanes, ZONES_ icons on the
+-- ZONES_ panel, at the car's place on its dashboard (RACEPRG 0x0EA2, 0x10A6).
 function S:draw_scanner(base)
     if not self.zones then return end
+    local at = hud.SCANNER_AT[self.car.code]
+    if not at then return end
+    local x0, y0 = at[1], at[2] + hud.DASH_Y
+    local pw = self.zones:size(20)
+    if pw then draw_top(self.zones, 20, x0 + pw // 2, y0) end
     for row = 0, 2 do
         local si = base + PLAYER_AHEAD + 1 + row * 2
         for lane = 0, 4 do
             local code = self.T:tile(si, lane)
             if code ~= 0 then
                 local icon = (code >= 17) and (math.min(code, 25) - 7) or (code - 1)
-                self.zones:draw(icon, 14 + lane * 10, 182 - row * 10)
+                draw_top(self.zones, icon, x0 + 9 + lane * 10, y0 + 20 - row * 10)
             end
         end
     end
+end
+
+-- The gauges, lamps and radar (RACEPRG 0x115E..0x1243).
+function S:draw_gauges()
+    local set, code, s = self.car.gauges, self.car.code, self.rules
+    if not set then return end
+    local v = hud.values(s)
+    for name, tbl in pairs(hud.GAUGES) do
+        local g = tbl[code]
+        if g then draw_top(set, hud.frame(g, v[name], hud.max_for(name, s)), g[1], g[2] + hud.DASH_Y) end
+    end
+    -- Radar: the screen, then the nearest rival's blip (or the jammed blink).
+    local rd = hud.RADAR[code]
+    if not rd then return end
+    local y = rd[2] + hud.DASH_Y
+    draw_top(set, rd[3] + 2, rd[1], y)
+    if s.timers[6] then
+        draw_top(set, rd[3] + (s.tick & 1), rd[1], y)
+        return
+    end
+    if self.radar_quiet_until and s.tick < self.radar_quiet_until then return end
+    local near, best
+    for _, r in ipairs(self.rivals) do
+        if not r.out and not r.destroyed then
+            local d = math.abs(r.ahead - PLAYER_AHEAD)
+            if not best or d < best then near, best = r, d end
+        end
+    end
+    if near then
+        local f = rd[3] + 3 + hud.blip(near.ahead - PLAYER_AHEAD)
+        local bw = set:size(f) or 0
+        draw_top(set, f, hud.blip_x(rd, near.u, bw), y)
+    end
+end
+
+-- Status line and the opponents digit (RACEPRG 0x150A): LAPS: n at the top
+-- left, the score in six digits at the top right.
+function S:draw_status(lap)
+    font.draw(2, 6, "LAPS:", C_TEXT)
+    font.draw(50, 6, tostring(math.max(0, 3 - (lap - 1))), C_TEXT)
+    font.draw(250, 6, string.format("%06d", math.min(999999, self.total + self.rules.points)), C_TEXT)
+    local at = hud.OPPONENTS_AT[self.car.code]
+    if at and at[1] ~= 0 and not self.last_round then
+        local left = 0
+        for _, r in ipairs(self.rivals) do if not r.out then left = left + 1 end end
+        font.draw_small(at[1], at[2] + hud.DASH_Y, tostring(math.min(9, left)), C_TEXT)
+    end
+end
+
+-- The rival's shot from behind: its muzzle flash and bolt rise from the
+-- bottom of the road at the rival's place; a hit plays the impact on you.
+function S:draw_rival_shot()
+    local sh = self.rules.rshot
+    if not sh or not self.fx or not sh.from then return end
+    if sh.hit then
+        if self.carbox then
+            local b = self.carbox
+            self:draw_fx(self.fx, sh.frame, b[1] + b[3] / 2, b[2] + b[4] / 2)
+        end
+        return
+    end
+    local x = sh.from.x_lane
+    if not x then return end
+    local y = hud.DASH_Y - 8
+    if sh.muzzle <= 13 then self:draw_fx(self.fx, sh.muzzle, x, y) end
+    if sh.frame < rules.SHOT.bolt_end then self:draw_fx(self.fx, sh.frame, x, y - 17) end
 end
 
 -- Draws sprite i of a set centred on (x, y).
@@ -292,6 +424,7 @@ function S:draw()
     local sh = s.shot
     for _, r in ipairs(self.rivals) do
         r.x, r.box = nil, nil
+        r.x_lane = plx and (plx + (prx - plx) * r.u) or nil    -- its place across the road, at your car
         local ahead = math.floor(r.ahead)
         if not r.out and ahead > PLAYER_AHEAD and ahead < track.WINDOW - 2 then
             local lx, ly, rx, ry = edges(T, cam, base + ahead)
@@ -328,28 +461,41 @@ function S:draw()
         self.road_l, self.road_r = plx + margin, prx - margin
         self.carx = math.max(self.road_l, math.min(self.road_r, self.carx))
         local y = ply + (pry - ply) * (self.carx - plx) / math.max(1, prx - plx)
-        local _, top = self.car:draw(math.floor(self.view + 3 * self.steer), self.carx, y, 1.0,
-                                     s.speed > 0 and self.spin or nil)
+        local left, top, w, h
+        if not self.wreck_frame or self.wreck_frame < 15 then
+            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer), self.carx, y, 1.0,
+                                            s.speed > 0 and self.spin or nil)
+        end
+        if left then self.carbox = { left, top, w, h } end
         self.cary, self.cartop = y, top or (y - 30)
         self:draw_shot()
+        self:draw_rival_shot()
+        if self.wreck_frame and self.boom and self.carbox then
+            local b = self.carbox
+            self:draw_fx(self.boom, math.min(self.wreck_frame, rules.EXPLOSION_FRAMES - 1),
+                         b[1] + b[3] / 2, b[2] + b[4] / 2)
+        end
     end
 
     self.car:draw_dashboard()
     self:draw_scanner(base)
+    self:draw_gauges()
 
-    -- Readouts (the dashboard gauges themselves aren't drawn yet).
     local lap = T.lap > 0 and math.min(3, f // T.lap + 1) or 1
-    gfx.fill(0, 0, 320, 8, 0)
-    local left = 0
-    for _, r in ipairs(self.rivals) do if not r.out then left = left + 1 end end
-    gfx.text(2, 1, string.format("LAP %d/3  POS %d/%d  SPD %3d  EN %3d  WPN %s  PTS %d",
-        lap, self:place(), left + 1, s.speed // 10, s.energy,
-        s.weapon == 0 and "-" or (s.weapon .. (s.super and "*" or "")), s.points), C_TEXT)
+    self:draw_status(lap)
+    if self.debug then
+        local left = 0
+        for _, r in ipairs(self.rivals) do if not r.out then left = left + 1 end end
+        gfx.fill(0, 20, 320, 8, 0)
+        gfx.text(2, 21, string.format("POS %d/%d SPD %d EN %d AR %d WPN %s THRILL %d",
+            self:place(), left + 1, s.speed // 10, s.energy, s.armour,
+            s.weapon == 0 and "-" or (s.weapon .. (s.super and "*" or "")), s.thrill), C_TEXT)
+    end
 
     if s.message and s.tick < s.message_until then
         local w = #s.message * 4
-        gfx.fill(160 - w // 2 - 3, 20, w + 6, 9, 0)
-        gfx.text(160 - w // 2, 22, s.message, s.message:find("+", 1, true) and C_GOOD or C_TEXT)
+        gfx.fill(160 - w // 2 - 3, 32, w + 6, 9, 0)
+        gfx.text(160 - w // 2, 34, s.message, s.message:find("+", 1, true) and C_GOOD or C_TEXT)
     end
 
     if self.clock < 0 then
@@ -361,7 +507,8 @@ function S:draw()
         gfx.text(156, 74, "GO", C_GOOD)
     end
     if self.finished then
-        local t1, t2 = "END OF RACE", string.format("YOU FINISHED %d OF %d", self.result, self.entrants)
+        local t1 = self.wrecked and "DESTROYED" or "END OF RACE"
+        local t2 = string.format("YOU FINISHED %d OF %d", self.result, self.entrants)
         local t3 = "PRESS ENTER"
         gfx.fill(90, 64, 140, 38, 0)
         gfx.text(160 - #t1 * 2, 68, t1, C_TEXT)

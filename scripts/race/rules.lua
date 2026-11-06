@@ -33,7 +33,7 @@ R.TILE_SOUND = {
 -- only a flag or timer in the EXE (not traced further yet) say so.
 R.TILE_LABEL = {
     [1] = "ENERGY DRAIN", [2] = "POINTS -10", [3] = "BRAKE", [4] = "SPIN", [5] = "WEAPON LOST",
-    [6] = "MALUS 6", [7] = "SKID", [8] = "BONUS 8", [9] = "MALUS 9", [10] = "MALUS 10",
+    [6] = "RADAR JAMMED", [7] = "SKID", [8] = "BONUS 8", [9] = "GAUGES OUT", [10] = "MALUS 10",
     [17] = "ENERGY +", [18] = "POINTS +10", [19] = "SUPER SPEED", [20] = "CHARGED SHOT",
     [21] = "WEAPON 3", [22] = "WEAPON 2", [23] = "BONUS 23", [24] = "BONUS 24", [25] = "BOOST",
 }
@@ -156,7 +156,55 @@ function R.hit(s, rival)
     if not sh or sh.hit then return false end
     sh.hit, sh.frame = true, R.SHOT.bolt_end
     s.points = s.points + R.HIT_POINTS
-    return R.damage(rival, s.car.power)
+    s.thrill_pending = s.thrill_pending + 0x40              -- 0x2FEC
+    local destroyed = R.damage(rival, s.car.power)
+    if destroyed then s.thrill_pending = 5 end             -- 0x3EAD
+    return destroyed
+end
+
+-- A bump into a rival (RACEPRG 0x3BFF): THRILL rises by 10.
+function R.bump(s) s.thrill_pending = 10 end
+
+-- The rival's shot at you (RACEPRG 0x4711, 0x4779, 0x491A). It fires from
+-- 3..10 sections behind when it is lined up with your car and no shot of
+-- its is in flight. Same frames as yours; a hit lands when it is 5..9
+-- sections behind and still lined up, and the impact's end costs 20 armour.
+R.RIVAL_FIRE_BEHIND = { 3, 10 }
+R.RIVAL_HIT_BEHIND  = { 5, 9 }
+R.RIVAL_SHOT_DAMAGE = 20
+
+function R.rival_fire(s)
+    if s.rshot or s.destroyed then return false end
+    s.energy = math.max(0, s.energy - 1)                  -- 0x4711 takes 1 from your energy
+    s.rshot = { muzzle = R.SHOT.muzzle, frame = R.SHOT.bolt, hit = false }
+    return true
+end
+
+function R.rival_hit(s)
+    local sh = s.rshot
+    if not sh or sh.hit then return false end
+    sh.hit, sh.frame = true, R.SHOT.bolt_end
+    return true
+end
+
+-- Returns "done", "hit" (armour lost) or "destroyed" when the shot ends.
+function R.rival_shot_step(s)
+    local sh = s.rshot
+    if not sh then return nil end
+    sh.muzzle = sh.muzzle + 1
+    if sh.muzzle == 14 then sh.muzzle = 15 end
+    sh.frame = sh.frame + 1
+    if not sh.hit and sh.frame >= R.SHOT.bolt_end then s.rshot = nil; return "done" end
+    if sh.frame >= R.SHOT.impact_end then
+        s.rshot = nil
+        s.armour = s.armour - R.RIVAL_SHOT_DAMAGE
+        if s.armour <= 0 then
+            s.armour, s.destroyed = 0, true
+            return "destroyed"
+        end
+        return "hit"
+    end
+    return nil
 end
 
 function R.damage(rival, n)
@@ -177,6 +225,11 @@ function R.new(car)
         weapon = 1,             -- [0xD5A]: every car starts with weapon 1 (DS:0xD66)
         super = false,          -- [0xD5E]: weapon 1 charged (code 20)
         shot = nil,
+        rshot = nil,            -- the rival's shot at you ([0xDAC])
+        thrill = 60,            -- [0xD32] THRILL meter (starts at 60, 0x0573)
+        thrill_pending = 0,      -- [0xD34] still to add to it
+        thrill_fall = 0,         -- [0xD36]
+        destroyed = false,      -- armour ran out ([0xD26])
         drain = 50,             -- [0x68DB]: next code-1 drain / code-17 gain size
         tick = 0,               -- [0x7038]
         brake_until_slow = false,   -- code 3, [0x68CF]
@@ -209,6 +262,19 @@ function R.step(s, input)
 
     for code, t in pairs(s.timers) do
         if s.tick >= t then s.timers[code] = nil end
+    end
+
+    -- THRILL meter (RACEPRG 0x1C19): pending amounts raise it one a tick,
+    -- otherwise it sinks back one a tick.
+    if s.thrill_pending == 0 then s.thrill_fall = 1 end
+    if s.thrill_pending > 0 then
+        s.thrill_pending = s.thrill_pending - 1
+        s.thrill = s.thrill + 1
+        if s.thrill >= 127 then s.thrill = 124 end
+    end
+    if s.thrill_fall > 0 then
+        s.thrill_fall = s.thrill_fall - 1
+        s.thrill = math.max(0, s.thrill - 1)
     end
 
     local drift = 0
@@ -259,7 +325,9 @@ function R.apply_tile(s, code, turn)
     elseif code == 10 then
         s.timers[10] = s.tick + 800
     elseif code == 6 or code == 9 then
-        s.timers[code] = s.tick + 200                     -- [0x812] ticks; per car, not yet read
+        -- 6 jams the radar ([0x68EB]), 9 blanks the gauges ([0x68E7]), for
+        -- the car's [0x812] ticks (RACEPRG 0x1F44..0x1F6B).
+        s.timers[code] = s.tick + s.car.timer
     elseif code == 8 or code == 23 or code == 24 then
         s.timers[code] = s.tick + 200
     end

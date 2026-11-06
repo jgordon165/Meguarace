@@ -203,6 +203,67 @@ test("rules: fire cost, shot frames, hits", function()
     check(o == -20 and dx == -30 and dy == -8, "aim mirrors with the angle")
 end)
 
+test("rules: rival shots, armour, THRILL, tiles 6 and 9", function()
+    local rules = require("race.rules")
+    local s = rules.new("RA")                       -- armour 70, timer 800
+    check(rules.rival_fire(s) and s.energy == 199, "rival fires; costs you 1 energy")
+    check(not rules.rival_fire(s), "one rival shot at a time")
+    local res
+    for _ = 1, 10 do res = res or rules.rival_shot_step(s) end
+    check(res == "done" and s.armour == 70, "a miss does nothing")
+    for i = 1, 3 do
+        rules.rival_fire(s); rules.rival_hit(s)
+        res = nil
+        for _ = 1, 10 do res = res or rules.rival_shot_step(s) end
+        check(res == "hit" and s.armour == 70 - 20 * i, "hit " .. i .. ": armour -20")
+    end
+    rules.rival_fire(s); rules.rival_hit(s)
+    res = nil
+    for _ = 1, 10 do res = res or rules.rival_shot_step(s) end
+    check(res == "destroyed" and s.destroyed and s.armour == 0, "fourth hit destroys RA")
+    check(not rules.rival_fire(s), "no more shots at a wreck")
+
+    local t = rules.new("JO")
+    check(t.thrill == 60, "THRILL starts at 60")
+    for _ = 1, 10 do rules.step(t, {}) end
+    check(t.thrill == 50, "and sinks 1 a tick")
+    rules.bump(t)
+    for _ = 1, 10 do rules.step(t, {}) end
+    check(t.thrill == 60, "a bump raises it by 10")
+    rules.fire(t); rules.hit(t, { damage = 0 })
+    for _ = 1, 64 do rules.step(t, {}) end
+    check(t.thrill == 124, "a hit raises it by 64")
+
+    rules.apply_tile(t, 9)
+    check(t.timers[9] == t.tick + 800, "9: gauges out for the car's timer (200 x 4)")
+    rules.apply_tile(t, 6)
+    check(t.timers[6] == t.tick + 800, "6: radar jammed as long")
+end)
+
+test("hud: gauge frames, radar, per-car tables", function()
+    local hud, rules = require("race.hud"), require("race.rules")
+    local g = hud.GAUGES.speed.JO                   -- { 155, 17, 11, 13 }
+    check(hud.frame(g, 0, 22) == 11 and hud.frame(g, 22, 22) == 23, "first..last frame")
+    check(hud.frame(g, 11, 22) == 17, "half way")
+    check(hud.frame(g, 99, 22) == 23 and hud.frame(g, -5, 22) == 11, "clamped")
+    check(hud.blip(0) == 0 and hud.blip(7) == 4, "ahead: 0..4")
+    check(hud.blip(-1) == 6 and hud.blip(-20) == 9, "behind: 6..9")
+    local rd = hud.RADAR.JO                         -- x 151, width 77
+    check(hud.blip_x(rd, 0.5, 20) == 151, "centre of the road: centre of the radar")
+    check(hud.blip_x(rd, 0, 20) == 151 - 38 + 10, "kept inside the screen")
+    for name, tbl in pairs(hud.GAUGES) do
+        for _, code in ipairs(hud.ORDER) do check(tbl[code] and #tbl[code] == 4, name .. " for " .. code) end
+    end
+    local s = rules.new("OU")
+    s.speed = 180; s.energy = 450
+    local v = hud.values(s)
+    check(v.speed == 18 and v.energy == 450 and v.armour == 70 and v.weapon == 1, "values")
+    check(v.lamp_a == 1 and v.lamp_b == 1, "lamps lit while not charged")
+    rules.apply_tile(s, 9)
+    v = hud.values(s)
+    check(v.speed == 0 and v.energy == 0 and v.armour == 0, "tile 9: every gauge reads 0")
+end)
+
 test("rules: rivals gain or drop back by speed difference", function()
     local rules = require("race.rules")
     check(rules.rival_relative(12.5, 180, 150) < 0, "faster player: rival drops back")
@@ -336,6 +397,29 @@ test("[data] the six FM songs", function()
     audio.stop_song()
     check(not audio.song_playing(), "stop_song stops it")
     check(not audio.song("not a song"), "junk is refused")
+end)
+
+test("[data] every dashboard's gauge images", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local hud = require("race.hud")
+    for _, code in ipairs(hud.ORDER) do
+        local set = spr.open("T" .. code)
+        check(set, "T" .. code)
+        if set then
+            local n = set:count()
+            for name, tbl in pairs(hud.GAUGES) do
+                local g = tbl[code]
+                check(g[3] + g[4] - 1 < n, string.format("%s %s frames %d..%d of %d", code, name, g[3], g[3] + g[4] - 1, n))
+            end
+            local rd = hud.RADAR[code]
+            check(rd[3] + 12 < n, code .. " radar frames")
+        end
+    end
+    local z = spr.open("ZONES_")
+    check(z and z:count() == 21, "ZONES_: 20 icons + scanner panel")
+    for _, f in ipairs({ "FONTE1.RAW", "FONTE2.RAW", "FONTE6_6.RAW" }) do
+        check(dat.exists(f), f)
+    end
 end)
 
 test("[data] game data from RACEPRG.EXE", function()
