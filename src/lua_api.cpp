@@ -11,7 +11,11 @@ extern "C" {
 #include <string>
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 static Engine& E(lua_State* L) {
     return *static_cast<Engine*>(lua_touserdata(L, lua_upvalueindex(1)));
@@ -168,14 +172,29 @@ static int sys_save(lua_State* L) {
     const char* data = luaL_checklstring(L, 2, &len);
     bool ok = false;
     if (!path.empty()) {
+        // Created readable and writable by the owner only (CodeQL finding).
+        // On Windows the file lives in the user's profile, whose ACLs already
+        // restrict it; the CRT only distinguishes read-only from writable.
+#ifdef _WIN32
+        int fd = _open(path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IREAD | _S_IWRITE);
+#else
         int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+#endif
         if (fd >= 0) {
+#ifdef _WIN32
+            FILE* f = _fdopen(fd, "wb");
+#else
             FILE* f = fdopen(fd, "wb");
+#endif
             if (f) {
                 ok = std::fwrite(data, 1, len, f) == len;
                 ok = (std::fclose(f) == 0) && ok;
             } else {
+#ifdef _WIN32
+                _close(fd);
+#else
                 close(fd);
+#endif
             }
         }
     }
