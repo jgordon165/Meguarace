@@ -406,8 +406,21 @@ characters other than RETURN refused); on the last row any key keeps them
 0x60D4). Names (0x611D): the character, the arrows as glyphs 24–27, and
 ESP, RET, SFTD, SFTG, CTLR, ALT for space, return, right and left shift,
 ctrl and alt. The port keeps its own defaults (arrows and SPACE) and shows
-the current keys rather than the table's dots. LOAD and SAVE use the port's one
-save rather than the original's slots. After a car showcase the original
+the current keys rather than the table's dots.
+
+**Saves** (SAVE 0x642A, LOAD 0x61CB): SAVE asks for a name on CONTROL4
+image 1 at (160,90): up to 8 letters and digits in FONTOPT from (128,98),
+8 pixels apart, `_` marking the next place; BACKSPACE takes one back,
+RETURN writes NAME.SAV, ESC leaves. The file holds the race points, the
+score, the level, the round and the rest of the career, the key table, the
+weapons table and the cars you can pick (0x658A). LOAD lists every `*.SAV`
+(up to 50, 0x625F) on CONTROL4 image 0 at (160,100): six names at a time
+from (132,80), a row every 10, the chosen one in FONTOPT2; Up/Down move
+and scroll, RETURN loads (then BA2 plays, 0x6352), ESC leaves. The port
+keeps each save as `slot_NAME.sav` in its preferences folder with the list
+of names in its main save; settings and the Hall of Fame stay outside.
+
+After a car showcase the original
 holds the last frame for up to 800 ticks or a key (0x5687); the port goes
 straight back.
 
@@ -940,7 +953,6 @@ header as described above.
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
 - In the port a wall bounce eases every other tick, not every other section.
-- The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).

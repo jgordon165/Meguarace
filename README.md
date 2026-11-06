@@ -65,7 +65,8 @@ menus. To use a recording instead (say, from a real Sound Blaster), put
 `PAGA.wav` in a folder and pass it with `--music <folder>`.
 
 Settings, progress and high scores are saved in your user preferences folder
-(`meguarace.sav`).
+(`meguarace.sav`). Options → Save and Load keep named saves there as well,
+as the original does.
 
 In a race: Up accelerates, Down brakes, Left/Right steer, Space fires (F1
 shows a debug line). Options → Keyboard sets your own keys, on the
