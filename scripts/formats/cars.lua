@@ -76,7 +76,8 @@ function M.frame_for(angle)
 end
 
 -- Draws the car with its bottom-centre at (x, y). `spin` alternates the
--- wheel frames (0 or 1); nil draws the body only.
+-- wheel frames (0 or 1); nil draws the body only. Returns the drawn box:
+-- left, top, width, height.
 function M:draw(angle, x, y, scale, spin)
     scale = scale or 1
     local f, flip = M.frame_for(angle)
@@ -93,6 +94,7 @@ function M:draw(angle, x, y, scale, spin)
             wheel:draw(f, math.floor(left + ox), math.floor(top + (h - wh) * scale), scale, flip)
         end
     end
+    return left, top, w * scale, h * scale
 end
 
 function M:draw_dashboard()

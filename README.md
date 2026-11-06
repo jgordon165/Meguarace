@@ -48,9 +48,11 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`).
 
-In a race: Up accelerates, Down brakes, Left/Right steer. Drive over the
-lane tiles for their effects (energy, points, weapons, super speed, skids,
-spins), overtake the three rivals, and finish three laps.
+In a race: Up accelerates, Down brakes, Left/Right steer, Space or Ctrl
+fires. Drive over the lane tiles for their effects (energy, points, weapons,
+super speed, skids, spins), overtake or shoot down the three rivals, and
+finish three laps. Each car has its own guns, armour and firepower, read from
+the game's car table.
 
 The track viewer drives along a track video with the game's own cars: your
 car (with its dashboard) and three rivals that hide behind scenery the way
@@ -99,7 +101,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Menus, fonts, subtitles, VOC effects, explosions | To do |
 | Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
 | Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
-| Weapons, rival AI, dashboard gauges, subtitles | To do |
+| Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE; rivals don't shoot back yet) |
+| Rival AI, dashboard gauges, subtitles | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 

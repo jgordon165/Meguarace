@@ -119,7 +119,7 @@ end)
 
 test("rules: tiles", function()
     local rules = require("race.rules")
-    local s = rules.new()
+    local s = rules.new("RA")
     s.energy = 100
     check(rules.apply_tile(s, 17) == "ENERGYP" and s.energy == 150, "17: energy +50, then +70")
     check(rules.apply_tile(s, 17) and s.energy == 220, "second 17: +70")
@@ -144,6 +144,63 @@ test("rules: tiles", function()
     for _ = 1, 3 do rules.step(s, { accel = true }) end
     check(s.speed < 170, "3: forced braking even while accelerating")
     check(rules.apply_tile(s, 0) == nil, "0: nothing")
+end)
+
+test("rules: per-car weapons", function()
+    local rules = require("race.rules")
+    local jo, ra = rules.new("JO"), rules.new("RA")
+    check(jo.weapon == 1 and ra.weapon == 1, "every car starts with weapon 1")
+    check(jo.armour == 120 and ra.armour == 70, "armour from the car table")
+    rules.apply_tile(jo, 21)
+    check(jo.weapon == 1, "JO can't carry weapon 3: drops to 1 (no gun 2 either)")
+    rules.apply_tile(jo, 20)
+    check(jo.weapon == 1 and not jo.super, "JO can't keep the charge")
+    rules.apply_tile(ra, 20)
+    check(ra.weapon == 1 and ra.super, "20: charged weapon 1")
+    local pa = rules.new("PA")
+    rules.apply_tile(pa, 21)
+    check(pa.weapon == 2, "PA: weapon 3 drops to 2")
+    rules.apply_tile(ra, 5)
+    check(ra.weapon == 0 and not rules.fire(ra), "no weapon: can't fire")
+end)
+
+test("rules: fire cost, shot frames, hits", function()
+    local rules = require("race.rules")
+    local s = rules.new("RA")                       -- power 20
+    check(rules.fire_cost(s) == 10, "weapon 1: power / 2")
+    s.super = true
+    check(rules.fire_cost(s) == 80, "charged weapon 1: x8")
+    s.super = false; s.weapon = 2
+    check(rules.fire_cost(s) == 14, "weapon 2: +4")
+    s.weapon = 1
+    s.energy = 15
+    check(rules.fire(s) and s.energy == 5 and s.shot, "fire spends energy")
+    check(s.shot.muzzle == 11 and s.shot.frame == 14, "muzzle 11, bolt 14")
+    local ends
+    for _ = 1, 10 do ends = ends or rules.shot_step(s) end
+    check(ends == "done" and s.shot == nil, "a miss ends after bolt frame 17")
+    s.energy = 5
+    check(rules.fire(s) and s.energy == 0, "energy never below 0")
+    check(not rules.fire(s), "no energy: can't fire")
+    s.energy = 400
+    local rival = { damage = 0 }
+    for i = 1, 4 do
+        rules.fire(s)
+        check(not rules.hit(s, rival), "hit " .. i .. " doesn't destroy")
+        check(not rules.hit(s, rival), "one hit per shot")
+    end
+    check(rival.damage == 80 and s.points == 20, "20 damage and 5 points per hit")
+    rules.fire(s)
+    check(rules.hit(s, rival) and rival.destroyed, "fifth hit destroys (health 100)")
+    -- charged shot: destroys on the impact's last frame
+    local r2 = { damage = 0 }
+    s.weapon, s.super = 1, true
+    rules.fire(s); rules.hit(s, r2)
+    local res
+    for _ = 1, 10 do res = res or rules.shot_step(s) end
+    check(res == "kill", "charged hit: kill at the end of the impact")
+    local o, dx, dy = rules.shot_aim(-6)
+    check(o == -20 and dx == -30 and dy == -8, "aim mirrors with the angle")
 end)
 
 test("rules: rivals gain or drop back by speed difference", function()
@@ -241,6 +298,18 @@ test("[data] tile sounds exist", function()
     for code, name in pairs(rules.TILE_SOUND) do
         local pcm, rate = voc.decode(dat.read(name .. ".VOC", false))
         check(pcm and #pcm > 100 and rate > 5000, name .. ".VOC (tile " .. code .. ")")
+    end
+end)
+
+test("[data] weapon sprites and sounds", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local voc = require("formats.voc")
+    local fx, boom = spr.open("FUMEE"), spr.open("EXPLOSE")
+    check(fx and fx:count() == 23, "FUMEE: 23 images (muzzle 11-13, bolt 14-17, impact 18-22)")
+    check(boom and boom:count() == 24, "EXPLOSE: 24 images")
+    for _, name in ipairs({ "LASER", "CHOCTIR", "EXPLOD2" }) do
+        local pcm = voc.decode(dat.read(name .. ".VOC", false))
+        check(pcm and #pcm > 100, name .. ".VOC")
     end
 end)
 

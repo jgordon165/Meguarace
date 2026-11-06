@@ -283,6 +283,7 @@ with the table near the end (`DETRITUS`, `ALARME`, `LENNY`, `MAEVA`,
 | 1–64 | track video (checked on every track) |
 | 65–71 | shared car shading |
 | 72–111 | dashboard (`T<XX>_2`, `T<XX>`) |
+| 112–127 | effects: `FUMEE` and `EXPLOSE` draw with 112–126; `EXPLOSE` carries the palette (fire colours, 127 black) |
 | 128–191 | the player's car (`<XX>_A/B/C`) |
 | 192–255 | rival cars (`_XXX`): the same model's `<XX>_A` palette moved up by 64 |
 
@@ -412,7 +413,7 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | 17 | ENERGYP | energy + `[0x68DB]` (then 70) |
 | 18 | BONUS1 | `[0x690D]` + 10 |
 | 19 | BONUS11 | super speed: speed held at 280 for 400 ticks (`[0x6903]`) |
-| 20 | BONUS10 | weapon 1 |
+| 20 | BONUS10 | weapon 1, charged (`[0xD5E]`): a hit destroys the rival |
 | 21 | BONUS10 | weapon 3, energy + 120 |
 | 22 | BONUS10 | weapon 2, energy + 60 |
 | 23 | BONUS15 | flag `[0x68E1]` if the car allows it (`[0x810]`) |
@@ -420,7 +421,71 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | 25 | — | boost: speed 280 for 100 ticks, resets the slide state |
 
 Energy `[0x6911]` is the EN gauge, max 450 (0x117A). Firing costs energy
-(0x2D1B): `[0x80A]` ÷ 2, more for some weapons.
+(see Weapons).
+
+After every tile (0x1FF1) the weapon is limited to what the car can carry:
+3 drops to 2 without gun 3, 2 to 1 without gun 2, 1 to none without gun 1,
+and the weapon-1 charge is cleared if the car can't keep it.
+
+### Per-car table
+
+DS:0x7B0, 10 bytes per car, copied to `[0x800]`–`[0x812]` at the start of a
+race (0x038C). It is indexed by `[0x81E]`, the same index that picks the car's
+`T<XX>` file (resource 0x24 + `[0x81A]`: TJO, TRA, TOU, TPA, TLU, TOM, THO,
+TMA), so the order is JO, RA, OU, PA, LU, OM, HO, MA.
+
+| Car | gun 1 | gun 2 | gun 3 | charge | armour | power | `[0x80C]` | `[0x80E]` | `[0x810]` | `[0x812]` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| JO | 1 | 0 | 0 | 0 | 120 | 8 | 5 | 1 | 1 | 200 |
+| RA | 1 | 1 | 1 | 1 | 70 | 20 | 4 | 0 | 0 | 200 |
+| OU | 1 | 1 | 1 | 1 | 70 | 20 | 6 | 1 | 1 | 200 |
+| PA | 1 | 1 | 0 | 0 | 120 | 16 | 6 | 0 | 0 | 100 |
+| LU | 1 | 1 | 1 | 0 | 100 | 10 | 6 | 1 | 1 | 200 |
+| OM | 1 | 1 | 0 | 0 | 80 | 10 | 4 | 1 | 1 | 100 |
+| HO | 1 | 1 | 0 | 0 | 110 | 10 | 4 | 0 | 0 | 100 |
+| MA | 1 | 1 | 1 | 0 | 100 | 16 | 2 | 1 | 1 | 200 |
+
+Armour starts the third gauge `[0xD2E]`. Power is the damage per hit and the
+base of the fire cost. `[0x812]` is multiplied by 4 at the start.
+
+### Weapons
+
+Every car starts with weapon 1 (DS:0xD66 is all zero, raised to 1).
+
+- **Fire** (0x2962, keyboard): needs a weapon and energy > 0, once per press
+  (`[0xDAE]` latch). Plays `LASER`. A new shot replaces one in flight.
+- **Cost** (0x2D1B): power ÷ 2; × 8 for a charged weapon 1; + 4 for weapons
+  2 and 3. Energy doesn't go below 0.
+- **Shot** (0x2E14, once per drawn frame): `FUMEE.HSQ` (resource 0). A muzzle
+  flash at the car, frames 11–13, and the bolt, frames 14–17, a little ahead
+  of it. Weapon 1 fires one bolt, 2 fires two (x ± 6), 3 fires three
+  (0x2EF3). The muzzle offset (0, 4, 12, 20, 40, 48) and the bolt offset from
+  the muzzle ((0,−17), (8,−14), (18,−10), (30,−8), (40,−7), (55,−6), with
+  the x sign following the angle) are picked by the car's view angle
+  `[0xCA4]` at thresholds 2, 3, 5, 7, 9 (0x2DD5, DS:0xD86).
+- **Hit** (0x2F93): the bolt's x is inside the rival's screen span
+  `[0xDC8]`–`[0xDCA]` and the rival is in range (`[0xE0B]` between 0 and the
+  angle table's third value, 32–40). The bolt stops on the rival and plays
+  the impact, frames 18–22, with `CHOCTIR`. The rival's damage `[0xD30]`
+  gains power (moved across one unit per gun drawn per frame, via
+  `[0x818]`), and 5 points are paid out (`[0x68D5]`).
+- **Charged weapon 1**: at the end of an impact the rival's damage is set to
+  the maximum (0x2E49).
+- **Destroyed rival** (0x3E98): damage ≥ `[0x814]` (100, set at 0x0592) plays
+  `EXPLOD2`, the rival's speed drops to yours − 20, and `EXPLOSE.HSQ`
+  (resource 0x5D) plays its 24 frames over it (0x4688), paying 5 points per
+  frame while it is on screen. A rival that stays 6+ sections behind for 400
+  ticks is also counted destroyed (0x3E7F). At the end of a race a destroyed
+  rival lowers `[0x68C7]` (0x0A3B).
+- **Damage bar** (0x0FC3): 52 × 6 in colour 74, with (100 − damage) ÷ 2
+  pixels of 77 (first 16) and 76, every 4th pixel 74.
+
+The rival fires back with the same machinery (`[0xD50]`/`[0xD54]`,
+`[0xDAC]`); its hit costs your armour 20 (0x4801). Not in the port yet.
+
+This port runs shot and explosion frames at 12.5 per second, applies a hit's
+damage at once, uses 12 sections as the range, draws the damage bar over the
+rival, and takes a rival out of the race once its explosion has played.
 
 ★ `MALUS2.VOC`, `MALUS7.VOC` and `BONUS15.VOC` declare a time constant of
 6 (4 kHz). Every other effect is 7.5–9.6 kHz, so this port plays those three
@@ -436,8 +501,8 @@ left box.
 ## Still to decode
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
-- Per-car values (`[0x800]`–`[0x812]`: weapons allowed, timer lengths, fire cost).
-- Weapons, rival AI and collisions (the port's are placeholders).
+- `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
+- Rival AI, the rival's shots at you, and collisions (the port's are placeholders).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
