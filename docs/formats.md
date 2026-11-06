@@ -674,6 +674,17 @@ FIN, and the credits (CREDIT over SkyHolder, 0x5198). The score resets and
 `[0x69AA]` is set: from then on the round clips are skipped and the race
 button lets you pick any track (0x55C7).
 
+**Attract mode** (0x555F, 0x4E9E): when the menu has been left alone for
+3000 ticks (`[0x69EC]`) it returns with `[0x69F2]` set. The first time
+(`[0x69DC]` = 0) B65 plays and the menu comes back; the next time a demo race
+runs (`[0x69E6]`): the first track (0x06EC), car entry 6 of DS:0x826 (OMEGA,
+0x0262), rival `_LUI` (`[0x866]` = 0x31, 0x0255). The demo drives at full
+throttle unless spinning (0x2D0F) and fires when the rival is 10–20 eighths
+ahead and within 50 pixels across, at most every 30 ticks (0x2C02);
+`PRESS BUTTON TO START` blinks at (60, 32) every 50 ticks (0x14B8). Any key
+ends it (0x082A); then the car choice resets and the show starts again from
+INTRO (0x4F2F). `[0x69DC]` resets after every real race (0x4F23).
+
 **Quitting** (options, 0x5113): B99 after a wreck, BA1 with fewer than four
 clean rounds, else B98 and AZUR; then the credits.
 
@@ -778,7 +789,7 @@ header as described above.
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
 - Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
-- The idle/attract clips in the menu (B65 after 3000 idle ticks, then a demo race: 0x4E9E, 0x555F).
+- The demo driver's steering input `[0x6808]` (the port steers to the rival or the middle).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.

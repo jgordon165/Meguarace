@@ -61,6 +61,8 @@ function S:enter(name, opts)
     self.next_decision = 0
     self.total = opts.total or 0              -- championship score before this race
     self.debug = false
+    self.demo = opts.demo                     -- attract mode: the game drives (RACEPRG [0x69E6])
+    self.demo_fire_at = 0
     self.on_done = opts.on_done
     self.ticks = 0
     self.clock = -COUNTDOWN
@@ -82,10 +84,12 @@ function S:spawn(r)
 end
 
 function S:update(dt)
+    if self.demo and input.any() then return self:end_demo() end   -- any key (0x082A)
     if input.pressed("Escape") then scenes.pop(); return end
     if input.pressed("F1") then self.debug = not self.debug end
     self.clock = self.clock + dt
     if self.finished then
+        if self.demo then return self:end_demo() end
         if input.pressed("Return") or input.pressed("Space") then
             local cb, result = self.on_done, self.result
             scenes.pop()
@@ -98,14 +102,19 @@ function S:update(dt)
     local s = self.rules
     local alive = not s.destroyed
     self.steer = 0
-    if alive and input.down("Left") then self.carx = self.carx - STEER * dt; self.steer = 1 end
-    if alive and input.down("Right") then self.carx = self.carx + STEER * dt; self.steer = -1 end
+    local left, right = input.down("Left"), input.down("Right")
+    if self.demo then left, right = self:autopilot_steer() end
+    if alive and left then self.carx = self.carx - STEER * dt; self.steer = 1 end
+    if alive and right then self.carx = self.carx + STEER * dt; self.steer = -1 end
 
     -- Game ticks.
     self.ticks = self.ticks + dt * rules.TICKS_PER_SECOND
     while self.ticks >= 1 do
         self.ticks = self.ticks - 1
-        local _, drift = rules.step(s, { accel = alive and input.down("Up"), brake = not alive or input.down("Down") })
+        local accel, brake = input.down("Up"), input.down("Down")
+        if self.demo then accel, brake = s.slide == nil, false end   -- full throttle unless spinning (0x2D0F)
+        local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
+        if self.demo then self:autopilot_fire() end
         self.carx = self.carx + drift
         self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
@@ -166,6 +175,33 @@ function S:update(dt)
 
     self.spin_t = self.spin_t + dt * (s.speed / 60)
     if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
+end
+
+-- Attract mode's driver. Firing is the game's (0x2C02): with the rival 10-20
+-- eighths ahead and within 50 pixels across, a shot at most every 30 ticks.
+-- Steering is this port's: toward the rival when it's near, else the middle
+-- of the road (the game's steering input in demo mode, [0x6808], isn't
+-- traced yet).
+function S:autopilot_steer()
+    local r = self.current
+    local target = 160
+    if r and not r.destroyed and r.x_lane and r.pos > -8 and r.pos < 40 then target = r.x_lane end
+    return self.carx > target + 6, self.carx < target - 6
+end
+
+function S:autopilot_fire()
+    local s, r = self.rules, self.current
+    if not r or r.destroyed or not r.x_lane then return end
+    if r.pos <= 10 or r.pos >= 20 or math.abs(r.x_lane - self.carx) > 50 then return end
+    if s.tick < self.demo_fire_at then return end
+    self.demo_fire_at = s.tick + 30
+    if rules.fire(s) then voc.play("LASER") end
+end
+
+function S:end_demo()
+    local cb = self.on_done
+    scenes.pop()
+    if cb then cb({ demo = true }) end
 end
 
 -- Is rival r lined up with your car (its place across the road inside your
@@ -538,6 +574,9 @@ function S:draw()
         gfx.text(160 - w // 2, 34, s.message, s.message:find("+", 1, true) and C_GOOD or C_TEXT)
     end
 
+    if self.demo and (s.tick // 50) % 2 == 0 then               -- 0x14B8: blinks every 50 ticks
+        font.draw(60, 32, "PRESS BUTTON TO START", C_TEXT)
+    end
     if self.clock < 0 then
         local t = "GET READY"
         gfx.fill(100, 70, 120, 13 + (self.title and 10 or 0), 0)

@@ -23,6 +23,12 @@ bool Input::pressed(const std::string& key) const {
     return sc != SDL_SCANCODE_UNKNOWN && cur_[sc] && !prev_[sc];
 }
 
+bool Input::anyPressed() const {
+    for (size_t i = 0; i < cur_.size(); ++i)
+        if (cur_[i] && !prev_[i]) return true;
+    return false;
+}
+
 bool Input::released(const std::string& key) const {
     auto sc = lookup(key);
     return sc != SDL_SCANCODE_UNKNOWN && !cur_[sc] && prev_[sc];

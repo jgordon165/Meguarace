@@ -169,6 +169,7 @@ static int audio_stop_all(lua_State* L) { E(L).audio.stopAll(); return 0; }
 static int input_down(lua_State* L)     { lua_pushboolean(L, E(L).input.down(luaL_checkstring(L, 1)));     return 1; }
 static int input_pressed(lua_State* L)  { lua_pushboolean(L, E(L).input.pressed(luaL_checkstring(L, 1)));  return 1; }
 static int input_released(lua_State* L) { lua_pushboolean(L, E(L).input.released(luaL_checkstring(L, 1))); return 1; }
+static int input_any(lua_State* L)      { lua_pushboolean(L, E(L).input.anyPressed()); return 1; }
 
 // --------------------------------------------------------------- sys ------
 
@@ -526,6 +527,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"sound", hnm_sound}, {"chunks", hnm_chunks}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
+        {"any", input_any},
         {nullptr, nullptr}};
     static const luaL_Reg sys[] = {
         {"ticks", sys_ticks}, {"quit", sys_quit}, {"log", sys_log},

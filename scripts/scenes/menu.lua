@@ -8,6 +8,11 @@
 -- The career between races (Lance Boyle's clips, game over, the second
 -- season, bonus tracks, the finale) is game/career.lua, from RACEPRG.EXE.
 --
+-- Attract mode (RACEPRG 0x555F, 0x4E9E): left alone for 3000 ticks the menu
+-- plays B65 (Lance: "only about a zillion viewers out there..."); left alone
+-- again it runs a demo race on the first track with OMEGA's car, which any
+-- key ends. Then the show starts again from the intro.
+--
 -- Overlay positions were found by matching PANEL2's images against the
 -- PANEL1 picture (bars and buttons match pixel for pixel; the car
 -- thumbnails sit on the monitor screens next to their bars).
@@ -26,6 +31,7 @@ local BAR   = { { 102, 4 }, { 206, 4 }, { 84, 33 }, { 223, 33 }, { 80, 65 }, { 2
 local BUTTON = { { 58, 146 }, { 133, 146 }, { 211, 146 } }   -- green, yellow, blue
 local BAR_LIT, BAR_OFF, BUTTON_LIT, BUTTON_OFF = 8, 16, 24, 27
 local C_FOCUS = 120
+local IDLE_SECONDS = 3000 / 25      -- 3000 ticks ([0x69EC], 0x555A) at the port's 25 ticks a second
 
 -- Focus: 1..8 monitors, 9..11 buttons.
 local function move(f, dx, dy)
@@ -83,6 +89,7 @@ end
 
 -- Redraws backdrop palette + overlays (after returning from another scene).
 function S:restore()
+    self.idle = 0
     self.want_music = true             -- started on the next update, once the menu is on top
     self.bg:decode(0)
     self.bg:apply_palette()
@@ -138,6 +145,7 @@ end
 -- then the next round, game over or the finale.
 function S:race_done(result)
     local st = self.state
+    self.attract_seen = false                            -- 0x4F23
     local out = career.after_race(st, result)
     save.store(st)
     local me = self
@@ -176,8 +184,31 @@ function S:farewell()
     end)
 end
 
+-- Attract mode: B65 the first time, a demo race the next (0x4EA5..0x4EEA).
+function S:attract()
+    local st, me = self.state, self
+    if not self.attract_seen then
+        self.attract_seen = true
+        sequence.play({ career.file(0x50) })
+        return
+    end
+    self.attract_seen = false
+    scenes.push(require("scenes.race"), data.TRACKS[1].video, {
+        demo = true, car = "OM", rival = "LU", level = st.level, total = 0, round = 1,
+        on_done = function()
+            st.car = 1                                   -- the car choice resets ([0x69FA] = 0)
+            me:pre_round("new")
+        end,
+    })
+end
+
 function S:update(dt)
     self.t = self.t + dt
+    if input.any() then self.idle = 0 else self.idle = (self.idle or 0) + dt end
+    if self.idle >= IDLE_SECONDS then
+        self.idle = 0
+        return self:attract()
+    end
     if self.want_music then
         self.want_music = false
         music.set_enabled(self.state.music ~= false)

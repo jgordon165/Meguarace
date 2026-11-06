@@ -12,6 +12,7 @@ public:
     bool down(const std::string& key) const;
     bool pressed(const std::string& key) const;    // went down this frame
     bool released(const std::string& key) const;   // went up this frame
+    bool anyPressed() const;                       // any key went down this frame
 
 private:
     std::array<bool, SDL_NUM_SCANCODES> cur_{}, prev_{};
