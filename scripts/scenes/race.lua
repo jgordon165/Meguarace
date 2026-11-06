@@ -1,5 +1,5 @@
 -- A race: the game's rules (race/rules.lua) on a track video.
---   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   F1 debug line   ESC quit
+--   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   F1 debug line   ESC give up (game over, as in the original)
 --
 -- From RACEPRG.EXE: the video advances at a fixed rate whenever you're
 -- moving; your speed decides how you gain on the rival. The lane is the
@@ -90,7 +90,13 @@ end
 
 function S:update(dt)
     if self.demo and input.any() then return self:end_demo() end   -- any key (0x082A)
-    if input.pressed("Escape") then scenes.pop(); return end
+    if input.pressed("Escape") then                   -- giving up: [0x68CB] = -4 (0x0A2B)
+        if not self.finished then self:finish("quit") end
+        local cb, result = self.on_done, self.result
+        scenes.pop()
+        if cb then cb(result) end
+        return
+    end
     if input.pressed("F1") then self.debug = not self.debug end
     self.clock = self.clock + dt
     if self.finished then
@@ -380,11 +386,18 @@ function S:next_rival()
     self.next_decision = self.rules.tick
 end
 
--- outcome: "won", "laps" or "wrecked".
+-- outcome: "won", "laps", "wrecked" or "quit" (ESC). A rival already
+-- destroyed but still exploding counts as gone (0x0A3B: its damage [0xD30]
+-- at the car's limit [0x814]).
 function S:finish(outcome)
     if self.finished then return end
     self.finished = true
     local s = self.rules
+    if outcome ~= "won" then
+        for _, r in ipairs(self.rivals) do
+            if r.destroyed and not r.out then self.left = math.max(0, self.left - 1) end
+        end
+    end
     local qualified = rivalai.qualifies(outcome, self.left, s.points)
     self.result = { outcome = outcome, left = self.left, points = s.points, qualified = qualified }
     voc.play(qualified and "BONUS11" or "MALUS2")
@@ -647,7 +660,7 @@ function S:draw()
     end
     if self.finished then
         local res = self.result
-        local t1 = ({ won = "ALL OPPONENTS DESTROYED", laps = "END OF RACE", wrecked = "DESTROYED" })[res.outcome]
+        local t1 = ({ won = "ALL OPPONENTS DESTROYED", laps = "END OF RACE", wrecked = "DESTROYED", quit = "GAVE UP" })[res.outcome]
         local t2 = res.qualified and "QUALIFIED" or
             (res.outcome == "laps" and string.format("%d OPPONENTS LEFT - NOT QUALIFIED", res.left) or "NOT QUALIFIED")
         local t3 = "PRESS ENTER"

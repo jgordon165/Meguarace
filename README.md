@@ -75,7 +75,9 @@ the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you
 shoot back; run out of armour and you're destroyed. Drive over the lane tiles for their effects (energy, points, weapons,
 super speed, skids, spins). The opponents come one at a time, each with the
 original's AI: destroy them all to win the round, or finish the laps with at
-most one left and 1200 points to qualify. Each car has its own guns, armour and firepower, read from
+most one left and 1200 points to qualify. Points come from hits, explosions and tiles,
+and count in on the score one a tick. Esc gives up the race, which as in the
+original ends the career. Each car has its own guns, armour and firepower, read from
 the game's car table.
 
 The track viewer drives along a track video with the game's own cars: your
@@ -126,7 +128,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | Collisions with the rival, walls (scraping, crashes), every armour loss | Done (from RACEPRG.EXE) |
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
-| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (menu and panels laid out and behaving as RACEPRG.EXE; scoring is the port's own) |
+| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (menu and panels laid out and behaving as RACEPRG.EXE) |
 | Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE) |
 | Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |

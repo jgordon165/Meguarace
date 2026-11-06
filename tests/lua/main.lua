@@ -125,9 +125,24 @@ test("rules: tiles", function()
     check(rules.apply_tile(s, 17) and s.energy == 220, "second 17: +70")
     check(rules.apply_tile(s, 1) == "MALUS9" and s.energy == 150, "1: drain 70 (last size), then 50")
     rules.apply_tile(s, 18); rules.apply_tile(s, 18)
-    check(s.points == 20, "18: points +10")
+    check(s.points == 10 and s.points_due == 10, "18: +10, the first paid at once by the second")
+    for _ = 1, 10 do rules.step(s, {}) end
+    check(s.points == 20 and not s.points_up, "the rest counts in one a tick")
     rules.apply_tile(s, 2)
-    check(s.points == 10, "2: points -10")
+    for _ = 1, 5 do rules.step(s, {}) end
+    check(s.points == 15, "2: -10, one a tick")
+    for _ = 1, 10 do rules.step(s, {}) end
+    check(s.points == 10 and not s.points_down, "and stops after 10")
+    local q = rules.new("RA")
+    q.points = 14
+    rules.apply_tile(q, 2)
+    for _ = 1, 20 do rules.step(q, {}) end
+    check(q.points == 9 and q.points_down, "counting out stops below 10")
+    q.points = 30
+    rules.apply_tile(q, 18)
+    check(q.points == 35, "a payment first adds what was still due (5 left from the charge)")
+    rules.apply_tile(q, 2)
+    check(q.points == 25, "a charge first takes off what was still due, even a payment's")
     rules.apply_tile(s, 21)
     check(s.weapon == 3, "21: weapon 3")
     check(rules.apply_tile(s, 5) == "PLUARME" and s.weapon == 0 and s.energy == 0, "5: weapon and energy lost")
@@ -189,7 +204,9 @@ test("rules: fire cost, shot frames, hits", function()
         check(not rules.hit(s, rival), "hit " .. i .. " doesn't destroy")
         check(not rules.hit(s, rival), "one hit per shot")
     end
-    check(rival.damage == 80 and s.points == 20, "20 damage and 5 points per hit")
+    check(rival.damage == 80 and s.points == 15 and s.points_due == 5, "20 damage and 5 points per hit")
+    for _ = 1, 5 do rules.step(s, {}) end
+    check(s.points == 20, "the last hit's points count in")
     rules.fire(s)
     check(rules.hit(s, rival) and rival.destroyed, "fifth hit destroys (health 100)")
     -- charged shot: destroys on the impact's last frame
@@ -558,6 +575,18 @@ test("career: car unlocks (DS:0x103C, 0x104C)", function()
     check(not st.unlocked[8] and st.unlocked[1], "game over: back to the first three")
     C.reset(st, "HARDENED")
     check(st.level == "HARDENED" and st.round == 1 and st.total == 0, "level panel: a new career")
+end)
+
+test("career: giving up (ESC, [0x68CB] = -4)", function()
+    local C = require("game.career")
+    local st = C.new("NOVICE")
+    st.round, st.total = 4, 1000
+    local out = C.after_race(st, { outcome = "quit", left = 3, points = 300 })
+    check(out.action == "gameover" and #out.videos == 0 and st.total == 1300, "game over, no clip, points kept")
+    st = C.new("NOVICE")
+    st.round, st.total = C.HOLD, 1000
+    out = C.after_race(st, { outcome = "quit", left = 3, points = 300 })
+    check(out.action == "gameover" and st.total == 1000, "on HOLD: game over, no points")
 end)
 
 test("menu: focus steps past locked cars and wraps (0x561E)", function()

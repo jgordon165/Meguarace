@@ -445,7 +445,7 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | Code | Sound | Effect (variable) |
 |---|---|---|
 | 1 | MALUS9 | energy − drain size `[0x68DB]` (then drain size = 50) |
-| 2 | MALUS11 | `[0x690D]` − 10 (if ≥ 10); called "points" here |
+| 2 | MALUS11 | points − 10, counted out one a tick (see Points) |
 | 3 | — | forced braking until speed ≤ 130 (`[0x68CF]`) |
 | 4 | — | spin: steering sequence + 5 px/tick drift (speed > 15), else as 7 |
 | 5 | PLUARME | weapon lost, energy 0 |
@@ -455,7 +455,7 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | 9 | MALUS6 | gauges out: `[0x68E7]` for `[0x812]` ticks (every dashboard gauge reads 0) |
 | 10 | MALUS2 | timer `[0x68FB]`, 800 ticks (not traced yet) |
 | 17 | ENERGYP | energy + `[0x68DB]` (then 70) |
-| 18 | BONUS1 | `[0x690D]` + 10 |
+| 18 | BONUS1 | points + 10, counted in one a tick (see Points) |
 | 19 | BONUS11 | super speed: speed held at 280 for 400 ticks (`[0x6903]`) |
 | 20 | BONUS10 | weapon 1, charged (`[0xD5E]`): a hit destroys the rival |
 | 21 | BONUS10 | weapon 3, energy + 120 |
@@ -697,6 +697,18 @@ Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213).
 **End of the race** (0x4F4B…0x5064): `[0x68CB]` −3 every opponent
 destroyed, −1 laps run out (`[0x68C5]`: 3, HOLD 2), −2 wrecked. The race's
 points `[0x690D]` add to the score `[0x6A02]` (none for a wreck on HOLD).
+ESC gives up (−4, 0x0A2B): the points count (not on HOLD, 0x4F78) and the
+career ends with no clip. However the race ends, a rival destroyed but still
+exploding counts as gone (0x0A3B: its damage `[0xD30]` at the limit `[0x814]`).
+
+**Points** `[0x690D]` come from three places: 5 per hit, 5 per frame of a
+rival's explosion (0x4699, at once), and the tiles (+10 code 18, −10 code
+2). Hits and tiles don't land at once (0x1C5D): the amount waits in
+`[0x68D5]` and moves one a tick, counting in (`[0x68D1]`) up to 65000 or out
+(`[0x68D3]`) down to 10. A payment (0x2FF1, 0x1F10) first adds whatever was
+still due; a charge (0x1EE1) first takes it off, if you have that many,
+even when it was a payment still counting in. Whatever is still due when the
+race ends is lost. There is no lap, time or finishing bonus.
 You go on to the next track after −3, or after −1 with at most one opponent
 left and 1200 points or more. Energy starts at 400 (0x0561).
 
@@ -881,7 +893,7 @@ header as described above.
 - The rival's steering physics (0x4210; the port moves it at a fixed rate).
 - In the port a wall bounce eases every other tick, not every other section.
 - The body lean from a strong curve push (`[0x691D]`), not drawn yet.
-- Championship scoring. The original's save slots and key redefinition.
+- The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).
