@@ -437,7 +437,7 @@ race (0x038C). It is indexed by `[0x81E]`, the same index that picks the car's
 `T<XX>` file (resource 0x24 + `[0x81A]`: TJO, TRA, TOU, TPA, TLU, TOM, THO,
 TMA), so the order is JO, RA, OU, PA, LU, OM, HO, MA.
 
-| Car | gun 1 | gun 2 | gun 3 | charge | armour | power | `[0x80C]` | `[0x80E]` | `[0x810]` | `[0x812]` |
+| Car | gun 1 | gun 2 | gun 3 | charge | armour | power | handling | `[0x80E]` | `[0x810]` | `[0x812]` |
 |---|---|---|---|---|---|---|---|---|---|---|
 | JO | 1 | 0 | 0 | 0 | 120 | 8 | 5 | 1 | 1 | 200 |
 | RA | 1 | 1 | 1 | 1 | 70 | 20 | 4 | 0 | 0 | 200 |
@@ -448,7 +448,8 @@ TMA), so the order is JO, RA, OU, PA, LU, OM, HO, MA.
 | HO | 1 | 1 | 0 | 0 | 110 | 10 | 4 | 0 | 0 | 100 |
 | MA | 1 | 1 | 1 | 0 | 100 | 16 | 2 | 1 | 1 | 200 |
 
-Armour starts the third gauge `[0xD2E]`. Power is the damage per hit and the
+Handling `[0x80C]` caps how far a curve pushes you (see Handling). Armour
+starts the third gauge `[0xD2E]`. Power is the damage per hit and the
 base of the fire cost. `[0x812]` is multiplied by 4 at the start.
 
 ### Weapons
@@ -495,6 +496,25 @@ after frame 15) and the race is lost (`[0x68CB]` = −2).
 Other armour losses: −8 when a skid ends with `[0x6933]` set (0x2136: after a
 collision skid or a wall crash), −1 per smoke cycle while scraping a wall
 (0x3098). See Collisions and walls.
+
+### Handling
+
+Curves push the car outward (0x1838…0x1A40, 0x2290…0x236A;
+`scripts/race/handling.lua`). Each video frame the heading change from the
+camera's section to the next (pt word 27, 2880 a turn, wrapped: 0x6DCC,
+`[0x6B58]`) is halved and the last four are averaged into the curvature
+`[0xCFC]`. NGL's first 420 frames and all of FC3, TOKY and HOLD have none
+(DS:0x2D6 per round × 4, 0x6E6A). A rising heading bends the road left on
+screen.
+
+The push `[0x691F]` (0x19CB) is 0 for a curvature within ±5, otherwise
+curvature × (speed / 10) / 50; 0 while you steer at 150 or less; capped at
+the car's handling `[0x80C]` (MA 2 … JO 5, OU/PA/LU 6). Each tick it moves
+you when you aren't steering, and once more at 160 and over on a sharp
+curve (beyond ±11). Toward an edge it eases: 1 pixel within 60 of it, none
+within 30 (x 60/30 on the left, 260/290 on the right: 0x232F). No push
+during a skid or at a wall. A push of 6 or more leans the body
+(`[0x691D]`, ±6).
 
 ### Collisions and walls
 
@@ -707,8 +727,10 @@ button lets you pick any track (0x55C7).
 (`[0x69DC]` = 0) B65 plays and the menu comes back; the next time a demo race
 runs (`[0x69E6]`): the first track (0x06EC), car entry 6 of DS:0x826 (OMEGA,
 0x0262), rival `_LUI` (`[0x866]` = 0x31, 0x0255). The demo drives at full
-throttle unless spinning (0x2D0F) and fires when the rival is 10–20 eighths
-ahead and within 50 pixels across, at most every 30 ticks (0x2C02);
+throttle unless spinning (0x2D0F); on the straight (curvature within ±11) it
+steers toward x 130–190, on curves not at all (`[0x6808]`, 0x22FD); it fires
+when the rival is 10–20 eighths ahead and within 50 pixels across, at most
+every 30 ticks (0x2C02);
 `PRESS BUTTON TO START` blinks at (60, 32) every 50 ticks (0x14B8). Any key
 ends it (0x082A); then the car choice resets and the show starts again from
 INTRO (0x4F2F). `[0x69DC]` resets after every real race (0x4F23).
@@ -815,10 +837,9 @@ header as described above.
 ## Still to decode
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
-- `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
 - The rival's steering physics (0x4210; the port moves it at a fixed rate).
 - In the port a wall bounce eases every other tick, not every other section.
-- The demo driver's steering input `[0x6808]` (the port steers to the rival or the middle).
+- The body lean from a strong curve push (`[0x691D]`), not drawn yet.
 - The original options-menu layout and championship scoring.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
