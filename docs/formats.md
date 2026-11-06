@@ -689,7 +689,24 @@ indexed by the opponents left: 1 → C, 2 → B, more → A.
 - (A fourth type, 0x35DF/0x35F6, blocks your line and speeds up near you; the
   table only uses it for more opponents than any round has.)
 
-Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213).
+Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213). Each
+tick (0x4210) it tips a lean `[0x691C]` (−6…6, against the direction) and
+builds a sideways speed `[0x6943]`: the old speed, halved if it points the
+other way, is doubled, the step added (speed/40, plus 4 when that is under
+2; 4 from 100 on), capped at ±speed/10 (at most 10) and halved, so it tops
+out at 5 pixels. Let go, the lean goes back toward 0 one a tick and the
+speed by one whenever the lean is even.
+
+The rival's place `[0xDBA]` is a screen x at its depth, between the road's
+inner edges `[0xE2D]`/`[0xE31]` less half its width (0x3B21). Every 6
+ticks (0x38EF, when the road there is 32 pixels or wider) it moves: within
+50 eighths by its sideways speed (none when the lean points the other way)
+plus a collision bump `[0x6947]`; up to 150, a pixel toward the middle of
+the road; from 150 on it is put in the middle every tick (0x3A18). Hitting
+an edge resets the lean (0x39EC). The curve under the rival (`[0xE23]`,
+0x3F06) only feeds its tilt `[0x691E]`, not its place. The port moves the
+rival by these pixels but keeps its place as a fraction of the road, so on
+a curve it follows the road where the original's stays put on screen.
 
 **Left behind:** 6+ sections behind for 400 ticks and it counts as destroyed
 (0x3E4D…0x3E8D); on HOLD, as soon as it's 6 behind.
@@ -890,7 +907,7 @@ header as described above.
 ## Still to decode
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
-- The rival's steering physics (0x4210; the port moves it at a fixed rate).
+- The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
 - In the port a wall bounce eases every other tick, not every other section.
 - The body lean from a strong curve push (`[0x691D]`), not drawn yet.
 - The original's save slots and key redefinition.
