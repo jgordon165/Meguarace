@@ -554,8 +554,25 @@ the car's handling `[0x80C]` (MA 2 … JO 5, OU/PA/LU 6). Each tick it moves
 you when you aren't steering, and once more at 160 and over on a sharp
 curve (beyond ±11). Toward an edge it eases: 1 pixel within 60 of it, none
 within 30 (x 60/30 on the left, 260/290 on the right: 0x232F). No push
-during a skid or at a wall. A push of 6 or more leans the body
-(`[0x691D]`, ±6).
+during a skid or at a wall. A push of 6 or more tips the body lean
+`[0x691D]` by 2 against it (±6), and each frame it eases back 1 (0x1A17).
+
+**Steering** (0x2833…0x2947, every tick; keys `,` and `.` by default,
+DS:0x1297): the direction tips a lean `[0x691B]` (±12, against the
+direction) and builds a sideways speed `[0x6941]` that moves the car each
+tick (0x2290, with the curve push and collision pushes). The old speed,
+halved if it points the other way (−1 counts as 0), is doubled, a step of
+speed/80 (at least 1) added, and the result capped at speed/20, at most 9
+(halved at 180 and over when the curve push is against it). Each steering
+tick adds one to `[0x6939]` (the wall-crash count). Let go, the lean goes
+back toward 0 one a tick, and so do the speed and the count, except on a
+car with handling over 5 while the lean is odd. Nothing happens below speed
+10 or in a slide (`[0x6933]`). A skid, a slide or a crash stops the
+sideways speed (0x1A82, 0x1E84, 0x2252, 0x3C21).
+
+The car's picture (0x1B84) is the eased view angle `[0xCDE]` less the two
+leans, through the table at DS:0x93C; a rival's (0x4574) is its own view
+angle plus the curve under it `[0xE23]` less its steering lean, within ±90.
 
 ### Collisions and walls
 
@@ -909,7 +926,6 @@ header as described above.
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
 - In the port a wall bounce eases every other tick, not every other section.
-- The body lean from a strong curve push (`[0x691D]`), not drawn yet.
 - The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.

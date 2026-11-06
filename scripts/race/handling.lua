@@ -82,6 +82,59 @@ function H.tick_dx(p, x, curv, speed, steering)
     return dx
 end
 
+-- Your steering (RACEPRG 0x2833..0x2947, every tick). dir: -1 left, 1
+-- right, 0 none. st = { lean, vel, ticks }: the lean [0x691B] (-12..12,
+-- against the direction; it turns the car's picture), the sideways speed
+-- [0x6941] (pixels a tick) and the steering ticks [0x6939].
+-- Steering doubles the speed (halved first if it points the other way)
+-- and adds a step of speed/80 (at least 1), capped at speed/20 (at most 9;
+-- halved at 180 and over when the curve push is against it). Let go, the
+-- lean and the speed go back toward 0 one a tick; on a car whose handling
+-- is over 5 the speed only eases when the lean is even. Nothing changes
+-- standing still or in a slide ([0x6933]).
+local function toward_zero(v)
+    if v == 0 then return 0 end
+    v = v - 1
+    if v < 0 then v = v + 2 end
+    return v
+end
+H.toward_zero = toward_zero
+
+function H.steer(st, dir, speed, handling, push)
+    local s10 = speed // 10
+    if s10 == 0 then return end
+    if dir == 0 then
+        st.lean = toward_zero(st.lean)
+        if handling > 5 and st.lean % 2 == 1 then return end
+        st.ticks = 0
+        st.vel = toward_zero(st.vel)
+        return
+    end
+    st.lean = math.max(-12, math.min(12, st.lean + (dir < 0 and 1 or -1)))
+    local cap = math.min(s10 // 2, 9)
+    local step = math.max(s10 // 8, 1)
+    local v = st.vel
+    if (v < 0) ~= (dir < 0) then
+        if v == -1 then v = 0 end
+        v = v // 2
+    end
+    v = 2 * v
+    if push ~= 0 and (push < 0) ~= (v < 0) and speed >= 180 then cap = cap // 2 end
+    v = math.max(-cap, math.min(cap, v + dir * step))
+    st.vel = v
+    st.ticks = st.ticks + 1
+end
+
+-- The body lean [0x691D] (0x1A17): a curve push of 6 or more tips it 2
+-- (against the push's side, -6..6), then it eases back 1. The car's
+-- picture is the view angle less both leans (0x1B84).
+function H.body_lean(b, p)
+    if p >= 6 then b = b + 2 end
+    if p <= -6 then b = b - 2 end
+    b = math.max(-6, math.min(6, b))
+    return toward_zero(b)
+end
+
 -- Attract mode's steering: -1 left, 1 right, 0 none.
 function H.demo_steer(curv, x)
     if curv > 11 or curv < -11 then return 0 end

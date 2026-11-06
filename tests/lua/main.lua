@@ -577,6 +577,34 @@ test("career: car unlocks (DS:0x103C, 0x104C)", function()
     check(st.level == "HARDENED" and st.round == 1 and st.total == 0, "level panel: a new career")
 end)
 
+test("handling: your steering (0x2833) and body lean (0x1A17)", function()
+    local H = require("race.handling")
+    local st = { lean = 0, vel = 0, ticks = 0 }
+    local v = {}
+    for i = 1, 4 do H.steer(st, 1, 180, 3, 0); v[i] = st.vel end
+    check(v[1] == 2 and v[2] == 6 and v[3] == 9 and v[4] == 9, "at 180: 2, 6, then 9 a tick")
+    check(st.lean == -4 and st.ticks == 4, "lean against the direction; steering ticks counted")
+    H.steer(st, -1, 180, 3, 0)
+    check(st.vel == 6 and st.lean == -3, "reversing: 9 halved to 4, doubled, less 2")
+    H.steer(st, 0, 180, 3, 0)
+    check(st.vel == 5 and st.lean == -2 and st.ticks == 0, "let go: back one, ticks reset")
+    local slip = { lean = 3, vel = 5, ticks = 7 }
+    H.steer(slip, 0, 180, 6, 0)
+    check(slip.vel == 4 and slip.lean == 2, "handling 6, even lean: eases")
+    H.steer(slip, 0, 180, 6, 0)
+    check(slip.vel == 4 and slip.lean == 1, "handling 6, odd lean: holds")
+    local slow = { lean = 0, vel = 0, ticks = 0 }
+    H.steer(slow, 1, 40, 3, 0)
+    check(slow.vel == 1, "at 40: step 1 (cap 2)")
+    H.steer(slow, 1, 5, 3, 0)
+    check(slow.vel == 1, "standing still: nothing")
+    local fast = { lean = 0, vel = 4, ticks = 0 }
+    H.steer(fast, 1, 200, 3, -4)
+    check(fast.vel == 4, "at 180+, push against: cap halved to 4")
+    check(H.body_lean(0, 6) == 1 and H.body_lean(5, 6) == 5 and H.body_lean(0, -7) == -1 and H.body_lean(3, 0) == 2,
+          "body lean: +-2 on a push of 6, capped 6, back 1")
+end)
+
 test("rival: steering (0x4210) and sideways step (0x38EF)", function()
     local V = require("race.rival")
     local r = V.new(2, 20, 200)
