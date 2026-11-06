@@ -36,10 +36,9 @@ M.ANGLE_FRAME = {
     15,15,15,15,15,15,15,15,15,15,15, 16,16,16,16,16,
 }
 
--- Wheel overlays line up bottom-left on the views from behind (0..10).
--- The side and front views need per-frame offsets that aren't decoded yet,
--- so those are drawn as the body alone (which already includes wheels).
-M.WHEEL_FRAMES = 10
+-- Wheel overlays (RACEPRG 0x2594..0x25F5): the same image number from
+-- <XX>_B or _C, centred on the body's x and level with its bottom, on every
+-- view; only while moving (the body already shows the wheels standing still).
 
 function M.open(code)
     local c = setmetatable({ code = code, name = M.NAMES[code] or code }, M)
@@ -87,11 +86,10 @@ function M:draw(angle, x, y, scale, spin)
     local left, top = x - w * scale / 2, y - h * scale
     self.body:draw(f, math.floor(left), math.floor(top), scale, flip)
     local wheel = spin and self.wheels[spin + 1]
-    if wheel and f <= M.WHEEL_FRAMES then
+    if wheel then
         local ww, wh = wheel:size(f)
         if ww then
-            local ox = flip and (w - ww) * scale or 0
-            wheel:draw(f, math.floor(left + ox), math.floor(top + (h - wh) * scale), scale, flip)
+            wheel:draw(f, math.floor(x - ww * scale / 2), math.floor(top + (h - wh) * scale), scale, flip)
         end
     end
     return left, top, w * scale, h * scale

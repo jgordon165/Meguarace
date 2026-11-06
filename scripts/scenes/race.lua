@@ -18,6 +18,7 @@ local cars   = require("formats.cars")
 local voc    = require("formats.voc")
 local rules  = require("race.rules")
 local rivalai = require("race.rival")
+local collide = require("race.collision")
 local hud    = require("race.hud")
 local font   = require("ui.rawfont")
 local music  = require("game.music")
@@ -61,6 +62,7 @@ function S:enter(name, opts)
     self.next_decision = 0
     self.total = opts.total or 0              -- championship score before this race
     self.debug = false
+    self.x_limit = name:match("^JNK") and 60 or 0
     self.demo = opts.demo                     -- attract mode: the game drives (RACEPRG [0x69E6])
     self.demo_fire_at = 0
     self.on_done = opts.on_done
@@ -106,16 +108,29 @@ function S:update(dt)
     if self.demo then left, right = self:autopilot_steer() end
     if alive and left then self.carx = self.carx - STEER * dt; self.steer = 1 end
     if alive and right then self.carx = self.carx + STEER * dt; self.steer = -1 end
+    if not (alive and (left or right)) then collide.release(s) end
 
     -- Game ticks.
     self.ticks = self.ticks + dt * rules.TICKS_PER_SECOND
     while self.ticks >= 1 do
         self.ticks = self.ticks - 1
+        -- Wheels (0x25F8): every 36 - 2 x (speed / 10) ticks the phase [0xCDA]
+        -- steps 2, 1, 0, 2, ...: phase 0 is the body alone, 1 and 2 add
+        -- the _B and _C wheel images.
+        self.spin_t = self.spin_t + 1
+        if self.spin_t >= 36 - 2 * (s.speed // 10) then
+            self.spin_t = 0
+            self.spin = self.spin - 1
+            if self.spin < 0 then self.spin = 2 end
+        end
         local accel, brake = input.down("Up"), input.down("Down")
         if self.demo then accel, brake = s.slide == nil, false end   -- full throttle unless spinning (0x2D0F)
         local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
         if self.demo then self:autopilot_fire() end
         self.carx = self.carx + drift
+        -- Walls: steering ticks in a row ([0x6939]), then scrape or crash.
+        self.steer_ticks = self.steer ~= 0 and (self.steer_ticks or 0) + 1 or 0
+        if alive and collide.wall(s, self.at_wall, self.steer_ticks) == "crash" then voc.play("CHOCRR2") end
         self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
@@ -123,8 +138,18 @@ function S:update(dt)
         if self.view < target then self.view = math.min(target, self.view + stepv)
         elseif self.view > target then self.view = math.max(target, self.view - stepv) end
     end
-    -- Stay on the road: between the inner edges where the car is (set in draw).
-    if self.road_l then self.carx = math.max(self.road_l, math.min(self.road_r, self.carx)) end
+    -- The car's x stays within the track's limits (RACEPRG 0x0311: DS:0x31A
+    -- per round, 0 except 60 on JNK; the right one is 320 minus it, [0xCD2]
+    -- and [0xCD6]). Pinned at one, you're at the wall (0x23B8).
+    self.at_wall = nil
+    local lim = self.x_limit
+    if self.carx <= lim then self.carx, self.at_wall = lim, "left"
+    elseif self.carx >= 320 - lim then self.carx, self.at_wall = 320 - lim, "right" end
+    if self.at_wall and s.speed > 0 and alive then
+        if not self.scrape_sound then voc.play("CRRR3"); self.scrape_sound = true end
+    else
+        self.scrape_sound = false
+    end
 
     -- Scenery: fixed rate while moving.
     local moving = s.speed > 0
@@ -158,23 +183,9 @@ function S:update(dt)
         self:effects_frame()
     end
 
-    -- Bumping into the rival costs speed and pushes it ahead (the port's own
-    -- collision; the game's is around 0x3BA5..0x3C71).
     local r = self.current
-    if r then
-        r.bump = math.max(0, r.bump - dt)
-        if alive and not r.destroyed and r.pos > -4 and r.pos < 12 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
-            s.speed = math.max(0, s.speed - 40)
-            rules.bump(s)
-            r.pos = r.pos + 12
-            r.bump = 0.6
-            voc.play("CHOC4")
-        end
-        r.ahead = PLAYER_AHEAD + r.pos / 8
-    end
+    if r then r.ahead = PLAYER_AHEAD + r.pos / 8 end
 
-    self.spin_t = self.spin_t + dt * (s.speed / 60)
-    if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
 end
 
 -- Attract mode's driver. Firing is the game's (0x2C02): with the rival 10-20
@@ -204,6 +215,34 @@ function S:end_demo()
     if cb then cb({ demo = true }) end
 end
 
+-- Collisions with the rival (race/collision.lua, RACEPRG 0x3A8F), then a
+-- tick of pushes and skids.
+function S:collisions(r, prev)
+    local s = self.rules
+    if self.carbox and r.x_lane and not s.destroyed then
+        local b = self.carbox
+        local half = b[3] / 2
+        local span = r.box and { r.box[1], r.box[1] + r.box[3] } or { r.x_lane - half, r.x_lane + half }
+        local kind = collide.classify(r.pos, r.pos ~= prev, span, { b[1], b[1] + b[3] }, r.destroyed)
+        if kind then
+            if kind == "ahead" or kind == "behind" then r.pos = prev end
+            if collide.respond(s, r, kind, r.x_lane > self.carx, self.hold) then voc.play("CHOC4") end
+        else
+            collide.clear(s)
+        end
+    end
+    local dx, sway, rdx = collide.tick(s, r)
+    self.carx = self.carx + dx
+    self.sway = sway
+    if rdx ~= 0 and self.road_w and self.road_w > 0 then
+        r.u = math.max(0.05, math.min(0.95, r.u + rdx / self.road_w))
+    end
+    if s.armour <= 0 and not s.destroyed then               -- 0x1940: out of armour
+        s.armour, s.destroyed = 0, true
+        self:wreck()
+    end
+end
+
 -- Is rival r lined up with your car (its place across the road inside your
 -- car's width, [0xCC4]..[0xCC6])?
 function S:lined_up(r)
@@ -217,7 +256,9 @@ function S:rival_tick()
     local s, r = self.rules, self.current
     if not r or r.out then return end
     if self.hold and not r.destroyed then r.speed = 0 end   -- HOLD's rivals are parked (0x4319)
+    local prev = r.pos
     local res = rivalai.tick(r, s.speed)
+    self:collisions(r, prev)
     if not r.destroyed then
         if res == "lost" or (self.hold and r.pos <= rivalai.LOST_BEHIND) then
             self:destroy(r)                                 -- left behind (0x3E7F)
@@ -249,6 +290,13 @@ end
 -- explosions advance (RACEPRG 0x2E14, 0x2F93, 0x4688).
 function S:effects_frame()
     local s = self.rules
+    -- Scraping a wall: smoke on that side, 1 armour a cycle (0x301B).
+    if s.scraping and s.speed > 0 and not s.destroyed then
+        self.smoke_frame = collide.smoke(s)
+        if self.smoke_frame == collide.SMOKE_FIRST then voc.play("CRRR3") end
+    else
+        self.smoke_frame = nil
+    end
     if s.shot then
         local result = rules.shot_step(s)
         if result == "kill" and s.shot_target then
@@ -503,7 +551,7 @@ function S:draw()
         r.x, r.box = nil, nil
         r.x_lane = plx and (plx + (prx - plx) * r.u) or nil    -- its place across the road, at your car
         local ahead = math.floor(r.ahead)
-        if not r.out and ahead > PLAYER_AHEAD and ahead < track.WINDOW - 2 then
+        if not r.out and ahead >= PLAYER_AHEAD and ahead < track.WINDOW - 2 then
             local lx, ly, rx, ry = edges(T, cam, base + ahead)
             if lx then
                 local x, y = lx + (rx - lx) * r.u, ly + (ry - ly) * r.u
@@ -534,17 +582,18 @@ function S:draw()
     end
 
     if plx then
-        local margin = math.min(30, (prx - plx) / 4)          -- keep the body on the road
-        self.road_l, self.road_r = plx + margin, prx - margin
-        self.carx = math.max(self.road_l, math.min(self.road_r, self.carx))
+        self.road_w = prx - plx
         local y = ply + (pry - ply) * (self.carx - plx) / math.max(1, prx - plx)
         local left, top, w, h
         if not self.wreck_frame or self.wreck_frame < 15 then
-            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer), self.carx, y, 1.0,
-                                            s.speed > 0 and self.spin or nil)
+            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer + (self.sway or 0)), self.carx, y, 1.0,
+                                            (s.speed > 0 and self.spin > 0) and (self.spin - 1) or nil)
         end
         if left then self.carbox = { left, top, w, h } end
         self.cary, self.cartop = y, top or (y - 30)
+        if self.smoke_frame and self.fx and s.scraping then           -- 20 px out on the wall's side
+            self:draw_fx(self.fx, self.smoke_frame, self.carx + (s.scraping == "left" and -20 or 20), self.cartop)
+        end
         self:draw_shot()
         self:draw_rival_shot()
         if self.wreck_frame and self.boom and self.carbox then
