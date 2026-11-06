@@ -43,6 +43,7 @@ S.CENTRE = {
 local BAR_LIT, BAR_OFF, BUTTON_LIT, BUTTON_OFF = 8, 16, 24, 27
 local C_NOTE = 120
 local IDLE_SECONDS = 3000 / 25      -- 3000 ticks ([0x69EC], 0x555A) at the port's 25 ticks a second
+local SHOWCASE_HOLD = 800 / 25      -- a showcase played through holds its last frame 800 ticks (0x5687)
 
 -- Career fields for saves from before the career existed.
 local function ensure_career(st)
@@ -259,7 +260,8 @@ function S:update(dt)
         elseif f == 9 then scenes.push(require("scenes.options"), "options", self.state)
         else scenes.push(require("scenes.hall"), self.state) end
     elseif (input.pressed("Space") or input.pressed("Escape")) and f <= 7 then
-        scenes.push(require("scenes.player"), data.MENU_CARS[f + 1].video .. ".HNM")
+        scenes.push(require("scenes.player"), data.MENU_CARS[f + 1].video .. ".HNM",
+            { hold = SHOWCASE_HOLD })
     end
 end
 
