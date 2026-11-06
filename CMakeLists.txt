@@ -84,6 +84,11 @@ add_executable(megarace
     src/audio.cpp
     src/input.cpp
     src/lua_api.cpp)
+if(WIN32)
+    # The port's own icon on the .exe (res/meguarace.ico, drawn by
+    # tools/make_icon.py; no game art).
+    target_sources(megarace PRIVATE res/meguarace.rc)
+endif()
 target_link_libraries(megarace PRIVATE megarace_formats SDL2::SDL2-static SDL2::SDL2main lua_static)
 megarace_warnings(megarace)
 if(MSVC)
@@ -131,4 +136,5 @@ endif()
 install(TARGETS megarace RUNTIME DESTINATION .)
 install(DIRECTORY scripts DESTINATION .)
 install(FILES README.md DESTINATION .)
+install(FILES res/meguarace.png res/meguarace.ico DESTINATION .)   # the icon, for shortcuts and launchers
 install(DIRECTORY docs DESTINATION .)
