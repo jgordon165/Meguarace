@@ -64,6 +64,9 @@ menus. To use a recording instead (say, from a real Sound Blaster), put
 `NEWSAN.wav`, `MAEVA.wav`, `DETRITUS.wav`, `LENNY.wav`, `ALARME.wav` or
 `PAGA.wav` in a folder and pass it with `--music <folder>`.
 
+The icon (`res/meguarace.ico`, also the window icon) is the port's own
+design, drawn by `tools/make_icon.py`, not art from the game.
+
 Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`). Options → Save and Load keep named saves there as well,
 as the original does.
