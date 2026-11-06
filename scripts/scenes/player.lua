@@ -7,7 +7,9 @@
 -- ENTER/SPACE skip the video; ESC skips it and tells on_done("all"), which a
 -- sequence takes as "skip the rest" (RACEPRG 0x5C98: one key ends the clip,
 -- the other the whole run of clips). opts.mute plays the picture only (the
--- credits roll over the music).
+-- credits roll over the music). opts.hold keeps the last frame up for that
+-- many seconds, or until a key, once the video has played to its end (the
+-- car showcases: 0x5687).
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
@@ -37,6 +39,7 @@ function S:enter(name, opts)
     self.lines = S.language and subs.for_video(subs.load(S.language), name) or nil
     self.line = 0
     self.showing, self.cleared = nil, false
+    self.holding = nil
     gfx.clear(0)
     audio.stream_reset()
     self:decodeAhead()
@@ -110,6 +113,11 @@ function S:finish(how)
 end
 
 function S:update(dt)
+    if self.holding then
+        self.holding = self.holding - dt
+        if input.any() or self.holding <= 0 then return self:finish() end
+        return
+    end
     if input.pressed("Escape") then return self:finish("all") end
     if input.pressed("Return") or input.pressed("Space") then return self:finish() end
     if input.pressed("P") then self.paused = not self.paused end
@@ -134,6 +142,8 @@ function S:update(dt)
     if self.shown >= self.count - 1 and (not self.sound or audio.stream_queued() <= 0) then
         if self.opts.loop then
             self:enter(self.name, self.opts)
+        elseif self.opts.hold then
+            self.holding = self.opts.hold
         else
             self:finish()
         end

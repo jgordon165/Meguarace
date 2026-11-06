@@ -64,11 +64,16 @@ menus. To use a recording instead (say, from a real Sound Blaster), put
 `NEWSAN.wav`, `MAEVA.wav`, `DETRITUS.wav`, `LENNY.wav`, `ALARME.wav` or
 `PAGA.wav` in a folder and pass it with `--music <folder>`.
 
-Settings, progress and high scores are saved in your user preferences folder
-(`meguarace.sav`).
+The icon (`res/meguarace.ico`, also the window icon) is the port's own
+design, drawn by `tools/make_icon.py`, not art from the game.
 
-In a race: Up accelerates, Down brakes, Left/Right steer, Space or Ctrl
-fires (F1 shows a debug line).
+Settings, progress and high scores are saved in your user preferences folder
+(`meguarace.sav`). Options → Save and Load keep named saves there as well,
+as the original does.
+
+In a race: Up accelerates, Down brakes, Left/Right steer, Space fires (F1
+shows a debug line). Options → Keyboard sets your own keys, on the
+original's key setup screen.
 The dashboard is each car's own: speed, energy and armour (SP/EN/DM)
 gauges, the THRILL meter, the weapon, the radar with the nearest rival and
 the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you

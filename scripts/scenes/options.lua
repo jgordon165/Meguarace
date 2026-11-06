@@ -44,7 +44,7 @@ S.KINDS = KINDS
 local DISPLAY_Y = 188
 
 -- KONTROL6 messages.
-local MSG_KEYBOARD, MSG_NO_JOYSTICK, MSG_NO_MOUSE = 0, 1, 4
+local MSG_NO_JOYSTICK, MSG_NO_MOUSE = 1, 4       -- (0 is "keyboard now active")
 local MSG_X, MSG_Y = 160, 130
 
 -- Item centres for a kind: { x, y } per item.
@@ -94,13 +94,20 @@ end
 
 function S:act(a)
     local st = self.state
-    if a == "load" then
-        local loaded = save.load()
-        for k, v in pairs(loaded) do st[k] = v end
-        return self:close(true)                            -- 0x61CD: the menu is rebuilt
-    elseif a == "save" then
-        self.note = save.store(st) and "SAVED" or "SAVE FAILED"
-    elseif a == "keyboard" then self.msg = MSG_KEYBOARD
+    if a == "load" then                                  -- the saves (0x61CB, scenes/slots.lua)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "load", st, function(ok)
+            if not ok then return end
+            local menu = require("scenes.menu")
+            menu:rebuild()                                 -- 0x61CD: the menu is rebuilt
+            require("core.sequence").play({ career.file(require("game.slots").LOADED_VIDEO) })   -- BA2 (0x6352)
+        end)
+    elseif a == "save" then                              -- a name for it (0x642A)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "save", st)
+    elseif a == "keyboard" then                          -- already the control: set up keys (0x5FD6)
+        scenes.pop()                                     -- over the menu alone (0x5FEB)
+        scenes.push(require("scenes.keysetup"), st)
     elseif a == "joystick" then self.msg = MSG_NO_JOYSTICK
     elseif a == "mouse" then self.msg = MSG_NO_MOUSE
     elseif a == "display" or a == "display_back" then

@@ -390,10 +390,37 @@ selects, Esc closes.
 | tracks | CONTROL2 0 at (160,105) | the 16 tracks (from 1); the choice is the round |
 
 KEYBOARD, JOYSTICK and MOUSE show a KONTROL6 message at (160,130) until a
-key; KEYBOARD when the keyboard is already active opens a key-redefinition
-screen instead (0x5FD6, not ported). The port has only the keyboard, so
-JOYSTICK and MOUSE get messages 1 and 4. LOAD and SAVE use the port's one
-save rather than the original's slots. After a car showcase the original
+key; KEYBOARD when the keyboard is already active opens the key setup
+instead. The port has only the keyboard, so KEYBOARD always opens the key
+setup and JOYSTICK and MOUSE get messages 1 and 4.
+
+**Key setup** (0x5FD6…0x6178): the controls are rows at DS:0x1297 (a
+second set for Spanish at 0x12EB), each a scancode and 13 characters: label
+and a 4-character key name (`LEFT    :... `). Defaults `,` `.` A Z SPACE;
+the sixth row is `<OK OR ESC>`. The screen is CONTROL4 image 2 at
+(160,100) with the rows from (125,80), 6 pixels a character and 10 a row,
+in FONTOPT; the row being asked for is in FONTOPT2 and its key name in
+FONTOPT3. A key per row in turn (lower case raised; P and control
+characters other than RETURN refused); on the last row any key keeps them
+(0x6AF2), ESC at any point restores the copy taken at the start (0x60A9,
+0x60D4). Names (0x611D): the character, the arrows as glyphs 24–27, and
+ESP, RET, SFTD, SFTG, CTLR, ALT for space, return, right and left shift,
+ctrl and alt. The port keeps its own defaults (arrows and SPACE) and shows
+the current keys rather than the table's dots.
+
+**Saves** (SAVE 0x642A, LOAD 0x61CB): SAVE asks for a name on CONTROL4
+image 1 at (160,90): up to 8 letters and digits in FONTOPT from (128,98),
+8 pixels apart, `_` marking the next place; BACKSPACE takes one back,
+RETURN writes NAME.SAV, ESC leaves. The file holds the race points, the
+score, the level, the round and the rest of the career, the key table, the
+weapons table and the cars you can pick (0x658A). LOAD lists every `*.SAV`
+(up to 50, 0x625F) on CONTROL4 image 0 at (160,100): six names at a time
+from (132,80), a row every 10, the chosen one in FONTOPT2; Up/Down move
+and scroll, RETURN loads (then BA2 plays, 0x6352), ESC leaves. The port
+keeps each save as `slot_NAME.sav` in its preferences folder with the list
+of names in its main save; settings and the Hall of Fame stay outside.
+
+After a car showcase the original
 holds the last frame for up to 800 ticks or a key (0x5687); the port goes
 straight back.
 

@@ -1,4 +1,5 @@
 #include "video.h"
+#include "icon_data.h"
 
 
 #include <cctype>
@@ -52,11 +53,21 @@ bool Video::init(int width, int height, int scale, bool hidden) {
     window_ = SDL_CreateWindow("MegaRace (port)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                w_ * scale, h_ * scale, flags);
     if (!window_) { std::fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return false; }
+
+    // The port's own icon (res/meguarace.ico, tools/make_icon.py) for the
+    // title bar, taskbar and dock.
+    if (SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom(
+            const_cast<unsigned char*>(kIconRGBA), kIconSize, kIconSize, 32, kIconSize * 4,
+            SDL_PIXELFORMAT_RGBA32)) {
+        SDL_SetWindowIcon(window_, icon);
+        SDL_FreeSurface(icon);
+    }
+
     // Render targets let display modes scale the game layer sharply
     // (whole-number nearest, then linear); without them it is nearest only.
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
     if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+  
     if (!renderer_) { std::fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError()); return false; }
     // The original runs at 320x200 on a 4:3 monitor (non-square pixels).
     SDL_RenderSetLogicalSize(renderer_, w_, w_ * 3 / 4);

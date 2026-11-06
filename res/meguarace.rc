@@ -1,0 +1,2 @@
+// The executable's icon on Windows (an original design: tools/make_icon.py).
+IDI_ICON1 ICON "meguarace.ico"
