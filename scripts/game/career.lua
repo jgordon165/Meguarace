@@ -107,7 +107,9 @@ function C.before_race(st)
     return {}
 end
 
--- After a race. result = { outcome = "won"|"laps"|"wrecked", left, points }.
+-- After a race. result = { outcome = "won"|"laps"|"wrecked"|"quit", left,
+-- points }. "quit" (ESC in the race, [0x68CB] = -4) ends the career with no
+-- clip; its points still count, except on HOLD (0x4F78).
 -- Returns { videos = {...}, action = "next" | "gameover" | "complete" } and
 -- updates the career (the round to play next, records, score).
 function C.after_race(st, result, rand)
@@ -156,6 +158,7 @@ function C.after_race(st, result, rand)
     -- and goes straight on; otherwise the points count and Lance comments.
     if r == C.HOLD then
         if outcome == "wrecked" then return next_round() end
+        if outcome == "quit" then return gameover() end
         st.total = st.total + points
         videos = C.clean_round_clips(points, rand)
         return next_round()

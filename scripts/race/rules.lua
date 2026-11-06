@@ -78,7 +78,9 @@ end
 -- little ahead of it (14..17). If the bolt is over the rival, it stops there
 -- and plays the impact (18..22); otherwise the shot ends after frame 17.
 R.RIVAL_HEALTH  = 100          -- [0x814]: damage [0xD30] that destroys the rival
-R.HIT_POINTS    = 5            -- [0x68D5]: points paid out per hit
+R.HIT_POINTS    = 5            -- [0x68D5]: points paid out per hit (0x3004)
+R.TILE_POINTS   = 10           -- codes 18 and 2 (0x1EFA, 0x1F23)
+R.POINTS_CAP    = 65000        -- no more points counted in above this (0x1C64)
 R.EXPLOSION_FRAMES = 24        -- EXPLOSE frames played over a destroyed rival
 R.EXPLOSION_POINTS = 5         -- per explosion frame (RACEPRG 0x4699)
 R.SHOT = { muzzle = 11, bolt = 14, bolt_end = 18, impact_end = 23 }
@@ -158,7 +160,7 @@ function R.hit(s, rival)
     local sh = s.shot
     if not sh or sh.hit then return false end
     sh.hit, sh.frame = true, R.SHOT.bolt_end
-    s.points = s.points + R.HIT_POINTS
+    R.pay(s, R.HIT_POINTS)
     s.thrill_pending = s.thrill_pending + 0x40              -- 0x2FEC
     local destroyed = R.damage(rival, s.car.power)
     if destroyed then s.thrill_pending = 5 end             -- 0x3EAD
@@ -210,6 +212,36 @@ function R.rival_shot_step(s)
     return nil
 end
 
+-- Points (RACEPRG 0x1C5D, 0x1EE1, 0x1F10, 0x2FF1). A hit or a code 18 pays
+-- `n` points and a code 2 charges `n`, but they move one a tick: the amount
+-- waits in [0x68D5]. A new payment first adds whatever was still due; a
+-- charge first takes off whatever was still due (if you have that many),
+-- even when that was a payment still counting in. Counting in stops above
+-- 65000, counting out below 10. Points still due when the race ends don't
+-- count.
+function R.pay(s, n)
+    s.points_down, s.points_up = false, true
+    s.points = s.points + s.points_due
+    s.points_due = n
+end
+
+function R.charge(s, n)
+    s.points_down, s.points_up = true, false
+    if s.points_due <= s.points then s.points = s.points - s.points_due end
+    s.points_due = n
+end
+
+local function count_points(s)
+    if s.points_up and s.points <= R.POINTS_CAP then
+        s.points, s.points_due = s.points + 1, s.points_due - 1
+        if s.points_due == 0 then s.points_up = false end
+    end
+    if s.points_down and s.points >= 10 then
+        s.points, s.points_due = s.points - 1, s.points_due - 1
+        if s.points_due == 0 then s.points_down = false end
+    end
+end
+
 function R.damage(rival, n)
     if rival.destroyed then return false end
     rival.damage = math.min(R.RIVAL_HEALTH, (rival.damage or 0) + n)
@@ -223,7 +255,10 @@ function R.new(car)
         car = stats,
         speed = 0,              -- [0xC9E]
         energy = 400,           -- [0x6911], 400 at the start (0x0561)
-        points = 0,             -- [0x690D] (raised by code 18, lowered by code 2)
+        points = 0,             -- [0x690D] this race's points
+        points_due = 0,         -- [0x68D5] still to count in or out, one a tick
+        points_up = false,      -- [0x68D1] counting in
+        points_down = false,    -- [0x68D3] counting out
         armour = stats.armour,  -- [0xD2E]
         weapon = 1,             -- [0xD5A]: every car starts with weapon 1 (DS:0xD66)
         super = false,          -- [0xD5E]: weapon 1 charged (code 20)
@@ -279,6 +314,7 @@ function R.step(s, input)
         s.thrill_fall = s.thrill_fall - 1
         s.thrill = math.max(0, s.thrill - 1)
     end
+    count_points(s)
 
     local drift = 0
     if s.slide then
@@ -304,9 +340,9 @@ function R.apply_tile(s, code, turn)
     elseif code == 1 then                                 -- energy drain
         s.energy = math.max(0, s.energy - s.drain); s.drain = 50
     elseif code == 2 then
-        if s.points >= 10 then s.points = s.points - 10 end
+        R.charge(s, R.TILE_POINTS)
     elseif code == 18 then
-        s.points = s.points + 10
+        R.pay(s, R.TILE_POINTS)
     elseif code == 3 then
         s.brake_until_slow = true
     elseif code == 7 or (code == 4 and display <= 15) then
