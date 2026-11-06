@@ -125,8 +125,8 @@ function K.smoke(s)
 end
 
 -- One tick of pushes and skids. Returns your x change and sway, and the
--- rival's x change (pixels).
-function K.tick(s, r)
+-- rival's x change (pixels). `frame` is the track video's frame.
+function K.tick(s, r, frame)
     local dx, sway, rdx = 0, 0, 0
     local function ease(v) if v > 0 then return v - 1 elseif v < 0 then return v + 1 end return 0 end
     if s.push and s.push ~= 0 then dx = dx + s.push; s.push = ease(s.push) end
@@ -139,9 +139,9 @@ function K.tick(s, r)
             if k.armour then s.armour = math.max(0, s.armour - K.SKID_ARMOUR) end   -- 0x2136
         else
             sway, dx = k.steps[k.i], dx + k.dx
-            -- A wall bounce eases off by 1 every other tick (the game: every
-            -- other section, 0x2271).
-            if k.ease and k.i % 2 == 0 and k.dx ~= 0 then k.dx = k.dx > 0 and k.dx - 1 or k.dx + 1 end
+            -- A wall bounce eases off by 1 on each tick of an odd video frame
+            -- (0x2271: [0x6957] & 1), so two ticks in every four.
+            if k.ease and (frame or 0) % 2 == 1 and k.dx ~= 0 then k.dx = k.dx > 0 and k.dx - 1 or k.dx + 1 end
         end
     end
     local q = r and r.skid

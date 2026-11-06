@@ -598,7 +598,7 @@ Held at one, you're scraping (0x23B8: `[0x68FF]`, `[0x6933]`): sound 6
 (0x302A), each cycle costing 1 armour. If you've steered for more than 6
 ticks in a row (`[0x6939]`) and your speed is over 100, you crash (0x2212):
 CHOCRR2, the 0x888 sway with a slide of 9 pixels a tick away from the wall
-that eases by 1 every other section (0x2271), and −8 armour when it ends
+that eases by 1 on every tick of an odd video frame (0x2271: `[0x6957]` & 1, two ticks in four), and −8 armour when it ends
 (0x2136). One crash per push: the counter is set to 1000 until you let go
 of the steering.
 
@@ -925,7 +925,6 @@ header as described above.
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
-- In the port a wall bounce eases every other tick, not every other section.
 - The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.

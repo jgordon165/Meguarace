@@ -256,7 +256,7 @@ function S:collisions(r, prev)
             collide.clear(s)
         end
     end
-    local dx, sway, rdx = collide.tick(s, r)
+    local dx, sway, rdx = collide.tick(s, r, math.max(0, self.frame))
     self.carx = self.carx + dx
     self.sway = sway
     if rdx ~= 0 and self.road_w and self.road_w > 0 then
