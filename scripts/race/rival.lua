@@ -43,6 +43,7 @@ function V.new(left, ahead8, speed)
         pos = ahead8 or V.START_AHEAD,   -- eighths ahead of you
         speed = speed or 0, max = V.MAX_SPEED,
         counter = 0, steer = 0, behind_ticks = 0,
+        lean = 0, vel = 0, step_at = 0,  -- steering: [0x691C], [0x6943], [0xE37]
         u = 0.25,                        -- across the road, 0 left .. 1 right (starts at x 80: 0x04B9)
         damage = 0,
     }
@@ -125,10 +126,7 @@ function V.tick(r, player_speed)
         local p = r.pos + dir * step
         if p > -V.LIMIT and p < V.LIMIT then r.pos = p end
     end
-    -- Steering only acts within about 6 sections (0x4213: [0xE0B] < 50).
-    if r.steer ~= 0 and r.pos < 50 then
-        r.u = math.max(0.1, math.min(0.9, r.u + r.steer * V.STEER_RATE))
-    end
+    V.steer_tick(r)
     if r.pos <= V.LOST_BEHIND then
         r.behind_ticks = r.behind_ticks + 1
         if r.behind_ticks >= V.LOST_TICKS then return "lost" end
@@ -138,7 +136,59 @@ function V.tick(r, player_speed)
     return nil
 end
 
-V.STEER_RATE = 0.012            -- road widths per tick (this port's value)
+-- Steering (RACEPRG 0x4210, every tick). The AI's direction [0xE03] only
+-- counts within 50 eighths. Steering tips a lean [0x691C] (-6..6, against
+-- the direction) and builds a sideways speed [0x6943]: each tick it is
+-- doubled (halved first when it points the other way), the step added
+-- (speed/40, +4 under 80; 4 at 100 and over), capped at +-(speed/10, at
+-- most 10) and halved again, so it tops out at 5. Let go, the lean returns
+-- toward 0 a tick at a time and the speed by 1 whenever the lean is even.
+local function toward_zero(v)
+    if v == 0 then return 0 end
+    v = v - 1
+    if v < 0 then v = v + 2 end
+    return v
+end
+
+function V.steer_tick(r)
+    local dir = r.pos < 50 and r.steer or 0
+    if dir == 0 then
+        r.lean = toward_zero(r.lean)
+        if r.lean % 2 == 0 then r.vel = toward_zero(r.vel) end
+        return
+    end
+    r.lean = math.max(-6, math.min(6, r.lean + (dir < 0 and 1 or -1)))
+    local s10 = math.floor(r.speed) // 10                                  -- [0xDB4]
+    local cap, step = s10, s10 // 4
+    if step < 2 then step = step + 4 end
+    if s10 >= 10 then cap, step = 10, 4 end
+    local v = r.vel
+    if (v < 0) ~= (dir < 0) then v = v // 2 end                -- sar
+    v = 2 * v + (dir < 0 and -step or step)
+    v = math.max(-cap, math.min(cap, v))
+    r.vel = v // 2                                              -- sar
+end
+
+-- The sideways move (0x38EF), once every 6 ticks while the road at the
+-- rival is 32 pixels wide or more ([0xDEA]). Returns pixels at the rival's
+-- depth. Within 50 eighths: its sideways speed, unless the lean says the
+-- other way. Further: a pixel toward the middle of the road (`off`: its
+-- pixels from the middle). From 150 on it is simply kept in the middle
+-- (0x3A18), every tick.
+function V.side_step(r, tick, width, off)
+    if tick <= r.step_at then return 0 end
+    r.step_at = tick + 5
+    if width < 32 then return 0 end
+    if r.pos >= 50 then
+        local d = (-math.floor(off)) & ~1                                   -- and 0xFFFE
+        if d == 0 then return 0 end
+        return d > 0 and 1 or -1
+    end
+    local v = r.vel
+    if r.lean > 0 and v >= 0 then v = 0 end
+    if r.lean < 0 and v < 0 then v = 0 end
+    return v
+end
 
 function V.decision_interval(level) return level == "HARDENED" and 50 or 100 end
 

@@ -28,6 +28,7 @@ local S = {}
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
 local STEER = 140           -- screen pixels per second
+local RIVAL_U = { 0.1, 0.9 }  -- the rival stays this far across the road (edges less half its width, 0x3B21)
 local COUNTDOWN = 2.5       -- seconds of "GET READY"
 local FX_FPS = 12.5         -- shot and explosion frames per second (one per video frame)
 local GUN_SPREAD = { { 0 }, { -6, 6 }, { -6, 0, 6 } }   -- bolts per weapon (RACEPRG 0x2EF3)
@@ -267,6 +268,21 @@ function S:lined_up(r)
     return r.x_lane >= self.carbox[1] and r.x_lane <= self.carbox[1] + self.carbox[3]
 end
 
+-- The rival's sideways move (race/rival.lua, RACEPRG 0x3996): in pixels at
+-- its depth, kept off the road's edges, where its lean resets (0x39EC).
+-- This port keeps its place as a fraction of the road, so on a curve it
+-- follows the road rather than the screen.
+function S:rival_side(r)
+    local w = r.w_px or self.road_w or 0
+    if r.pos >= 150 then r.u = 0.5 end                      -- 0x3A18
+    local dx = rivalai.side_step(r, self.rules.tick, w, (r.u - 0.5) * w)
+    if dx ~= 0 and w > 0 then
+        local u = r.u + dx / w
+        if u < RIVAL_U[1] or u > RIVAL_U[2] then r.lean = 0 end
+        r.u = math.max(RIVAL_U[1], math.min(RIVAL_U[2], u))
+    end
+end
+
 -- One game tick for the rival: movement, being left behind, and every 100
 -- ticks (50 on HARDENED) an AI decision while you're moving (RACEPRG 0x3467).
 function S:rival_tick()
@@ -275,6 +291,7 @@ function S:rival_tick()
     if self.hold and not r.destroyed then r.speed = 0 end   -- HOLD's rivals are parked (0x4319)
     local prev = r.pos
     local res = rivalai.tick(r, s.speed)
+    self:rival_side(r)
     self:collisions(r, prev)
     if not r.destroyed then
         if res == "lost" or (self.hold and r.pos <= rivalai.LOST_BEHIND) then
@@ -579,6 +596,7 @@ function S:draw()
             local lx, ly, rx, ry = edges(T, cam, base + ahead)
             if lx then
                 local x, y = lx + (rx - lx) * r.u, ly + (ry - ly) * r.u
+                r.w_px = rx - lx
                 local scale = math.max(0.05, (rx - lx) / ref)
                 local sec = T.sections[base + ahead]
                 local dh = ((sec.heading - cam.heading + 1440) % 2880) - 1440

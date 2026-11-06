@@ -577,6 +577,40 @@ test("career: car unlocks (DS:0x103C, 0x104C)", function()
     check(st.level == "HARDENED" and st.round == 1 and st.total == 0, "level panel: a new career")
 end)
 
+test("rival: steering (0x4210) and sideways step (0x38EF)", function()
+    local V = require("race.rival")
+    local r = V.new(2, 20, 200)
+    r.steer = 1
+    local seen = {}
+    for i = 1, 6 do V.steer_tick(r); seen[i] = r.vel end
+    check(seen[1] == 2 and seen[2] == 4 and seen[3] == 5 and seen[6] == 5, "speed builds 2, 4, then 5 at 200")
+    check(r.lean == -6, "lean tips against the direction, to -6")
+    r.speed = 50                                     -- s10 5: step 5 // 4 + 4 = 5, cap 5
+    r.vel, r.lean = 0, 0
+    V.steer_tick(r)
+    check(r.vel == 2, "at 50: (0 + 5) capped 5, halved: 2")
+    r.speed, r.vel, r.lean = 200, 5, -6
+    r.steer = -1
+    V.steer_tick(r)
+    check(r.vel == 0 and r.lean == -5, "reversing: halved (2), doubled less the step (0), halved")
+    r.steer = 0
+    r.vel, r.lean = 4, 3
+    V.steer_tick(r); check(r.lean == 2 and r.vel == 3, "let go: lean back 1, speed back 1 on an even lean")
+    V.steer_tick(r); check(r.lean == 1 and r.vel == 3, "odd lean: speed holds")
+    r.steer, r.pos = 1, 60
+    V.steer_tick(r); check(r.lean == 0, "no steering from 50 eighths on")
+    -- the step
+    r.pos, r.vel, r.lean, r.step_at = 20, 4, -2, 0
+    check(V.side_step(r, 1, 100, 0) == 4, "within 50: its speed")
+    check(V.side_step(r, 5, 100, 0) == 0 and V.side_step(r, 7, 100, 0) == 4, "once every 6 ticks")
+    r.lean = 3
+    check(V.side_step(r, 20, 100, 0) == 0, "a lean the other way holds it")
+    r.pos = 80
+    check(V.side_step(r, 40, 100, 10) == -1 and V.side_step(r, 60, 100, -10) == 1, "50..150: a pixel toward the middle")
+    check(V.side_step(r, 80, 100, -1) == 0 and V.side_step(r, 90, 100, 1) == -1, "a pixel left of the middle stays; right moves (and 0xFFFE)")
+    check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
+end)
+
 test("career: giving up (ESC, [0x68CB] = -4)", function()
     local C = require("game.career")
     local st = C.new("NOVICE")
