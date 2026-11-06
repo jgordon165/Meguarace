@@ -58,7 +58,11 @@ Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`).
 
 In a race: Up accelerates, Down brakes, Left/Right steer, Space or Ctrl
-fires. Drive over the lane tiles for their effects (energy, points, weapons,
+fires (F1 shows a debug line).
+The dashboard is each car's own: speed, energy and armour (SP/EN/DM)
+gauges, the THRILL meter, the weapon, the radar with the nearest rival and
+the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you
+shoot back; run out of armour and you're destroyed. Drive over the lane tiles for their effects (energy, points, weapons,
 super speed, skids, spins), overtake or shoot down the three rivals, and
 finish three laps. Each car has its own guns, armour and firepower, read from
 the game's car table.
@@ -111,8 +115,10 @@ GitHub Actions (same layout as the Aleph One fork):
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
 | Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
-| Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE; rivals don't shoot back yet) |
-| Rival AI, dashboard gauges, subtitles | To do |
+| Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE) |
+| Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
+| Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |
+| Rival AI, one-rival-at-a-time races, subtitles | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
