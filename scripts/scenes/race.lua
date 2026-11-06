@@ -18,6 +18,7 @@ local cars   = require("formats.cars")
 local voc    = require("formats.voc")
 local rules  = require("race.rules")
 local rivalai = require("race.rival")
+local collide = require("race.collision")
 local hud    = require("race.hud")
 local font   = require("ui.rawfont")
 local music  = require("game.music")
@@ -158,20 +159,8 @@ function S:update(dt)
         self:effects_frame()
     end
 
-    -- Bumping into the rival costs speed and pushes it ahead (the port's own
-    -- collision; the game's is around 0x3BA5..0x3C71).
     local r = self.current
-    if r then
-        r.bump = math.max(0, r.bump - dt)
-        if alive and not r.destroyed and r.pos > -4 and r.pos < 12 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
-            s.speed = math.max(0, s.speed - 40)
-            rules.bump(s)
-            r.pos = r.pos + 12
-            r.bump = 0.6
-            voc.play("CHOC4")
-        end
-        r.ahead = PLAYER_AHEAD + r.pos / 8
-    end
+    if r then r.ahead = PLAYER_AHEAD + r.pos / 8 end
 
     self.spin_t = self.spin_t + dt * (s.speed / 60)
     if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
@@ -204,6 +193,34 @@ function S:end_demo()
     if cb then cb({ demo = true }) end
 end
 
+-- Collisions with the rival (race/collision.lua, RACEPRG 0x3A8F), then a
+-- tick of pushes and skids.
+function S:collisions(r, prev)
+    local s = self.rules
+    if self.carbox and r.x_lane and not s.destroyed then
+        local b = self.carbox
+        local half = b[3] / 2
+        local span = r.box and { r.box[1], r.box[1] + r.box[3] } or { r.x_lane - half, r.x_lane + half }
+        local kind = collide.classify(r.pos, r.pos ~= prev, span, { b[1], b[1] + b[3] }, r.destroyed)
+        if kind then
+            if kind == "ahead" or kind == "behind" then r.pos = prev end
+            if collide.respond(s, r, kind, r.x_lane > self.carx, self.hold) then voc.play("CHOC4") end
+        else
+            collide.clear(s)
+        end
+    end
+    local dx, sway, rdx = collide.tick(s, r)
+    self.carx = self.carx + dx
+    self.sway = sway
+    if rdx ~= 0 and self.road_w and self.road_w > 0 then
+        r.u = math.max(0.05, math.min(0.95, r.u + rdx / self.road_w))
+    end
+    if s.armour <= 0 and not s.destroyed then               -- 0x1940: out of armour
+        s.armour, s.destroyed = 0, true
+        self:wreck()
+    end
+end
+
 -- Is rival r lined up with your car (its place across the road inside your
 -- car's width, [0xCC4]..[0xCC6])?
 function S:lined_up(r)
@@ -217,7 +234,9 @@ function S:rival_tick()
     local s, r = self.rules, self.current
     if not r or r.out then return end
     if self.hold and not r.destroyed then r.speed = 0 end   -- HOLD's rivals are parked (0x4319)
+    local prev = r.pos
     local res = rivalai.tick(r, s.speed)
+    self:collisions(r, prev)
     if not r.destroyed then
         if res == "lost" or (self.hold and r.pos <= rivalai.LOST_BEHIND) then
             self:destroy(r)                                 -- left behind (0x3E7F)
@@ -503,7 +522,7 @@ function S:draw()
         r.x, r.box = nil, nil
         r.x_lane = plx and (plx + (prx - plx) * r.u) or nil    -- its place across the road, at your car
         local ahead = math.floor(r.ahead)
-        if not r.out and ahead > PLAYER_AHEAD and ahead < track.WINDOW - 2 then
+        if not r.out and ahead >= PLAYER_AHEAD and ahead < track.WINDOW - 2 then
             local lx, ly, rx, ry = edges(T, cam, base + ahead)
             if lx then
                 local x, y = lx + (rx - lx) * r.u, ly + (ry - ly) * r.u
@@ -536,11 +555,12 @@ function S:draw()
     if plx then
         local margin = math.min(30, (prx - plx) / 4)          -- keep the body on the road
         self.road_l, self.road_r = plx + margin, prx - margin
+        self.road_w = prx - plx
         self.carx = math.max(self.road_l, math.min(self.road_r, self.carx))
         local y = ply + (pry - ply) * (self.carx - plx) / math.max(1, prx - plx)
         local left, top, w, h
         if not self.wreck_frame or self.wreck_frame < 15 then
-            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer), self.carx, y, 1.0,
+            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer + (self.sway or 0)), self.carx, y, 1.0,
                                             s.speed > 0 and self.spin or nil)
         end
         if left then self.carbox = { left, top, w, h } end

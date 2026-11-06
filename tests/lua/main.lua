@@ -416,6 +416,41 @@ test("attract mode: the demo driver's firing and steering", function()
     check(not l and not r, "otherwise holds the middle")
 end)
 
+test("collisions: kinds and responses", function()
+    local K, rules = require("race.collision"), require("race.rules")
+    local me = { 140, 180 }
+    check(K.classify(3, true, { 150, 190 }, me) == "ahead", "moving, 3/8 ahead, overlapping: you ran into it")
+    check(K.classify(-2, true, { 150, 190 }, me) == "behind", "moving, 2/8 behind: it ran into you")
+    check(K.classify(3, false, { 120, 160 }, me) == "left", "not moving, its right edge inside you: on your left")
+    check(K.classify(3, false, { 170, 210 }, me) == "right", "on your right")
+    check(K.classify(9, true, { 150, 190 }, me) == nil and K.classify(-5, true, { 150, 190 }, me) == nil, "out of reach")
+    check(K.classify(3, true, { 190, 230 }, me) == nil, "not overlapping")
+    check(K.classify(3, true, { 150, 190 }, me, true) == nil, "a destroyed rival doesn't collide")
+
+    local s, r = rules.new("RA"), { speed = 150, damage = 0 }
+    s.speed = 170
+    check(K.respond(s, r, "ahead", false) and not K.respond(s, r, "ahead", false), "CHOC4 once per contact")
+    check(s.speed == 130 and s.brake_until_slow and r.speed == 230 and r.skid, "ahead: -20 twice, forced braking, rival +40 twice and skids")
+    K.clear(s)
+    local t, q = rules.new("RA"), { speed = 150, damage = 0 }
+    t.speed = 150
+    K.respond(t, q, "behind", true)
+    check(t.speed == 180 and q.speed == 130 and t.skid and t.skid.dx == -2, "behind: +30 / -20, you skid away from it")
+    local moved = 0
+    for _ = 1, 7 do local dx = K.tick(t, q); moved = moved + dx end
+    check(moved == -14 and t.armour == 70, "a 7-tick skid, 2 px a tick")
+    K.tick(t, q)
+    check(t.armour == 62 and t.skid == nil, "then 8 armour")
+    local u, w = rules.new("RA"), { speed = 150, damage = 0 }
+    K.respond(u, w, "left", false)
+    local dx, _, rdx = K.tick(u, w)
+    check(dx == 7 and rdx == -7 - 2, "side: pushed 7 apart, the rival skidding away too")
+    dx = K.tick(u, w); check(dx == 6, "easing off by 1")
+    local h, hr = rules.new("RA"), { speed = 0, damage = 0 }
+    K.respond(h, hr, "ahead", false, true)
+    check(h.armour == 0 and hr.damage == 100, "HOLD: ramming finishes both")
+end)
+
 test("voc: decodes a type-1 block", function()
     local voc = require("formats.voc")
     local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)
