@@ -12,6 +12,7 @@ extern "C" {
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -312,7 +313,18 @@ struct HnmUd {
     int index = -1;                 // last decoded frame
 #ifdef MEGARACE_HD
     std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
+    std::string name;
+    // Frames drawn from the pack, and drawn from the original because the
+    // palette differed or the pack had no picture (MEGARACE_HD_STATS=1).
+    long hdDraws = 0, paletteMisses = 0, pictureMisses = 0;
 #endif
+    ~HnmUd() {
+#ifdef MEGARACE_HD
+        if (pack && std::getenv("MEGARACE_HD_STATS"))
+            std::printf("HD %s: %ld frames from the pack, %ld original (palette), %ld original (no picture)\n",
+                        name.c_str(), hdDraws, paletteMisses, pictureMisses);
+#endif
+    }
 };
 static const char* kHnmMeta = "megarace.hnm";
 
@@ -349,26 +361,53 @@ static int hnm_decode(lua_State* L) {
     return 1;
 }
 
+// Draws a decoded frame's pixels: from the HD pack when there is a picture
+// for that frame and the screen shows the video's own colours (not mid-fade,
+// not recoloured by the game), else the original pixels.
+static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w, int ht,
+                      const uint8_t* px, size_t len, int key) {
+    Video& v = h->eng->video;
+#ifdef MEGARACE_HD
+    if (h->pack && v.hdOn()) {
+        if (!v.paletteMatches(h->video.palette().data(), px, len, key)) {
+            ++h->paletteMisses;
+        } else if (const auto* pic = h->pack->frame(index)) {
+            v.blitHd(ox, oy, fx, fy, w, ht, px, len, key, pic->data(), h->pack->hdWidth(),
+                     h->pack->hdHeight());
+            ++h->hdDraws;
+            return;
+        } else {
+            ++h->pictureMisses;
+        }
+    }
+#else
+    (void)index;
+#endif
+    v.blit(ox + fx, oy + fy, w, ht, px, len, key);
+}
+
 static int hnm_draw(lua_State* L) {
     HnmUd* h = checkHnm(L);
     const auto& f = h->frame;
     if (!f.hasVideo) return 0;
     int ox = int(luaL_optinteger(L, 2, 0)), oy = int(luaL_optinteger(L, 3, 0));
-    const int key = f.overlay ? 0 : -1;
-    Video& v = h->eng->video;
-#ifdef MEGARACE_HD
-    // HD picture when there is one for this frame and the screen is showing
-    // the video's own colours (not mid-fade, not recoloured by the game).
-    if (h->pack && v.hdOn() &&
-        v.paletteMatches(h->video.palette().data(), f.pixels.data(), f.pixels.size(), key)) {
-        if (const auto* pic = h->pack->frame(h->index)) {
-            v.blitHd(ox, oy, f.x, f.y, f.w, f.h, f.pixels.data(), f.pixels.size(), key,
-                     pic->data(), h->pack->hdWidth(), h->pack->hdHeight());
-            return 0;
-        }
-    }
-#endif
-    v.blit(ox + f.x, oy + f.y, f.w, f.h, f.pixels.data(), f.pixels.size(), key);
+    drawFrame(h, h->index, ox, oy, f.x, f.y, f.w, f.h, f.pixels.data(), f.pixels.size(),
+              f.overlay ? 0 : -1);
+    return 0;
+}
+
+// v:blit(i, x, y, w, h, pixels [, key]): gfx.blit for frame i of this video,
+// decoded earlier (the player decodes ahead and draws later). x, y are the
+// frame's own position (decode's info.x, info.y). Uses the HD pack like :draw.
+static int hnm_blit(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    int i = int(luaL_checkinteger(L, 2));
+    int x = int(luaL_checkinteger(L, 3)), y = int(luaL_checkinteger(L, 4));
+    int w = int(luaL_checkinteger(L, 5)), ht = int(luaL_checkinteger(L, 6));
+    size_t len = 0;
+    const char* px = luaL_checklstring(L, 7, &len);
+    int key = int(luaL_optinteger(L, 8, -1));
+    drawFrame(h, i, 0, 0, x, y, w, ht, reinterpret_cast<const uint8_t*>(px), len, key);
     return 0;
 }
 
@@ -434,8 +473,10 @@ static int hnm_open(lua_State* L) {
                              p.string().c_str(), ph.scale, e.video.hdScale());
             else if (int(ph.frames) != h->video.frameCount())
                 std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.string().c_str());
-            else
+            else {
                 h->pack = std::move(pack);
+                h->name = stem;
+            }
         }
     }
 #endif
@@ -587,7 +628,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
-        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {nullptr, nullptr}};
+        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {"blit", hnm_blit}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
         {"any", input_any},

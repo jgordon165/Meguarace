@@ -76,8 +76,12 @@ default size is the HD scale or 3×, whichever is larger.
   the game has changed any colour the frame uses (a fade, a recolour), that
   frame draws from the original pixels instead, so it always looks the way
   the game means it to.
-- **Lua**: `sys.hd_scale` (0 without HD), `sys.hd_path`, and `v:hd()` on a
-  video, which is true when it plays from a pack.
+- **Lua**: `sys.hd_scale` (0 without HD), `sys.hd_path`, `v:hd()` on a
+  video (true when it plays from a pack), and `v:blit(i, x, y, w, h, pixels,
+  key)`: `gfx.blit` for frame i of the video, which the cutscene player uses
+  because it decodes frames ahead and draws them later.
+- **Diagnostics**: set `MEGARACE_HD_STATS=1` to print, for each video, how
+  many frames came from the pack and how many fell back to the original.
 
 ## Builds
 
