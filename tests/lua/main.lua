@@ -535,6 +535,50 @@ test("save: hall of fame keeps the top 7", function()
     check(save.add_score(st, { name = "LOW", score = 1 }) == nil, "too low: not entered")
 end)
 
+test("career: car unlocks (DS:0x103C, 0x104C)", function()
+    local C, save = require("game.career"), require("game.save")
+    local st = C.new("NOVICE")
+    local open = {}
+    for m = 1, 8 do if st.unlocked[m] then open[#open + 1] = m end end
+    check(table.concat(open, ",") == "1,3,4", "a new career has JO, LU, OU")
+    st.round = 1
+    C.after_race(st, { outcome = "won", left = 0, points = 1500 }, function() return 1 end)
+    check(st.unlocked[8], "clearing round 1 unlocks RA")
+    st.round = 3
+    C.after_race(st, { outcome = "laps", left = 1, points = 1300 }, function() return 1 end)
+    check(not st.unlocked[2], "round 3 not cleared: HO stays locked")
+    st.round = C.TOKY
+    C.after_race(st, { outcome = "won", left = 0, points = 1500 }, function() return 1 end)
+    local n = 0
+    for m = 1, 8 do if st.unlocked[m] then n = n + 1 end end
+    check(n == 4, "bonus tracks unlock nothing")
+    local back = save.parse(save.serialize(st))
+    check(back.unlocked[8] == true and back.unlocked[2] == false, "unlocks survive a save")
+    C.gameover(st)
+    check(not st.unlocked[8] and st.unlocked[1], "game over: back to the first three")
+    C.reset(st, "HARDENED")
+    check(st.level == "HARDENED" and st.round == 1 and st.total == 0, "level panel: a new career")
+end)
+
+test("menu: focus steps past locked cars and wraps (0x561E)", function()
+    local C = require("game.career")
+    local un = C.new().unlocked                     -- monitors 0, 2, 3 open
+    check(C.step_focus(0, 1, un) == 2, "0 -> 2, skipping HO")
+    check(C.step_focus(3, 1, un) == 8, "3 -> the left button")
+    check(C.step_focus(10, 1, un) == 0, "wraps past the right button")
+    check(C.step_focus(0, -1, un) == 10, "and back")
+    check(C.step_focus(8, -1, un) == 3, "left button back to OU")
+end)
+
+test("menu: panel layouts (0x57F8, 0x5991)", function()
+    local O = require("scenes.options")
+    local lv, op, tr = O.layout("level"), O.layout("options"), O.layout("tracks")
+    check(#lv == 2 and lv[1][2] == 92 and lv[2][2] == 108, "level: two items at y 92, 108")
+    check(#op == 6 and op[1][2] == 76 and op[6][2] == 156, "options: six from y 76, every 16")
+    check(#tr == 16 and tr[1][2] == 36 and tr[16][2] == 171, "tracks: sixteen from y 36, every 9")
+    check(#require("scenes.menu").CENTRE == 30, "30 menu image centres")
+end)
+
 -- bytes reader ----------------------------------------------------------------
 
 test("core.bytes reader", function()
