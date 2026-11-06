@@ -14,6 +14,9 @@
 --     and three clean rounds banked gives TOKY instead of game over, at most
 --     3 times (0x502B). After a bonus track you go on to the next round.
 --   * After completing the game the track choice is free (`completed`).
+--   * Cars: a new career has JOSE, LUIS and OUZBEL (DS:0x103C, copied to
+--     [0x101C] by 0x6A7C); destroying every opponent on a championship
+--     round unlocks one more (0x51AB, DS:0x104C + 32 x round).
 
 local C = {}
 
@@ -49,8 +52,20 @@ local FAMILY = { "NS", "MV", "FC", "NG", "SJ", "NS", "MV", "NG", "FC", "SJ", "MV
 local FAMILY_CLIP = { NS = 0x42, MV = 0x45, FC = 0x48, NG = 0x4E, SJ = 0x4B }
 C.FAMILY = FAMILY
 
+-- Menu monitors (1..8, data.MENU_CARS) open at the start, and the one each
+-- championship round unlocks when you destroy every opponent there.
+C.START_CARS = { 1, 3, 4 }                                   -- JO, LU, OU
+C.UNLOCK = { 8, 5, 2, 7, 6, 8, 5, 7, 2, 6, 5, 2, 8, 7 }    -- RA MA HO OM PA ...
+
+local function start_cars()
+    local u = { false, false, false, false, false, false, false, false }
+    for _, m in ipairs(C.START_CARS) do u[m] = true end
+    return u
+end
+
 function C.new(level)
     return {
+        unlocked = start_cars(),   -- [0x101C] monitors you can pick
         round = 1, main_round = 1, level = level or "NOVICE", total = 0,
         cleared_rounds = 0,        -- [0x69E0] rounds with every opponent destroyed
         hold_streak = 0,           -- [0x69B2] clean rounds in a row (HOLD at 3)
@@ -101,6 +116,11 @@ function C.after_race(st, result, rand)
     local points, left, outcome = result.points or 0, result.left or 0, result.outcome
     local videos = {}
     st.last_outcome = outcome
+    -- A clean championship round unlocks a car (0x4F4B -> 0x51AB).
+    if left == 0 and r <= C.ROUNDS then
+        st.unlocked = st.unlocked or start_cars()
+        st.unlocked[C.UNLOCK[r]] = true
+    end
 
     local function set_round(bx)                     -- 0x50E1
         if r ~= C.HOLD and st.hold_streak >= 3 then bx = C.HOLD; st.hold_streak = 0 end
@@ -189,10 +209,27 @@ end
 -- Returns the Hall of Fame entry to add.
 function C.gameover(st)
     local entry = { score = st.total, round = st.round, level = st.level }
-    local level = st.level
-    for k, v in pairs(C.new(level)) do st[k] = v end
-    st.level = level
+    C.reset(st, st.level)
     return entry
+end
+
+-- A new career on `level` (0x6A7C): game over, or a level picked from the
+-- menu's level panel (0x590B).
+function C.reset(st, level)
+    for k, v in pairs(C.new(level)) do st[k] = v end
+end
+
+-- The menu's focus (RACEPRG 0x561E): 0..7 the monitors, 8..10 the buttons
+-- (level, options, Hall of Fame). Arrows step it by `d` (+1 right or down,
+-- -1 left or up), wrapping, past monitors whose car is locked.
+function C.step_focus(f, d, unlocked)
+    for _ = 1, 11 do
+        f = f + d
+        if f < 0 then f = 10 elseif f > 10 then f = 0 end
+        if f > 7 or unlocked[f + 1] then return f end
+        if d == 0 then d = 1 end
+    end
+    return 8
 end
 
 -- The game completed (0x5267): Hall of Fame, then B82, a BB3-BB6 clip, B89,

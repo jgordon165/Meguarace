@@ -35,17 +35,20 @@ build\Release\megarace.exe --data V:\
 It plays the original boot sequence (Mindscape, Cryo, the intro with Lance
 Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 
-- Arrows move between the eight car monitors and the three buttons; Enter on
-  a monitor picks that car and plays its showcase video.
-- Green starts the next round. The career is the original's: Lance Boyle
+- Arrows move between the car monitors and the three buttons. You start with
+  three cars; destroying every opponent on a championship round unlocks
+  another. Enter on a monitor races the next round with that car; Space (or
+  Esc) plays its showcase video.
+- The career is the original's: Lance Boyle
   introduces each round and reacts to how you did; fail to qualify (or get
   wrecked) and it's game over and the Hall of Fame. Season 1 is Novice,
   season 2 Hardened; clean rounds earn the bonus tracks HOLD and TOKY;
   finish season 2 for the finale, after which you can pick any track.
   In a run of clips Enter skips one, Esc skips the rest.
-- Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
-  `RACEPRG.EXE`). Make it at the end of a career and you type your name.
-  Blue (or Esc) opens the **options**: Novice/Hardened, save, load, quit.
+- The left button picks the **level** (Novice or Hardened), which starts a
+  new career. The middle one opens the **options**: load, save, input, quit.
+  The right one shows the **Hall of Fame** (seeded with the defaults stored
+  in your `RACEPRG.EXE`). Make it at the end of a career and you type your name.
 - Leave the menu alone for two minutes and Lance butts in; leave it again
   and a demo race runs (any key ends it).
 - M turns the music on or off. S cycles the subtitles: off, English (US),
@@ -123,7 +126,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | Collisions with the rival, walls (scraping, crashes), every armour loss | Done (from RACEPRG.EXE) |
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
-| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
+| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (menu and panels laid out and behaving as RACEPRG.EXE; scoring is the port's own) |
 | Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE) |
 | Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |

@@ -343,18 +343,59 @@ NS2 MV2 PAR FC2 JNK MV3 FC3 NS3 LST TOKY HOLD.
 | `PANEL2.HSQ` | overlays: 0–7 car thumbnails, 8–15 lit bars, 16–23 bars as on the backdrop, 24–26 buttons highlighted, 27–29 buttons as on the backdrop, 30 palette strip |
 | `I_<NAME>.HNM` | car showcase videos |
 | `HALL1.HNM` | Hall of Fame backdrop |
-| `CONTROL.HSQ` | options: 0 OPTIONS panel, 1 LEVEL panel, then (off, lit) pairs NOVICE 2/3, HARDENED 4/5, LOAD 6/7, SAVE 8/9, KEYBOARD 10/11, JOYSTICK 12/13, MOUSE 14/15, QUIT 16/17. `KONTROL`/`QONTROL` are other languages |
+| `KONTROL.HSQ` | the menu's panels (resource 0x4D): 0 OPTIONS panel, 1 LEVEL panel, then (off, lit) pairs NOVICE 2/3, HARDENED 4/5, LOAD 6/7, SAVE 8/9, KEYBOARD 10/11, JOYSTICK 12/13, MOUSE 14/15, QUIT 16/17. `CONTROL` holds the same in English, `QONTROL` in Spanish |
+| `KONTROL6.HSQ` | input messages (0x5F): 0 keyboard now active, 1 joystick needs INSTALL, 2 joystick now active, 3 mouse now active, 4 no mouse driver |
+| `CONTROL2.HSQ` | track choice (0x58): 0 panel, then (off, lit) pairs for the 16 tracks, 1/2 … 31/32 |
 | `FONTHALL.HSQ` | 9×9 font, glyph index = ASCII code (96 glyphs; DOS arrows at 24–27) |
 | `VWBT*.HNM` | channel idents (played before each race in this port) |
 
-Overlay positions on `PANEL1`, found by matching `PANEL2`'s images against
-the backdrop pixel for pixel (bars and buttons match exactly):
+**The menu** (RACEPRG 0x54C9). Every `PANEL2` image is centred on its
+point in DS:0xFA4 ({x, y} per image, drawn at x − w/2, y − h/2: 0x57AE):
 
-| | Slot 1–8 (left, right per row, top to bottom) |
+| Images | Centres |
 |---|---|
-| bar | (102,4) (206,4) (84,33) (223,33) (80,65) (226,65) (92,100) (213,100) |
-| thumbnail | (47,3) (222,3) (26,33) (237,33) (20,65) (242,65) (27,99) (230,99) |
-| buttons | green (58,146), yellow (133,146), blue (211,146) |
+| 0–7 cars | (72,18) (247,18) (53,48) (264,48) (48,83) (272,83) (59,120) (261,120) |
+| 8–15, 16–23 bars | (107,19) (212,20) (90,48) (229,48) (86,81) (232,81) (99,120) (220,119) |
+| 24–26, 27–29 buttons | (86,168) (161,168) (239,168) |
+
+The focus `[0x69FA]` runs 0–10: the monitors, then the buttons left, middle,
+right. Right and Down step it +1, Left and Up −1, wrapping, past monitors
+whose car is locked (0x561E). Drawing (0x569C): an unlocked monitor shows
+its car (image m) and its bar, 8 + m when focused, else 16 + m; a locked one
+keeps the backdrop's empty screen. A button is 24 + b when focused, else
+27 + b.
+
+Keys (0x59F5; scancodes in `[0x703F + code]`): Enter on a monitor races the
+next round with that car, or once the game is completed (`[0x69AA]`) asks for
+the track first (0x55AB); Space or Esc plays the showcase, video 0x27 +
+monitor (0x5662). Enter on a button opens its panel (0x57F8): left = level,
+middle = options, right = the Hall of Fame (0x548C).
+
+**Cars you can pick** (`[0x101C]`, a word per monitor): a new career copies
+DS:0x103C, which opens JOSE, LUIS and OUZBEL (0x6A7C, also at game over).
+After a race where every opponent was destroyed on rounds 1–14 (0x4F4B),
+0x51AB ORs in DS:0x104C + 32 × round, which opens one more: round 1 RAMON,
+2 MARIA, 3 HOOPER, 4 OMEGA, 5 PALOMA, 6 RAMON, 7 MARIA, 8 OMEGA, 9 HOOPER,
+10 PALOMA, 11 MARIA, 12 HOOPER, 13 RAMON, 14 OMEGA.
+
+**Panels** (0x57F8, 0x5991): a list over the menu. Items are (off, lit)
+pairs from `[0x6A00]`, centred on x = 160, from y = 100 − 4 × count, one
+every 16 rows (9 for the tracks). Up/Down move (wrapping), Enter or Space
+selects, Esc closes.
+
+| Panel | Picture | Items |
+|---|---|---|
+| level | KONTROL 1 at (160,95) | NOVICE, HARDENED (from 2). Starts with the current level; picking one sets `[0x68CD]` and starts a new career (0x6A7C) |
+| options | KONTROL 0 at (160,108) | LOAD 0x61CB, SAVE 0x642A, KEYBOARD 0x5FC1, JOYSTICK 0x5EBF, MOUSE 0x5EF8, QUIT 0x5113 (from 6) |
+| tracks | CONTROL2 0 at (160,105) | the 16 tracks (from 1); the choice is the round |
+
+KEYBOARD, JOYSTICK and MOUSE show a KONTROL6 message at (160,130) until a
+key; KEYBOARD when the keyboard is already active opens a key-redefinition
+screen instead (0x5FD6, not ported). The port has only the keyboard, so
+JOYSTICK and MOUSE get messages 1 and 4. LOAD and SAVE use the port's one
+save rather than the original's slots. After a car showcase the original
+holds the last frame for up to 800 ticks or a key (0x5687); the port goes
+straight back.
 
 Monitor order = thumbnail order = showcase videos: JOSE, HOOPER, LUIS,
 OUZBEL, MARIA, PALOMA, OMEGA, RAMON (confirmed by comparing each
@@ -840,7 +881,7 @@ header as described above.
 - The rival's steering physics (0x4210; the port moves it at a fixed rate).
 - In the port a wall bounce eases every other tick, not every other section.
 - The body lean from a strong curve push (`[0x691D]`), not drawn yet.
-- The original options-menu layout and championship scoring.
+- Championship scoring. The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).
