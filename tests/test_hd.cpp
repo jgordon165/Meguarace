@@ -3,7 +3,6 @@
 
 #include "formats/cryo.h"
 #include "hd/convert.h"
-#include "hd/compose.h"
 #include "hd/hdpack.h"
 
 #include <cstdio>
@@ -47,16 +46,16 @@ static void testWebpLossless() {
 }
 
 static void testPack() {
-    const int K = 2, W = 4, H = 2;   // tiny canvas: 8x4 HD pixels
-    std::vector<uint32_t> a(size_t(W * K * H * K), 0xFF112233u), b(a.size(), 0xFFAABBCCu);
+    const int PW = 8, PH = 6;        // tiny canvas 4x2 shown as an 8x6 picture
+    std::vector<uint32_t> a(size_t(PW * PH), 0xFF112233u), b(a.size(), 0xFFAABBCCu);
     hd::PackHeader h;
-    h.scale = K; h.width = W; h.height = H; h.frames = 3; h.sourceCrc = 0x1234;
+    h.pictureW = PW; h.pictureH = PH; h.width = 4; h.height = 2; h.frames = 3; h.sourceCrc = 0x1234;
     std::string path = scratch("pack.hdv").string();
     hd::PackWriter w;
     CHECK(w.open(path, h));
-    CHECK(w.addFrame(hd::encodeWebp(a.data(), W * K, H * K, 101)));
+    CHECK(w.addFrame(hd::encodeWebp(a.data(), PW, PH, 101)));
     CHECK(w.addRepeat());
-    CHECK(w.addFrame(hd::encodeWebp(b.data(), W * K, H * K, 101)));
+    CHECK(w.addFrame(hd::encodeWebp(b.data(), PW, PH, 101)));
     CHECK(!w.addRepeat());   // one too many
     CHECK(w.finish());
 
@@ -64,7 +63,9 @@ static void testPack() {
     CHECK(!p.open(path, 0x9999));          // made from a different video
     hd::Pack q;
     CHECK(q.open(path, 0x1234));
-    CHECK(q.header().scale == K && q.header().frames == 3 && q.hdWidth() == 8);
+    CHECK(q.header().frames == 3 && q.hdWidth() == PW && q.hdHeight() == PH);
+    hd::PackHeader peeked;
+    CHECK(hd::Pack::peek(path, peeked) && peeked.pictureW == PW && peeked.width == 4);
     const auto* f0 = q.frame(0);
     CHECK(f0 && *f0 == a);
     const auto* f1 = q.frame(1);           // repeat of frame 0
@@ -79,18 +80,21 @@ static void testPack() {
     CHECK(!short_.finish());               // frame count mismatch
 }
 
-static void testCompose() {
-    // 2x1 screen at K=2: pixel 0 indexed (palette 7), pixel 1 from HD.
-    const uint8_t fb[2] = {7, 0};
-    const uint8_t src[2] = {0, 1};
-    uint32_t pal[256] = {};
-    pal[7] = 0xFF070707u;
-    std::vector<uint32_t> hdp(8), out(8);
-    for (size_t i = 0; i < 8; ++i) hdp[i] = 0xFF000000u | uint32_t(i);
-    hd::compose(fb, src, pal, hdp.data(), 2, 1, 2, out.data());
-    // Rows of 4 HD pixels: [pal pal hd2 hd3] [pal pal hd6 hd7]
-    CHECK(out[0] == pal[7] && out[1] == pal[7] && out[4] == pal[7] && out[5] == pal[7]);
-    CHECK(out[2] == hdp[2] && out[3] == hdp[3] && out[6] == hdp[6] && out[7] == hdp[7]);
+static void testResample() {
+    // A flat picture stays flat at any size, up or down.
+    std::vector<uint32_t> flat(size_t(320 * 200), 0xFF336699u);
+    auto up = hd::resample(flat, 320, 200, 1440, 1080);
+    CHECK(up.size() == 1440u * 1080u);
+    CHECK(up.front() == 0xFF336699u && up.back() == 0xFF336699u && up[size_t(540) * 1440 + 720] == 0xFF336699u);
+    auto down = hd::resample(up, 1440, 1080, 800, 600);
+    CHECK(down.size() == 800u * 600u && down[size_t(300) * 800 + 400] == 0xFF336699u);
+    // Left half black, right half white: the edge stays in the middle.
+    std::vector<uint32_t> half(size_t(8 * 2));
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 8; ++x) half[size_t(y * 8 + x)] = x < 4 ? 0xFF000000u : 0xFFFFFFFFu;
+    auto r = hd::resample(half, 8, 2, 32, 8);
+    CHECK((r[0] & 0xFF) == 0 && (r[31] & 0xFF) == 255);
+    CHECK((r[14] & 0xFF) < 128 && (r[17] & 0xFF) > 128);
 }
 
 // ---- a small HNM built in memory (see test_formats.cpp for the format) -----
@@ -144,7 +148,6 @@ static void testComposite() {
 static void testConvert() {
     Bytes v = testVideo();
     hd::ConvertOptions opt;
-    opt.scale = 2;
     opt.quality = 101;
     std::string path = scratch("video.hdv").string(), err;
     CHECK(hd::convertVideo(v, path, opt, err));
@@ -152,20 +155,20 @@ static void testConvert() {
     CHECK(!fs::exists(path + ".part"));
     hd::Pack p;
     CHECK(p.open(path, hd::crc32(v.data(), v.size())));
-    CHECK(p.header().frames == 2 && p.hdWidth() == 640 && p.hdHeight() == 400);
+    CHECK(p.header().frames == 2 && p.hdWidth() == 1440 && p.hdHeight() == 1080);
     const auto* f = p.frame(0);
     CHECK(f != nullptr);
     if (f) {
         uint32_t c = (*f)[0];   // top-left HD pixel: mostly red
         CHECK(((c >> 16) & 0xFF) > 200 && ((c >> 8) & 0xFF) < 80);
-        uint32_t far = (*f)[size_t(100) * 640 + 300];   // nothing drawn there: black
+        uint32_t far = (*f)[size_t(540) * 1440 + 1300];   // nothing drawn there: black
         CHECK((far & 0xFFFFFF) == 0);
     }
     CHECK(!hd::convertVideo(Bytes{1, 2, 3}, scratch("bad.hdv").string(), opt, err));
 }
 
 int main() {
-    for (auto* t : {testCrc, testWebpLossless, testPack, testCompose, testComposite, testConvert}) t();
+    for (auto* t : {testCrc, testWebpLossless, testPack, testResample, testComposite, testConvert}) t();
     std::error_code ec;
     fs::remove_all(fs::temp_directory_path() / "megarace_hd_tests", ec);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

@@ -10,11 +10,14 @@
 namespace hd {
 
 struct ConvertOptions {
-    int scale = 2;              // 2..4 is sensible; Real-ESRGAN's video model does 2, 3, 4
+    // Picture size: the 4:3 picture of the largest display mode (1080p).
+    // Smaller modes are scaled down from it by the engine.
+    int pictureW = 1440, pictureH = 1080;
     int quality = 90;           // WebP quality; >100 = lossless
     // Built-in: a Catmull-Rom resize, no extra programs, runs anywhere.
     // Real-ESRGAN: runs realesrgan-ncnn-vulkan (MIT, uses the GPU through
-    // Vulkan) over each batch of frames.
+    // Vulkan) at 4x over each batch of frames (1280x800), then resizes that
+    // to the picture size.
     enum class Upscaler { Builtin, RealEsrgan } upscaler = Upscaler::Builtin;
     std::string realesrgan;     // path to realesrgan-ncnn-vulkan(.exe)
     std::string model = "realesr-animevideov3";
@@ -31,8 +34,8 @@ bool compositeFrames(const std::vector<uint8_t>& hnm,
                      const std::function<bool(int, const std::vector<uint32_t>*)>& sink,
                      std::string& err);
 
-// Upscale RGB pictures w x h by `k` with the built-in filter.
-std::vector<uint32_t> upscaleBuiltin(const std::vector<uint32_t>& argb, int w, int h, int k);
+// Resize an ARGB picture w x h to W x H (Catmull-Rom; widened when shrinking).
+std::vector<uint32_t> resample(const std::vector<uint32_t>& argb, int w, int h, int W, int H);
 
 // Converts one HNM file (its bytes) into an HD pack at outPath.
 bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,

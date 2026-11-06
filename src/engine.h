@@ -24,4 +24,5 @@ struct Engine {
     // HD mode (MEGARACE_HD builds): folder of .hdv packs made by megarace-hd
     // from the player's own videos; empty when HD is off or there are none.
     std::string hdDir;
+    std::string displayArg;   // --display: overrides the saved display mode
 };

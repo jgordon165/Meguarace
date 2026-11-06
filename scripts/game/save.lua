@@ -39,6 +39,7 @@ function M.defaults()
         total = 0,                 -- championship score so far
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
+        display = nil,             -- display mode (options); nil: the largest that fits
         hall = nil,                -- filled from the EXE's defaults on first run
     }
 end

@@ -5,6 +5,7 @@
 //
 // Usage: megarace --data <game folder> [--music <ripped tracks folder>]
 //                 [--scale N] [--scripts <dir>] [--hd <packs folder> | --no-hd]
+//                 [--display native|800x600|1024x768|1920x1080]
 //                 [--frames N --screenshot out.bmp]   (headless testing)
 
 #include "engine.h"
@@ -29,10 +30,10 @@ extern "C" {
 namespace fs = std::filesystem;
 
 #ifdef MEGARACE_HD
-// The HD packs folder and its scale: --hd, else the packs megarace-hd made
-// in the user folder. All packs in a folder share one scale (the first
-// pack found decides; packs at another scale are skipped when opened).
-static int findHd(std::string& dir) {
+// The HD packs folder and their picture size: --hd, else the packs
+// megarace-hd made in the user folder. All packs share one size (the first
+// pack found decides; packs of another size are skipped when opened).
+static bool findHd(std::string& dir, int& picW, int& picH) {
     const bool asked = !dir.empty();
     if (dir.empty()) {
         char* p = SDL_GetPrefPath("Meguarace", "Meguarace");
@@ -43,15 +44,19 @@ static int findHd(std::string& dir) {
     if (dir.empty() || !fs::is_directory(dir, ec)) {
         if (asked) std::fprintf(stderr, "--hd: no such folder %s\n", dir.c_str());
         dir.clear();
-        return 0;
+        return false;
     }
+    bool old = false;
     for (const auto& f : fs::directory_iterator(dir, ec)) {
+        if (f.path().extension() != ".hdv") continue;
         hd::PackHeader h;
-        if (f.path().extension() == ".hdv" && hd::Pack::peek(f.path().string(), h)) return h.scale;
+        if (hd::Pack::peek(f.path().string(), h)) { picW = h.pictureW; picH = h.pictureH; return true; }
+        old = true;
     }
-    if (asked) std::fprintf(stderr, "--hd: no HD packs in %s (make them with megarace-hd)\n", dir.c_str());
+    if (old) std::fprintf(stderr, "HD packs in %s are from an older megarace-hd: run it again\n", dir.c_str());
+    else if (asked) std::fprintf(stderr, "--hd: no HD packs in %s (make them with megarace-hd)\n", dir.c_str());
     dir.clear();
-    return 0;
+    return false;
 }
 #endif
 
@@ -74,7 +79,7 @@ int main(int argc, char** argv) {
     Engine eng;
     std::string scripts;
     std::string shot;
-    int scale = 0;      // 0: default (3, or the HD scale if larger)
+    int scale = 3;      // native mode's window size
     long maxFrames = -1;
     bool noHd = false;
 
@@ -89,11 +94,13 @@ int main(int argc, char** argv) {
         else if (a == "--screenshot") shot = next();
         else if (a == "--hd")         eng.hdDir = next();
         else if (a == "--no-hd")      noHd = true;
+        else if (a == "--display")    eng.displayArg = next();
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
                         "[--music <folder with track02.wav...>] [--scale N]"
 #ifdef MEGARACE_HD
                         " [--hd <HD packs folder> | --no-hd]"
+                        " [--display native|800x600|1024x768|1920x1080]"
 #endif
                         "\n");
             return 0;
@@ -119,20 +126,30 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
-    int hdScale = 0;
+    int picW = 0, picH = 0;
 #ifdef MEGARACE_HD
-    if (noHd) eng.hdDir.clear();
-    else hdScale = findHd(eng.hdDir);
+    if (noHd || !findHd(eng.hdDir, picW, picH)) eng.hdDir.clear();
 #else
     (void)noHd;
 #endif
-    if (scale == 0) scale = std::max(3, hdScale);
     if (!eng.video.init(320, 200, scale, headless)) return 1;
-    if (hdScale) {
-        if (eng.video.enableHd(hdScale))
-            std::printf("HD mode: x%d videos from %s (F10 turns it off and on)\n", hdScale, eng.hdDir.c_str());
+    if (!eng.hdDir.empty()) {
+        if (eng.video.enableHd(picW, picH))
+            std::printf("HD videos (%dx%d) from %s (F10 turns them off and on)\n", picW, picH, eng.hdDir.c_str());
         else
             eng.hdDir.clear();
+    }
+    // Display mode: --display, else the largest that fits the desktop. The
+    // game's saved setting, if any, is applied by the Lua side at start
+    // (unless --display was given). Without HD packs: native.
+    {
+        std::string want = eng.displayArg.empty() ? eng.video.bestMode() : eng.displayArg;
+        if (!eng.video.setMode(want)) {
+            if (!eng.displayArg.empty())
+                std::fprintf(stderr, "--display %s: %s\n", want.c_str(),
+                             eng.video.hdAvailable() ? "unknown mode" : "needs HD packs (megarace-hd)");
+            eng.video.setMode("native");
+        }
     }
     eng.audio.init();   // non-fatal: the game runs silent without a device
 
@@ -170,7 +187,7 @@ int main(int argc, char** argv) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) eng.quit = true;
             if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat &&
-                eng.video.hdScale()) {
+                eng.video.hdAvailable() && eng.video.mode().hd) {
                 eng.video.setHdOn(!eng.video.hdOn());
                 std::printf("HD %s\n", eng.video.hdOn() ? "on" : "off");
             }

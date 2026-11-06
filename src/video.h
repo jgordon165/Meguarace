@@ -46,32 +46,46 @@ public:
     void setClip(std::vector<std::vector<int>> rows, int yOffset);
     void clearClip() { clipOn_ = false; clip_.clear(); }
 
-    // ---- HD layer -------------------------------------------------------
-    // With an HD scale K, the screen is also kept at K times the resolution:
-    // every original pixel records whether its current colour came from an
-    // HD video (blitHd) or from anything else the game drew. present() shows
-    // the HD picture for the first kind and the indexed pixel, scaled up, for
-    // the second. The indexed framebuffer stays exactly as without HD, so
-    // pget(), masks, hit tests and screenshots are unchanged.
-    bool enableHd(int k);
-    int  hdScale() const { return hdK_; }
-    bool hdOn() const { return hdK_ > 0 && hdOn_; }
+    // ---- Display modes and the HD layer ---------------------------------
+    // The game always draws in the original 320x200 coordinates: positions,
+    // masks, hit tests and every layout table from RACEPRG.EXE stay as they
+    // are. A display mode only decides how that screen is shown:
+    //   native     320x200 at 4:3, scaled by --scale (the original look)
+    //   800x600, 1024x768, 1920x1080
+    //              a 4:3 picture of 800x600, 1024x768 or 1440x1080 (pillarboxed
+    //              on 1920x1080), with HD videos when the player made packs
+    // In those modes the screen is two layers: the HD video pictures (made
+    // once at 1440x1080 and scaled down by the GPU for smaller modes), and the
+    // game's own drawing (cars, dashboard, text) from the 320x200 framebuffer,
+    // scaled up sharp. Each original pixel records which layer it shows.
+    struct Mode { const char* name; int winW, winH, picW, picH; bool hd; };
+    static const std::vector<Mode>& modes();
+    // HD packs found: their picture size. HD modes are offered only then.
+    bool enableHd(int picW, int picH);
+    bool hdAvailable() const { return picW_ > 0; }
+    int  hdPictureW() const { return picW_; }
+    int  hdPictureH() const { return picH_; }
+    bool setMode(const std::string& name);          // false: unknown or not available
+    const Mode& mode() const { return modes()[size_t(mode_)]; }
+    bool modeAvailable(const Mode& m) const { return !m.hd || hdAvailable(); }
+    // The best mode that fits the desktop (HD modes only when available).
+    std::string bestMode() const;
+    // HD pictures are shown: an HD mode, packs found, and not switched off (F10).
+    bool hdOn() const { return hdAvailable() && hdOn_ && mode().hd; }
     void setHdOn(bool on) { hdOn_ = on; }
     // blit() of a video frame drawn with its top-left at (ox, oy) on screen,
-    // its pixels at (fx, fy) in the video. `hd` is the video's whole screen
-    // at the HD scale (hdW x hdH): each pixel this draws takes its K x K
-    // block from there.
+    // its pixels at (fx, fy) in the video, also taking that part of `pic`, the
+    // video's whole screen as an HD picture (picW x picH), for the HD layer.
     void blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
-                int transparent, const uint32_t* hd, int hdW, int hdH);
+                int transparent, const uint32_t* pic, int picW, int picH);
     // True when, for every colour index `px` uses (except `transparent`),
     // the current palette is `rgb` (768 bytes, 8-bit). HD pictures carry the
     // video's own colours, so they are only used while the screen shows them.
     bool paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const;
 
     void present();
-    // asShown: the HD screen when HD is showing (else the 320x200 indexed one).
+    // asShown: the window as shown (in display modes); else the 320x200 screen.
     bool saveBmp(const std::string& path, bool asShown = false);
-
 private:
     SDL_Window*   window_   = nullptr;
     SDL_Renderer* renderer_ = nullptr;
@@ -86,10 +100,19 @@ private:
     bool visible(int x, int y) const;
     void convert();
 
-    int hdK_ = 0;
+    int nativeScale_ = 3;
+    bool hidden_ = false;
+    int mode_ = 0;                   // index in modes()
+    int picW_ = 0, picH_ = 0;        // HD picture size, 0 = no packs
     bool hdOn_ = true;
-    std::vector<uint8_t>  src_;      // per original pixel: 1 = from an HD video
-    std::vector<uint32_t> hd_;       // HD video pixels, (w*K) x (h*K)
-    std::vector<uint32_t> hdOut_;    // composed HD screen
-    SDL_Texture* hdTexture_ = nullptr;
+    bool hdDirty_ = false;
+    std::vector<uint8_t>  src_;      // per original pixel: 1 = shows the HD layer
+    std::vector<uint32_t> hd_;       // HD layer, picW_ x picH_ (the whole screen)
+    std::vector<uint32_t> layer_;    // game layer, 320x200, transparent over HD
+    SDL_Texture* hdTexture_ = nullptr;      // HD layer
+    SDL_Texture* gameTexture_ = nullptr;    // game layer, 320x200
+    SDL_Texture* sharpTexture_ = nullptr;   // game layer at a whole-number scale (render target)
+    void render(bool hdShown);
+    bool hdShown() const;
+    void destroyModeTextures();
 };

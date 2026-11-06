@@ -33,7 +33,8 @@ static const char* kUsage =
     "of the game. Run it once; the game picks the packs up by itself.\n"
     "\n"
     "  --out <folder>        where packs go (default: your Meguarace user folder /hd)\n"
-    "  --scale N             2, 3 or 4 (default 2)\n"
+    "  (pictures are 1440x1080, the 4:3 picture of 1080p; smaller display modes\n"
+    "   are scaled down from them by the game)\n"
     "  --quality Q           WebP quality 1..100, or 'lossless' (default 90)\n"
     "  --upscaler U          'realesrgan' or 'builtin' (default: realesrgan if it is\n"
     "                        next to this program, else builtin)\n"
@@ -92,7 +93,6 @@ int main(int argc, char** argv) {
         auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
         if      (a == "--data")       data = next();
         else if (a == "--out")        out = next();
-        else if (a == "--scale")      opt.scale = std::atoi(next().c_str());
         else if (a == "--quality")    { std::string q = next(); opt.quality = q == "lossless" ? 101 : std::atoi(q.c_str()); }
         else if (a == "--upscaler")   upscaler = next();
         else if (a == "--realesrgan") realesrgan = next();
@@ -104,7 +104,6 @@ int main(int argc, char** argv) {
         else { std::fputs(kUsage, a == "--help" || a == "-h" ? stdout : stderr); return a == "--help" || a == "-h" ? 0 : 2; }
     }
     if (data.empty()) { std::fputs(kUsage, stderr); return 2; }
-    if (opt.scale < 2 || opt.scale > 4) { std::fprintf(stderr, "--scale must be 2, 3 or 4\n"); return 2; }
     if (opt.quality < 1) { std::fprintf(stderr, "--quality must be 1..100 or lossless\n"); return 2; }
 
     Vfs vfs;
@@ -156,6 +155,7 @@ int main(int argc, char** argv) {
         if (realesrgan.empty()) { std::fprintf(stderr, "Real-ESRGAN not found; pass --realesrgan <path>\n"); return 2; }
         opt.upscaler = hd::ConvertOptions::Upscaler::RealEsrgan;
         opt.realesrgan = realesrgan;
+        opt.batch = 64;   // its 1280x800 output is 4 MB a frame; keep batches small
     } else if (upscaler != "builtin") {
         std::fprintf(stderr, "--upscaler must be realesrgan or builtin\n");
         return 2;
@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
                 "keep them for your own use and do not share or upload them.\n";
     }
 
-    std::printf("%zu videos -> %s (x%d, %s)\n", videos.size(), out.c_str(), opt.scale,
+    std::printf("%zu videos -> %s (%dx%d, %s)\n", videos.size(), out.c_str(), opt.pictureW, opt.pictureH,
                 opt.upscaler == hd::ConvertOptions::Upscaler::RealEsrgan ? "Real-ESRGAN" : "built-in upscaler");
     int failed = 0, skipped = 0, n = 0;
     for (const auto& v : videos) {
@@ -184,7 +184,10 @@ int main(int argc, char** argv) {
         if (!force) {
             hd::Pack existing;
             if (existing.open(packPath.string(), hd::crc32(d->data(), d->size())) &&
-                existing.header().scale == opt.scale) { ++skipped; continue; }
+                existing.header().pictureW == opt.pictureW && existing.header().pictureH == opt.pictureH) {
+                ++skipped;
+                continue;
+            }
         }
         auto t0 = std::chrono::steady_clock::now();
         opt.progress = [&](int done, int total) {

@@ -114,6 +114,41 @@ static int gfx_setcolor(lua_State* L) {
     return 0;
 }
 
+// ---- display modes ----
+// The game draws in 320x200 (gfx.width(), gfx.height()) in every mode; the
+// mode only changes how that is shown. See Video::Mode.
+//   gfx.displays() -> { "native", "800x600", ... } the modes available now
+//   gfx.display()  -> name, picture width, height, hd (HD pictures showing)
+//   gfx.set_display(name) -> true, or false if not available
+//   gfx.to_display(x, y) -> the point's position in the display picture, in
+//                           its pixels (for anything drawn at display resolution)
+static int gfx_displays(lua_State* L) {
+    lua_newtable(L);
+    int n = 0;
+    for (const auto& m : Video::modes())
+        if (E(L).video.modeAvailable(m)) { lua_pushstring(L, m.name); lua_rawseti(L, -2, ++n); }
+    return 1;
+}
+static int gfx_display(lua_State* L) {
+    const auto& m = E(L).video.mode();
+    lua_pushstring(L, m.name);
+    lua_pushinteger(L, m.picW);
+    lua_pushinteger(L, m.picH);
+    lua_pushboolean(L, E(L).video.hdOn());
+    return 4;
+}
+static int gfx_set_display(lua_State* L) {
+    lua_pushboolean(L, E(L).video.setMode(luaL_checkstring(L, 1)));
+    return 1;
+}
+static int gfx_to_display(lua_State* L) {
+    const auto& m = E(L).video.mode();
+    double x = luaL_checknumber(L, 1), y = luaL_checknumber(L, 2);
+    lua_pushnumber(L, x * m.picW / E(L).video.width());
+    lua_pushnumber(L, y * m.picH / E(L).video.height());
+    return 2;
+}
+
 static int gfx_screenshot(lua_State* L) {
     lua_pushboolean(L, E(L).video.saveBmp(luaL_checkstring(L, 1)));
     return 1;
@@ -458,7 +493,7 @@ static int hnm_open(lua_State* L) {
     if (!h->video.load(std::move(*d))) { lua_pushnil(L); lua_pushstring(L, "bad HNM"); return 2; }
 #ifdef MEGARACE_HD
     // <hd folder>/<NAME>.hdv, made from exactly these bytes, at the session's scale.
-    if (!e.hdDir.empty() && e.video.hdScale() > 0) {
+    if (!e.hdDir.empty() && e.video.hdAvailable()) {
         std::string stem = std::filesystem::path(name).stem().string();
         for (auto& c : stem) c = char(std::toupper(static_cast<unsigned char>(c)));
         std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hdv");
@@ -468,9 +503,11 @@ static int hnm_open(lua_State* L) {
             const auto& ph = pack->header();
             if (!pack->open(p.string(), crc))
                 std::fprintf(stderr, "HD pack %s ignored: %s\n", p.string().c_str(), pack->error().c_str());
-            else if (ph.scale != e.video.hdScale() || ph.width != e.video.width() || ph.height != e.video.height())
-                std::fprintf(stderr, "HD pack %s ignored: made at x%d, this session is x%d\n",
-                             p.string().c_str(), ph.scale, e.video.hdScale());
+            else if (ph.pictureW != e.video.hdPictureW() || ph.pictureH != e.video.hdPictureH() ||
+                     ph.width != e.video.width() || ph.height != e.video.height())
+                std::fprintf(stderr, "HD pack %s ignored: made at %dx%d, the others are %dx%d\n",
+                             p.string().c_str(), ph.pictureW, ph.pictureH, e.video.hdPictureW(),
+                             e.video.hdPictureH());
             else if (int(ph.frames) != h->video.frameCount())
                 std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.string().c_str());
             else {
@@ -606,6 +643,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"pget", gfx_pget}, {"fill", gfx_fill}, {"line", gfx_line},
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
+        {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
+        {"to_display", gfx_to_display},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},
@@ -668,8 +707,12 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, e.dataArg.c_str());  lua_setfield(L, -2, "data_path");
     lua_pushstring(L, e.musicArg.c_str()); lua_setfield(L, -2, "music_path");
     lua_pushboolean(L, e.music.mounted()); lua_setfield(L, -2, "music_mounted");
-    // HD mode: the pack scale (0 = no HD) and folder.
-    lua_pushinteger(L, e.video.hdScale()); lua_setfield(L, -2, "hd_scale");
-    lua_pushstring(L, e.hdDir.c_str());    lua_setfield(L, -2, "hd_path");
+    // HD content: whether packs were found, their folder and picture size,
+    // and the --display given on the command line ("" if none).
+    lua_pushboolean(L, e.video.hdAvailable()); lua_setfield(L, -2, "hd");
+    lua_pushstring(L, e.hdDir.c_str());        lua_setfield(L, -2, "hd_path");
+    lua_pushinteger(L, e.video.hdPictureW());  lua_setfield(L, -2, "hd_width");
+    lua_pushinteger(L, e.video.hdPictureH());  lua_setfield(L, -2, "hd_height");
+    lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
     lua_pop(L, 1);
 }

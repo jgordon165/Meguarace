@@ -67,12 +67,13 @@ static uint32_t get(const uint8_t* p, int bytes) {
     for (int i = 0; i < bytes; ++i) v |= uint32_t(p[i]) << (8 * i);
     return v;
 }
-static constexpr size_t kHeaderSize = 4 + 2 + 2 + 2 + 2 + 4 + 4 + 4;
+static constexpr size_t kHeaderSize = 4 + 2 + 2 + 2 + 2 + 2 + 4 + 4 + 4;
 
 static std::vector<uint8_t> headerBytes(const PackHeader& h) {
     std::vector<uint8_t> b = {'M', 'R', 'H', 'D'};
     put(b, kPackVersion, 2);
-    put(b, uint32_t(h.scale), 2);
+    put(b, uint32_t(h.pictureW), 2);
+    put(b, uint32_t(h.pictureH), 2);
     put(b, uint32_t(h.width), 2);
     put(b, uint32_t(h.height), 2);
     put(b, h.frames, 4);
@@ -83,7 +84,8 @@ static std::vector<uint8_t> headerBytes(const PackHeader& h) {
 
 // ---- writer ------------------------------------------------------------------
 bool PackWriter::open(const std::string& path, const PackHeader& h) {
-    if (h.scale < 1 || h.scale > kMaxScale || h.width <= 0 || h.height <= 0) {
+    if (h.pictureW < 1 || h.pictureH < 1 || h.pictureW > kMaxPicture || h.pictureH > kMaxPicture ||
+        h.width <= 0 || h.height <= 0) {
         err_ = "bad pack parameters";
         return false;
     }
@@ -127,18 +129,24 @@ bool PackWriter::finish() {
 }
 
 // ---- reader ------------------------------------------------------------------
+static bool parseHeader(const uint8_t* hdr, PackHeader& h) {
+    h.pictureW = int(get(hdr + 6, 2));
+    h.pictureH = int(get(hdr + 8, 2));
+    h.width = int(get(hdr + 10, 2));
+    h.height = int(get(hdr + 12, 2));
+    h.frames = get(hdr + 14, 4);
+    h.sourceCrc = get(hdr + 18, 4);
+    return h.pictureW >= 1 && h.pictureH >= 1 && h.pictureW <= kMaxPicture && h.pictureH <= kMaxPicture &&
+           h.width > 0 && h.height > 0 && h.frames <= 1000000;
+}
+
 bool Pack::peek(const std::string& path, PackHeader& h) {
     std::ifstream in(path, std::ios::binary);
     uint8_t hdr[kHeaderSize];
     if (!in.read(reinterpret_cast<char*>(hdr), sizeof hdr) || std::memcmp(hdr, "MRHD", 4) != 0 ||
         get(hdr + 4, 2) != kPackVersion)
         return false;
-    h.scale = int(get(hdr + 6, 2));
-    h.width = int(get(hdr + 8, 2));
-    h.height = int(get(hdr + 10, 2));
-    h.frames = get(hdr + 12, 4);
-    h.sourceCrc = get(hdr + 16, 4);
-    return h.scale >= 1 && h.scale <= kMaxScale;
+    return parseHeader(hdr, h);
 }
 
 bool Pack::open(const std::string& path, uint32_t sourceCrc) {
@@ -149,16 +157,11 @@ bool Pack::open(const std::string& path, uint32_t sourceCrc) {
         err_ = "not an HD pack";
         return false;
     }
-    if (get(hdr + 4, 2) != kPackVersion) { err_ = "unsupported pack version"; return false; }
-    h_.scale = int(get(hdr + 6, 2));
-    h_.width = int(get(hdr + 8, 2));
-    h_.height = int(get(hdr + 10, 2));
-    h_.frames = get(hdr + 12, 4);
-    h_.sourceCrc = get(hdr + 16, 4);
-    if (h_.scale < 1 || h_.scale > kMaxScale || h_.width <= 0 || h_.height <= 0 || h_.frames > 1000000) {
-        err_ = "damaged pack header";
+    if (get(hdr + 4, 2) != kPackVersion) {
+        err_ = "made by an older megarace-hd; run megarace-hd again";
         return false;
     }
+    if (!parseHeader(hdr, h_)) { err_ = "damaged pack header"; return false; }
     if (h_.sourceCrc != sourceCrc) {
         err_ = "made from a different version of this video";
         return false;

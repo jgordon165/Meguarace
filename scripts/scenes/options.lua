@@ -8,6 +8,8 @@
 
 local scenes = require("core.scenes")
 local save   = require("game.save")
+local font   = require("ui.font")
+local display = require("game.display")
 local S = { overlay = true }
 
 local PANEL = { x = 52, y = 22 }        -- OPTIONS panel (86x123)
@@ -23,6 +25,9 @@ local ITEMS = {
     { img = 16, x = PANEL.x + 8, y = PANEL.y + 104, act = "quit" },     -- QUIT
     { img = 2,  x = LEVEL.x + 10, y = LEVEL.y + 24, act = "novice" },   -- NOVICE
     { img = 4,  x = LEVEL.x + 10, y = LEVEL.y + 40, act = "hardened" }, -- HARDENED
+    -- The port's own: display mode, in the game's FONTOPT font under the
+    -- panels (the original has no such setting, so no panel art for it).
+    { text = true, x = PANEL.x + 8, y = 156, act = "display" },
 }
 
 function S:enter(state)
@@ -31,6 +36,7 @@ function S:enter(state)
     self.set:apply_palette()
     self.sel = 1
     self.note = nil
+    self.font = font.open("FONTOPT", 8)
 end
 
 function S:act(a)
@@ -43,6 +49,12 @@ function S:act(a)
         for k, v in pairs(loaded) do st[k] = v end
         self.note = "LOADED"
     elseif a == "input_na" then self.note = "KEYBOARD ONLY FOR NOW"
+    elseif a == "display" or a == "display_back" then
+        if not sys.hd then self.note = "HD VIDEOS: RUN MEGARACE-HD"; return end
+        local name = display.cycle(a == "display" and 1 or -1)
+        st.display = name
+        save.store(st)
+        self.note = nil
     elseif a == "quit" then
         scenes.pop()
         require("scenes.menu"):farewell()     -- Lance's farewell and the credits (0x5113)
@@ -54,6 +66,10 @@ function S:update()
     if input.pressed("Up") then self.sel = (self.sel - 2) % #ITEMS + 1 end
     if input.pressed("Down") then self.sel = self.sel % #ITEMS + 1 end
     if input.pressed("Return") or input.pressed("Space") then self:act(ITEMS[self.sel].act) end
+    if ITEMS[self.sel].act == "display" then
+        if input.pressed("Right") then self:act("display") end
+        if input.pressed("Left") then self:act("display_back") end
+    end
 end
 
 function S:draw()
@@ -61,11 +77,19 @@ function S:draw()
     s:draw(0, PANEL.x, PANEL.y)
     s:draw(1, LEVEL.x, LEVEL.y)
     for i, it in ipairs(ITEMS) do
+        if it.text then
+            local label = "DISPLAY " .. display.label(gfx.display())
+            gfx.fill(it.x - 6, it.y - 2, #label * 8 + 10, 13, 0)
+            if self.font then self.font:draw(it.x, it.y, label)
+            else gfx.text(it.x, it.y + 2, label, 120) end
+            goto continue
+        end
         local on = i == self.sel
             or (it.act == "novice" and self.state.level == "NOVICE")
             or (it.act == "hardened" and self.state.level == "HARDENED")
             or it.act == "input"
         s:draw(it.img + (on and 1 or 0), it.x, it.y)
+        ::continue::
     end
     -- Cursor beside the selected item.
     local it = ITEMS[self.sel]
