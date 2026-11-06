@@ -119,7 +119,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | HSQ decompression | Done (all 91 files) |
 | HNM video + soundtrack | Done (all 109 videos, 65,234 frames) |
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
-| Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
+| Car sprites, dashboards, palettes, rival cars, spinning wheels | Done (from RACEPRG.EXE) |
+| Collisions with the rival, walls (scraping, crashes), every armour loss | Done (from RACEPRG.EXE) |
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
 | Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |

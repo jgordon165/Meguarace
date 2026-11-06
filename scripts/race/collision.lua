@@ -14,6 +14,14 @@
 --           off by 1 a tick; THRILL 50. It skids.
 -- A skid (0x3C72) is a short sway script with a 2-pixel-a-tick slide away
 -- from the other car: yours DS:0x896 (or 0x888), the rival's 0x8A6/0x89E.
+--
+-- The walls (0x23B2, 0x21F8, 0x301B). Your car is held between the road's
+-- edges; pinned at one, you're scraping it ([0x68FF]): the scrape sound
+-- loops and FUMEE smoke (frames 6-10) puffs on that side, each cycle of it
+-- costing 1 armour. Touch a wall at speed over 100 after more than 6 ticks
+-- of steering ([0x6939]) and you crash into it: CHOCRR2, the 0x888 sway
+-- with a slide of 9 pixels a tick away from the wall, easing off by 1 every
+-- other section (0x2271), and 8 armour when it ends (0x2136).
 
 local K = {}
 
@@ -25,6 +33,10 @@ K.SKID = {
 }
 K.PUSH = 7
 K.SKID_ARMOUR = 8
+K.WALL_SLIDE = 9
+K.WALL_SPEED = 100
+K.WALL_STEER_TICKS = 6
+K.SMOKE_FIRST, K.SMOKE_END = 6, 11       -- FUMEE frames 6..10, then round again
 
 -- rel: the rival's distance in eighths (race/rival.lua `pos`); moved: did it
 -- move this tick; rival / player: screen spans { left, right }.
@@ -83,6 +95,35 @@ end
 
 function K.clear(s) s.contact = nil end
 
+-- One tick at a wall. wall: "left", "right" or nil; steer_ticks: ticks of
+-- steering in a row. Returns "crash" when you hit it.
+function K.wall(s, wall, steer_ticks)
+    s.scraping = wall
+    if not wall then return nil end
+    if s.skid or s.wall_latched then return nil end         -- one crash per push (0x6939 = 1000)
+    if steer_ticks > K.WALL_STEER_TICKS and s.speed > K.WALL_SPEED then
+        s.wall_latched = true
+        s.skid = { steps = K.SKID.player[1], i = 0, armour = true,
+                   dx = wall == "left" and K.WALL_SLIDE or -K.WALL_SLIDE, ease = true }
+        return "crash"
+    end
+    return nil
+end
+
+-- Steering released: the next push into a wall can crash again.
+function K.release(s) s.wall_latched = false end
+
+-- One frame of scraping smoke; returns the FUMEE frame to draw. A finished
+-- cycle costs 1 armour (0x3086..0x3098).
+function K.smoke(s)
+    s.smoke = (s.smoke or K.SMOKE_FIRST) + 1
+    if s.smoke >= K.SMOKE_END then
+        s.smoke = K.SMOKE_FIRST
+        s.armour = math.max(0, s.armour - 1)
+    end
+    return s.smoke
+end
+
 -- One tick of pushes and skids. Returns your x change and sway, and the
 -- rival's x change (pixels).
 function K.tick(s, r)
@@ -98,6 +139,9 @@ function K.tick(s, r)
             if k.armour then s.armour = math.max(0, s.armour - K.SKID_ARMOUR) end   -- 0x2136
         else
             sway, dx = k.steps[k.i], dx + k.dx
+            -- A wall bounce eases off by 1 every other tick (the game: every
+            -- other section, 0x2271).
+            if k.ease and k.i % 2 == 0 and k.dx ~= 0 then k.dx = k.dx > 0 and k.dx - 1 or k.dx + 1 end
         end
     end
     local q = r and r.skid

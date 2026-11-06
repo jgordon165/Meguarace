@@ -451,6 +451,28 @@ test("collisions: kinds and responses", function()
     check(h.armour == 0 and hr.damage == 100, "HOLD: ramming finishes both")
 end)
 
+test("walls: scraping smoke, crashes, the bounce and its armour", function()
+    local K, rules = require("race.collision"), require("race.rules")
+    local s = rules.new("RA")                         -- armour 70
+    s.speed = 150
+    check(K.wall(s, "left", 3) == nil and s.scraping == "left", "a brief touch: scraping, no crash")
+    for _ = 1, 5 do K.smoke(s) end
+    check(s.armour == 69, "a full smoke cycle costs 1 armour")
+    check(K.wall(s, "left", 7) == "crash" and s.skid and s.skid.dx == 9, "7 ticks of steering at 150: crash, sliding right")
+    check(K.wall(s, "left", 20) == nil, "one crash per push")
+    local first = s.skid.dx
+    local _, sway = K.tick(s, nil); K.tick(s, nil)
+    check(sway == K.SKID.player[1][1] and s.skid.dx == first - 1, "the 0x888 sway; the slide eases")
+    for _ = 1, 20 do K.tick(s, nil) end
+    check(s.skid == nil and s.armour == 69 - 8, "the bounce ends: 8 armour")
+    K.release(s); s.speed = 90
+    check(K.wall(s, "right", 30) == nil, "slow: no crash")
+    s.speed = 150
+    check(K.wall(s, "right", 30) == "crash" and s.skid.dx == -9, "right wall: slide left")
+    K.wall(s, nil, 0)
+    check(s.scraping == nil, "off the wall")
+end)
+
 test("voc: decodes a type-1 block", function()
     local voc = require("formats.voc")
     local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)

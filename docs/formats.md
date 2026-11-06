@@ -299,7 +299,7 @@ Codes in game order: `JO` Jose, `RA` Ramon, `OU` Ouzbel, `PA` Paloma, `LU` Luis,
 | File | Contents |
 |---|---|
 | `<XX>_A` | 17 body images, from straight behind (0) round to head-on (16), plus the palette |
-| `<XX>_B`, `<XX>_C` | wheel frames drawn over the body, alternated to spin the wheels. Bottom-left aligned on images 0–10; offsets for 11–16 are not decoded yet |
+| `<XX>_B`, `<XX>_C` | wheel frames drawn over the body to spin the wheels: the same image number, centred on the body's x and level with its bottom, on every view (0x2594). Only while moving; the phase `[0xCDA]` steps 2, 1, 0 every 36 − 2 × (speed / 10) ticks, 0 drawing the body alone (0x25F8) |
 | `_JOS _RAM _OUZ _PAL _LUI _OME _HOO _MAR` | rival version: 11 rear views (0–10) in colours 192–255, plus 9 data tables |
 | `T<XX>_2` | dashboard: two 160×47/48 halves, drawn at y = 152 |
 | `T<XX>` | dashboard gauge pieces |
@@ -492,8 +492,37 @@ and still lined up; at the end of the impact you lose 20 armour (0x4801).
 At 0 armour (0x1940) `EXPLOD2` plays, `EXPLOSE` plays over your car (gone
 after frame 15) and the race is lost (`[0x68CB]` = −2).
 
-Other armour losses, not in the port yet: −8 at the end of some slides
-(0x2136, `[0x6933]`) and −1 per smoke cycle while `[0x68FF]` is set (0x3098).
+Other armour losses: −8 when a skid ends with `[0x6933]` set (0x2136: after a
+collision skid or a wall crash), −1 per smoke cycle while scraping a wall
+(0x3098). See Collisions and walls.
+
+### Collisions and walls
+
+**The rival** (0x3A8F…0x3CF9, `scripts/race/collision.lua`): it's in reach
+0–7 eighths ahead or 1–4 behind with the two cars' screen spans
+overlapping. If it moved this tick it's a rear-end collision and it goes
+back to where it was; otherwise it's alongside.
+
+| `[0x694F]` | Contact | Effect |
+|---|---|---|
+| 4 | you ran into it | your speed −20 and braking down to 130, its speed +40, a boost ends; THRILL 10; it skids. On HOLD both cars are finished |
+| 8 | it ran into you | your speed +30, its −20; THRILL 30; you skid |
+| 1 / other | alongside, left / right | 7-pixel pushes apart easing by 1 a tick; THRILL 50; it skids |
+
+A skid (0x3C72) is a sway script with a 2-pixel-a-tick slide away from the
+other car (yours DS:0x896 or 0x888, the rival's 0x8A6/0x89E); CHOC4 plays.
+
+**The walls.** Your car's x `[0xCB6]` stays within the track's limits:
+DS:0x31A[round × 4] on the left (0 on every track except JNK: 60) and 320
+minus it on the right (0x0311, `[0xCD2]`/`[0xCD6]`), not the road's edges.
+Held at one, you're scraping (0x23B8: `[0x68FF]`, `[0x6933]`): sound 6
+(CRRR3) loops and FUMEE frames 6–10 puff 20 pixels out on that side
+(0x302A), each cycle costing 1 armour. If you've steered for more than 6
+ticks in a row (`[0x6939]`) and your speed is over 100, you crash (0x2212):
+CHOCRR2, the 0x888 sway with a slide of 9 pixels a tick away from the wall
+that eases by 1 every other section (0x2271), and −8 armour when it ends
+(0x2136). One crash per push: the counter is set to 1000 until you let go
+of the steering.
 
 This port runs shot and explosion frames at 12.5 per second, applies a hit's
 damage at once, uses 12 sections as the range, draws the damage bar over the
@@ -610,9 +639,8 @@ points `[0x690D]` add to the score `[0x6A02]` (none for a wreck on HOLD).
 You go on to the next track after −3, or after −1 with at most one opponent
 left and 1200 points or more. Energy starts at 400 (0x0561).
 
-The port runs the AI exactly as above. Its own choices: the steering rate
-(0.012 road widths a tick), the bump collision, and that rivals within
-one section of you aren't drawn (the camera is one section behind your car).
+The port runs the AI exactly as above. Its own choice: the steering rate
+(0.012 road widths a tick).
 
 ## Career
 
@@ -788,10 +816,10 @@ header as described above.
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
-- Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
+- The rival's steering physics (0x4210; the port moves it at a fixed rate).
+- In the port a wall bounce eases every other tick, not every other section.
 - The demo driver's steering input `[0x6808]` (the port steers to the rival or the middle).
 - The original options-menu layout and championship scoring.
-- Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).

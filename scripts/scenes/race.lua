@@ -62,6 +62,7 @@ function S:enter(name, opts)
     self.next_decision = 0
     self.total = opts.total or 0              -- championship score before this race
     self.debug = false
+    self.x_limit = name:match("^JNK") and 60 or 0
     self.demo = opts.demo                     -- attract mode: the game drives (RACEPRG [0x69E6])
     self.demo_fire_at = 0
     self.on_done = opts.on_done
@@ -107,16 +108,29 @@ function S:update(dt)
     if self.demo then left, right = self:autopilot_steer() end
     if alive and left then self.carx = self.carx - STEER * dt; self.steer = 1 end
     if alive and right then self.carx = self.carx + STEER * dt; self.steer = -1 end
+    if not (alive and (left or right)) then collide.release(s) end
 
     -- Game ticks.
     self.ticks = self.ticks + dt * rules.TICKS_PER_SECOND
     while self.ticks >= 1 do
         self.ticks = self.ticks - 1
+        -- Wheels (0x25F8): every 36 - 2 x (speed / 10) ticks the phase [0xCDA]
+        -- steps 2, 1, 0, 2, ...: phase 0 is the body alone, 1 and 2 add
+        -- the _B and _C wheel images.
+        self.spin_t = self.spin_t + 1
+        if self.spin_t >= 36 - 2 * (s.speed // 10) then
+            self.spin_t = 0
+            self.spin = self.spin - 1
+            if self.spin < 0 then self.spin = 2 end
+        end
         local accel, brake = input.down("Up"), input.down("Down")
         if self.demo then accel, brake = s.slide == nil, false end   -- full throttle unless spinning (0x2D0F)
         local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
         if self.demo then self:autopilot_fire() end
         self.carx = self.carx + drift
+        -- Walls: steering ticks in a row ([0x6939]), then scrape or crash.
+        self.steer_ticks = self.steer ~= 0 and (self.steer_ticks or 0) + 1 or 0
+        if alive and collide.wall(s, self.at_wall, self.steer_ticks) == "crash" then voc.play("CHOCRR2") end
         self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
@@ -124,8 +138,18 @@ function S:update(dt)
         if self.view < target then self.view = math.min(target, self.view + stepv)
         elseif self.view > target then self.view = math.max(target, self.view - stepv) end
     end
-    -- Stay on the road: between the inner edges where the car is (set in draw).
-    if self.road_l then self.carx = math.max(self.road_l, math.min(self.road_r, self.carx)) end
+    -- The car's x stays within the track's limits (RACEPRG 0x0311: DS:0x31A
+    -- per round, 0 except 60 on JNK; the right one is 320 minus it, [0xCD2]
+    -- and [0xCD6]). Pinned at one, you're at the wall (0x23B8).
+    self.at_wall = nil
+    local lim = self.x_limit
+    if self.carx <= lim then self.carx, self.at_wall = lim, "left"
+    elseif self.carx >= 320 - lim then self.carx, self.at_wall = 320 - lim, "right" end
+    if self.at_wall and s.speed > 0 and alive then
+        if not self.scrape_sound then voc.play("CRRR3"); self.scrape_sound = true end
+    else
+        self.scrape_sound = false
+    end
 
     -- Scenery: fixed rate while moving.
     local moving = s.speed > 0
@@ -162,8 +186,6 @@ function S:update(dt)
     local r = self.current
     if r then r.ahead = PLAYER_AHEAD + r.pos / 8 end
 
-    self.spin_t = self.spin_t + dt * (s.speed / 60)
-    if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
 end
 
 -- Attract mode's driver. Firing is the game's (0x2C02): with the rival 10-20
@@ -268,6 +290,13 @@ end
 -- explosions advance (RACEPRG 0x2E14, 0x2F93, 0x4688).
 function S:effects_frame()
     local s = self.rules
+    -- Scraping a wall: smoke on that side, 1 armour a cycle (0x301B).
+    if s.scraping and s.speed > 0 and not s.destroyed then
+        self.smoke_frame = collide.smoke(s)
+        if self.smoke_frame == collide.SMOKE_FIRST then voc.play("CRRR3") end
+    else
+        self.smoke_frame = nil
+    end
     if s.shot then
         local result = rules.shot_step(s)
         if result == "kill" and s.shot_target then
@@ -553,18 +582,18 @@ function S:draw()
     end
 
     if plx then
-        local margin = math.min(30, (prx - plx) / 4)          -- keep the body on the road
-        self.road_l, self.road_r = plx + margin, prx - margin
         self.road_w = prx - plx
-        self.carx = math.max(self.road_l, math.min(self.road_r, self.carx))
         local y = ply + (pry - ply) * (self.carx - plx) / math.max(1, prx - plx)
         local left, top, w, h
         if not self.wreck_frame or self.wreck_frame < 15 then
             left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer + (self.sway or 0)), self.carx, y, 1.0,
-                                            s.speed > 0 and self.spin or nil)
+                                            (s.speed > 0 and self.spin > 0) and (self.spin - 1) or nil)
         end
         if left then self.carbox = { left, top, w, h } end
         self.cary, self.cartop = y, top or (y - 30)
+        if self.smoke_frame and self.fx and s.scraping then           -- 20 px out on the wall's side
+            self:draw_fx(self.fx, self.smoke_frame, self.carx + (s.scraping == "left" and -20 or 20), self.cartop)
+        end
         self:draw_shot()
         self:draw_rival_shot()
         if self.wreck_frame and self.boom and self.carbox then
