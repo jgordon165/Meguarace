@@ -88,6 +88,14 @@ the videos' sound are in the video files, and the in-game music is FM songs
 
 Headless test run: `--frames 60 --screenshot out.bmp`.
 
+## HD mode (`release/hd` branch)
+
+Upscaled videos, made on your machine from your own CD by the bundled
+`megarace-hd` tool. No HD video is ever committed or shipped, because an
+upscaled video is still the game's content. Run `megarace-hd --data V:\`
+once, then play as usual (F10 switches HD on and off). Details, options and
+how it works: [docs/hd.md](docs/hd.md).
+
 ## Tests and CI
 
 ```
@@ -110,6 +118,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | `code-analysis` | push/PR to `master`, or manually | CodeQL security-and-quality on our C++ |
 | `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx` |
 | `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
+| `release-hd-*`, `release-hd-all` | manual | the HD builds, `meguarace-hd-<platform>-<version>`: the same plus `megarace-hd` and Real-ESRGAN; never HD videos ([docs/hd.md](docs/hd.md)) |
 
 ## Status
 
@@ -139,6 +148,7 @@ Format notes: [docs/formats.md](docs/formats.md).
 ```
 src/            C++ host: window, framebuffer, audio mixer, FM music (fm.cpp), input, Lua API
 src/formats/    C++ decoders: MEGARACE.DAT, HSQ, HNM video, HERAD music
+src/hd/         HD mode: .hdv packs, compositing, the megarace-hd converter
 scripts/        Lua game code
   main.lua        entry point (game.init/update/draw)
   core/           scene stack, binary reader, UI helpers, asset manifest
@@ -164,7 +174,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played()`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
-| `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
+| `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound() :hd()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
 | `input` | `down(key) pressed(key) released(key) any()`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
-| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted` |
+| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted hd_scale hd_path` |
 

@@ -15,6 +15,7 @@ jobs:
       with:
         platform: x64
         configurations: Release
+        configure_options: -DMEGARACE_HD=OFF   # HD builds: release-hd-windows
 
     - name: Run Tests
       uses: ./.github/actions/run-tests
@@ -50,6 +51,7 @@ jobs:
       with:
         platform: x86
         configurations: Release
+        configure_options: -DMEGARACE_HD=OFF   # HD builds: release-hd-windows
 
     - name: Run Tests
       uses: ./.github/actions/run-tests

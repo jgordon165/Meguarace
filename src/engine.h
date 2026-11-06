@@ -21,4 +21,7 @@ struct Engine {
     int   exitCode = 0;
     std::string dataArg;
     std::string musicArg;
+    // HD mode (MEGARACE_HD builds): folder of .hdv packs made by megarace-hd
+    // from the player's own videos; empty when HD is off or there are none.
+    std::string hdDir;
 };

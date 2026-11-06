@@ -1,5 +1,7 @@
 #include "video.h"
 
+#include "hd/compose.h"
+
 #include <cctype>
 #include <cstdlib>
 #include <algorithm>
@@ -40,6 +42,7 @@ static const char* glyphFor(char c) {
 bool Video::init(int width, int height, int scale, bool hidden) {
     w_ = width; h_ = height;
     fb_.assign(static_cast<size_t>(w_) * h_, 0);
+    src_.assign(fb_.size(), 0);
     rgba_.assign(fb_.size(), 0);
     for (int i = 0; i < 256; ++i) setColor(i, i, i, i);   // grey ramp until a palette loads
 
@@ -58,16 +61,25 @@ bool Video::init(int width, int height, int scale, bool hidden) {
 }
 
 void Video::shutdown() {
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = nullptr;
     if (texture_)  SDL_DestroyTexture(texture_);
     if (renderer_) SDL_DestroyRenderer(renderer_);
     if (window_)   SDL_DestroyWindow(window_);
     texture_ = nullptr; renderer_ = nullptr; window_ = nullptr;
 }
 
-void Video::clear(uint8_t idx) { std::memset(fb_.data(), idx, fb_.size()); }
+void Video::clear(uint8_t idx) {
+    std::memset(fb_.data(), idx, fb_.size());
+    std::memset(src_.data(), 0, src_.size());
+}
 
 void Video::pset(int x, int y, uint8_t idx) {
-    if (x >= 0 && y >= 0 && x < w_ && y < h_) fb_[static_cast<size_t>(y) * w_ + x] = idx;
+    if (x >= 0 && y >= 0 && x < w_ && y < h_) {
+        size_t i = static_cast<size_t>(y) * w_ + x;
+        fb_[i] = idx;
+        src_[i] = 0;
+    }
 }
 
 uint8_t Video::pget(int x, int y) const {
@@ -181,9 +193,62 @@ void Video::sprite(const uint8_t* px, int w, int h, int x, int y, double scale, 
             int sx = dx * w / dw;
             if (flip) sx = w - 1 - sx;
             uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
-            if (c && visible(X, Y)) fb_[size_t(Y) * w_ + X] = c;
+            if (c && visible(X, Y)) {
+                fb_[size_t(Y) * w_ + X] = c;
+                src_[size_t(Y) * w_ + X] = 0;
+            }
         }
     }
+}
+
+bool Video::enableHd(int k) {
+    if (k < 2 || k > 8 || !renderer_) return false;
+    if (hdK_ == k) return true;
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+                                   w_ * k, h_ * k);
+    if (!hdTexture_) { std::fprintf(stderr, "HD texture: %s\n", SDL_GetError()); hdK_ = 0; return false; }
+    // The HD screen is shown smaller or larger than its size depending on the
+    // window; filter it rather than dropping pixels.
+    SDL_SetTextureScaleMode(hdTexture_, SDL_ScaleModeLinear);
+    hdK_ = k;
+    hd_.assign(size_t(w_) * k * size_t(h_) * k, 0xFF000000u);
+    hdOut_.assign(hd_.size(), 0xFF000000u);
+    return true;
+}
+
+void Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
+                   int transparent, const uint32_t* hd, int hdW, int hdH) {
+    const int k = hdK_;
+    const size_t W = size_t(w_) * size_t(k);
+    for (int yy = 0; yy < h; ++yy) {
+        for (int xx = 0; xx < w; ++xx) {
+            size_t i = static_cast<size_t>(yy) * w + xx;
+            if (i >= len) return;
+            if (src[i] == transparent) continue;
+            int X = ox + fx + xx, Y = oy + fy + yy;            // on screen
+            if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
+            int cx = (fx + xx) * k, cy = (fy + yy) * k;        // in the HD picture
+            size_t p = size_t(Y) * w_ + X;
+            fb_[p] = src[i];
+            if (cx < 0 || cy < 0 || cx + k > hdW || cy + k > hdH) { src_[p] = 0; continue; }
+            src_[p] = 1;
+            for (int r = 0; r < k; ++r)
+                std::memcpy(&hd_[(size_t(Y) * k + r) * W + size_t(X) * k],
+                            &hd[(size_t(cy) + r) * size_t(hdW) + size_t(cx)], size_t(k) * 4);
+        }
+    }
+}
+
+bool Video::paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const {
+    bool used[256] = {};
+    for (size_t i = 0; i < n; ++i) used[px[i]] = true;
+    for (int c = 0; c < 256; ++c) {
+        if (!used[c] || c == transparent) continue;
+        uint32_t want = 0xFF000000u | uint32_t(rgb[c * 3]) << 16 | uint32_t(rgb[c * 3 + 1]) << 8 | rgb[c * 3 + 2];
+        if (pal_[size_t(c)] != want) return false;
+    }
+    return true;
 }
 
 void Video::convert() {
@@ -191,18 +256,34 @@ void Video::convert() {
 }
 
 void Video::present() {
-    convert();
-    SDL_UpdateTexture(texture_, nullptr, rgba_.data(), w_ * 4);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
-    SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+    // HD only when something on screen came from an HD video; menus and
+    // screens without one go through the plain path.
+    if (hdOn() && std::find(src_.begin(), src_.end(), uint8_t(1)) != src_.end()) {
+        hd::compose(fb_.data(), src_.data(), pal_.data(), hd_.data(), w_, h_, hdK_, hdOut_.data());
+        SDL_UpdateTexture(hdTexture_, nullptr, hdOut_.data(), w_ * hdK_ * 4);
+        SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
+    } else {
+        convert();
+        SDL_UpdateTexture(texture_, nullptr, rgba_.data(), w_ * 4);
+        SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+    }
     SDL_RenderPresent(renderer_);
 }
 
-bool Video::saveBmp(const std::string& path) {
-    convert();
-    SDL_Surface* s = SDL_CreateRGBSurfaceWithFormatFrom(rgba_.data(), w_, h_, 32, w_ * 4,
-                                                        SDL_PIXELFORMAT_ARGB8888);
+bool Video::saveBmp(const std::string& path, bool asShown) {
+    uint32_t* px = rgba_.data();
+    int w = w_, h = h_;
+    if (asShown && hdOn() && std::find(src_.begin(), src_.end(), uint8_t(1)) != src_.end()) {
+        hd::compose(fb_.data(), src_.data(), pal_.data(), hd_.data(), w_, h_, hdK_, hdOut_.data());
+        px = hdOut_.data();
+        w = w_ * hdK_;
+        h = h_ * hdK_;
+    } else {
+        convert();
+    }
+    SDL_Surface* s = SDL_CreateRGBSurfaceWithFormatFrom(px, w, h, 32, w * 4, SDL_PIXELFORMAT_ARGB8888);
     if (!s) return false;
     bool ok = SDL_SaveBMP(s, path.c_str()) == 0;
     SDL_FreeSurface(s);

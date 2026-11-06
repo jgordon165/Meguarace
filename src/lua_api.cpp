@@ -1,5 +1,8 @@
 #include "lua_api.h"
 #include "engine.h"
+#ifdef MEGARACE_HD
+#include "hd/hdpack.h"
+#endif
 
 extern "C" {
 #include "lauxlib.h"
@@ -7,7 +10,10 @@ extern "C" {
 #include "lualib.h"
 }
 
+#include <cctype>
 #include <cstdio>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -299,7 +305,15 @@ static int dat_read_range(lua_State* L) {
 // v:frames() v:sound_rate() v:decode(i) -> info  v:draw([ox, oy]) v:apply_palette()
 // v:pixels() v:sound()
 
-struct HnmUd { HnmVideo video; HnmVideo::Frame frame; Engine* eng; };
+struct HnmUd {
+    HnmVideo video;
+    HnmVideo::Frame frame;
+    Engine* eng;
+    int index = -1;                 // last decoded frame
+#ifdef MEGARACE_HD
+    std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
+#endif
+};
 static const char* kHnmMeta = "megarace.hnm";
 
 static HnmUd* checkHnm(lua_State* L) { return static_cast<HnmUd*>(luaL_checkudata(L, 1, kHnmMeta)); }
@@ -315,6 +329,7 @@ static int hnm_decode(lua_State* L) {
     try { ok = h->video.decode(i, h->frame); }
     catch (const std::exception& ex) { return luaL_error(L, "hnm frame %d: %s", i, ex.what()); }
     if (!ok) { lua_pushnil(L); return 1; }
+    h->index = i;
     const auto& f = h->frame;
     lua_createtable(L, 0, 10);
     lua_pushboolean(L, f.hasVideo);       lua_setfield(L, -2, "video");
@@ -339,9 +354,32 @@ static int hnm_draw(lua_State* L) {
     const auto& f = h->frame;
     if (!f.hasVideo) return 0;
     int ox = int(luaL_optinteger(L, 2, 0)), oy = int(luaL_optinteger(L, 3, 0));
-    h->eng->video.blit(ox + f.x, oy + f.y, f.w, f.h, f.pixels.data(), f.pixels.size(),
-                       f.overlay ? 0 : -1);
+    const int key = f.overlay ? 0 : -1;
+    Video& v = h->eng->video;
+#ifdef MEGARACE_HD
+    // HD picture when there is one for this frame and the screen is showing
+    // the video's own colours (not mid-fade, not recoloured by the game).
+    if (h->pack && v.hdOn() &&
+        v.paletteMatches(h->video.palette().data(), f.pixels.data(), f.pixels.size(), key)) {
+        if (const auto* pic = h->pack->frame(h->index)) {
+            v.blitHd(ox, oy, f.x, f.y, f.w, f.h, f.pixels.data(), f.pixels.size(), key,
+                     pic->data(), h->pack->hdWidth(), h->pack->hdHeight());
+            return 0;
+        }
+    }
+#endif
+    v.blit(ox + f.x, oy + f.y, f.w, f.h, f.pixels.data(), f.pixels.size(), key);
     return 0;
+}
+
+// v:hd() -> true when this video plays from an HD pack
+static int hnm_hd(lua_State* L) {
+#ifdef MEGARACE_HD
+    lua_pushboolean(L, checkHnm(L)->pack != nullptr);
+#else
+    lua_pushboolean(L, false);
+#endif
+    return 1;
 }
 
 static int hnm_apply_palette(lua_State* L) {
@@ -375,7 +413,32 @@ static int hnm_open(lua_State* L) {
     new (h) HnmUd();
     h->eng = &e;
     luaL_setmetatable(L, kHnmMeta);
+#ifdef MEGARACE_HD
+    const uint32_t crc = hd::crc32(d->data(), d->size());
+#endif
     if (!h->video.load(std::move(*d))) { lua_pushnil(L); lua_pushstring(L, "bad HNM"); return 2; }
+#ifdef MEGARACE_HD
+    // <hd folder>/<NAME>.hdv, made from exactly these bytes, at the session's scale.
+    if (!e.hdDir.empty() && e.video.hdScale() > 0) {
+        std::string stem = std::filesystem::path(name).stem().string();
+        for (auto& c : stem) c = char(std::toupper(static_cast<unsigned char>(c)));
+        std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hdv");
+        std::error_code ec;
+        if (std::filesystem::exists(p, ec)) {
+            auto pack = std::make_unique<hd::Pack>();
+            const auto& ph = pack->header();
+            if (!pack->open(p.string(), crc))
+                std::fprintf(stderr, "HD pack %s ignored: %s\n", p.string().c_str(), pack->error().c_str());
+            else if (ph.scale != e.video.hdScale() || ph.width != e.video.width() || ph.height != e.video.height())
+                std::fprintf(stderr, "HD pack %s ignored: made at x%d, this session is x%d\n",
+                             p.string().c_str(), ph.scale, e.video.hdScale());
+            else if (int(ph.frames) != h->video.frameCount())
+                std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.string().c_str());
+            else
+                h->pack = std::move(pack);
+        }
+    }
+#endif
     return 1;
 }
 
@@ -524,7 +587,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
-        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {nullptr, nullptr}};
+        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
         {"any", input_any},
@@ -564,5 +627,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, e.dataArg.c_str());  lua_setfield(L, -2, "data_path");
     lua_pushstring(L, e.musicArg.c_str()); lua_setfield(L, -2, "music_path");
     lua_pushboolean(L, e.music.mounted()); lua_setfield(L, -2, "music_mounted");
+    // HD mode: the pack scale (0 = no HD) and folder.
+    lua_pushinteger(L, e.video.hdScale()); lua_setfield(L, -2, "hd_scale");
+    lua_pushstring(L, e.hdDir.c_str());    lua_setfield(L, -2, "hd_path");
     lua_pop(L, 1);
 }

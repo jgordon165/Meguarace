@@ -1,0 +1,49 @@
+name: bundle-realesrgan
+description: >
+  Put Real-ESRGAN ncnn-vulkan (MIT program, BSD-3 project models) into the
+  staged HD build as realesrgan/, for megarace-hd to find. Tools only: no
+  game content goes into any build.
+
+inputs:
+  platform:
+    description: windows, ubuntu or macos (the upstream archive names)
+    required: true
+  stage:
+    description: staged install folder
+    required: false
+    default: stage/Meguarace
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download and stage Real-ESRGAN
+      shell: bash
+      env:
+        # Pinned upstream release (xinntao/Real-ESRGAN v0.2.5.0).
+        RELEASE: https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0
+        BUILD: "20220424"
+      run: |
+        set -euo pipefail
+        name="realesrgan-ncnn-vulkan-$BUILD-${{inputs.platform}}.zip"
+        curl -fsSL -o "$RUNNER_TEMP/$name" "$RELEASE/$name"
+        rm -rf "$RUNNER_TEMP/esrgan" && mkdir -p "$RUNNER_TEMP/esrgan"
+        unzip -q "$RUNNER_TEMP/$name" -d "$RUNNER_TEMP/esrgan"
+        # The program may sit at the top of the archive or in a subfolder.
+        exe=$(find "$RUNNER_TEMP/esrgan" -type f \( -name realesrgan-ncnn-vulkan -o -name realesrgan-ncnn-vulkan.exe \) | head -n 1)
+        [ -n "$exe" ] || { echo "realesrgan-ncnn-vulkan not found in $name"; exit 1; }
+        src=$(dirname "$exe")
+        dest="${{inputs.stage}}/realesrgan"
+        mkdir -p "$dest"
+        cp "$exe" "$dest/"
+        chmod +x "$dest/$(basename "$exe")"
+        # Runtime libraries next to the program (Windows: vcomp140.dll and the like).
+        find "$src" -maxdepth 1 -type f \( -name '*.dll' -o -name '*.dylib' -o -name '*.so*' \) -exec cp {} "$dest/" \;
+        cp -R "$src/models" "$dest/models"
+        # Only the video model and its x2/x3/x4 variants are used.
+        find "$dest/models" -type f ! -name 'realesr-animevideov3*' -delete
+        cat > "$dest/LICENSES.txt" <<'TXT'
+        Real-ESRGAN ncnn-vulkan: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan (MIT)
+        Real-ESRGAN and the realesr-animevideov3 models: https://github.com/xinntao/Real-ESRGAN (BSD-3-Clause)
+        Downloaded unmodified from https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.2.5.0
+        TXT
+        ls -lR "$dest"

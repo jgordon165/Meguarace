@@ -46,8 +46,31 @@ public:
     void setClip(std::vector<std::vector<int>> rows, int yOffset);
     void clearClip() { clipOn_ = false; clip_.clear(); }
 
+    // ---- HD layer -------------------------------------------------------
+    // With an HD scale K, the screen is also kept at K times the resolution:
+    // every original pixel records whether its current colour came from an
+    // HD video (blitHd) or from anything else the game drew. present() shows
+    // the HD picture for the first kind and the indexed pixel, scaled up, for
+    // the second. The indexed framebuffer stays exactly as without HD, so
+    // pget(), masks, hit tests and screenshots are unchanged.
+    bool enableHd(int k);
+    int  hdScale() const { return hdK_; }
+    bool hdOn() const { return hdK_ > 0 && hdOn_; }
+    void setHdOn(bool on) { hdOn_ = on; }
+    // blit() of a video frame drawn with its top-left at (ox, oy) on screen,
+    // its pixels at (fx, fy) in the video. `hd` is the video's whole screen
+    // at the HD scale (hdW x hdH): each pixel this draws takes its K x K
+    // block from there.
+    void blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
+                int transparent, const uint32_t* hd, int hdW, int hdH);
+    // True when, for every colour index `px` uses (except `transparent`),
+    // the current palette is `rgb` (768 bytes, 8-bit). HD pictures carry the
+    // video's own colours, so they are only used while the screen shows them.
+    bool paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const;
+
     void present();
-    bool saveBmp(const std::string& path);
+    // asShown: the HD screen when HD is showing (else the 320x200 indexed one).
+    bool saveBmp(const std::string& path, bool asShown = false);
 
 private:
     SDL_Window*   window_   = nullptr;
@@ -62,4 +85,11 @@ private:
     bool clipOn_ = false;
     bool visible(int x, int y) const;
     void convert();
+
+    int hdK_ = 0;
+    bool hdOn_ = true;
+    std::vector<uint8_t>  src_;      // per original pixel: 1 = from an HD video
+    std::vector<uint32_t> hd_;       // HD video pixels, (w*K) x (h*K)
+    std::vector<uint32_t> hdOut_;    // composed HD screen
+    SDL_Texture* hdTexture_ = nullptr;
 };

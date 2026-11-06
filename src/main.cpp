@@ -4,11 +4,14 @@
 // is compiled in or shipped.
 //
 // Usage: megarace --data <game folder> [--music <ripped tracks folder>]
-//                 [--scale N] [--scripts <dir>]
+//                 [--scale N] [--scripts <dir>] [--hd <packs folder> | --no-hd]
 //                 [--frames N --screenshot out.bmp]   (headless testing)
 
 #include "engine.h"
 #include "lua_api.h"
+#ifdef MEGARACE_HD
+#include "hd/hdpack.h"
+#endif
 
 extern "C" {
 #include "lauxlib.h"
@@ -24,6 +27,33 @@ extern "C" {
 #include <string>
 
 namespace fs = std::filesystem;
+
+#ifdef MEGARACE_HD
+// The HD packs folder and its scale: --hd, else the packs megarace-hd made
+// in the user folder. All packs in a folder share one scale (the first
+// pack found decides; packs at another scale are skipped when opened).
+static int findHd(std::string& dir) {
+    const bool asked = !dir.empty();
+    if (dir.empty()) {
+        char* p = SDL_GetPrefPath("Meguarace", "Meguarace");
+        if (p) dir = (fs::path(p) / "hd").string();
+        SDL_free(p);
+    }
+    std::error_code ec;
+    if (dir.empty() || !fs::is_directory(dir, ec)) {
+        if (asked) std::fprintf(stderr, "--hd: no such folder %s\n", dir.c_str());
+        dir.clear();
+        return 0;
+    }
+    for (const auto& f : fs::directory_iterator(dir, ec)) {
+        hd::PackHeader h;
+        if (f.path().extension() == ".hdv" && hd::Pack::peek(f.path().string(), h)) return h.scale;
+    }
+    if (asked) std::fprintf(stderr, "--hd: no HD packs in %s (make them with megarace-hd)\n", dir.c_str());
+    dir.clear();
+    return 0;
+}
+#endif
 
 static bool callLua(lua_State* L, const char* fn, double arg, bool withArg) {
     lua_getglobal(L, "game");
@@ -44,8 +74,9 @@ int main(int argc, char** argv) {
     Engine eng;
     std::string scripts;
     std::string shot;
-    int scale = 3;
+    int scale = 0;      // 0: default (3, or the HD scale if larger)
     long maxFrames = -1;
+    bool noHd = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -56,9 +87,15 @@ int main(int argc, char** argv) {
         else if (a == "--scale")      scale = std::max(1, std::atoi(next().c_str()));
         else if (a == "--frames")     maxFrames = std::atol(next().c_str());
         else if (a == "--screenshot") shot = next();
+        else if (a == "--hd")         eng.hdDir = next();
+        else if (a == "--no-hd")      noHd = true;
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
-                        "[--music <folder with track02.wav...>] [--scale N]\n");
+                        "[--music <folder with track02.wav...>] [--scale N]"
+#ifdef MEGARACE_HD
+                        " [--hd <HD packs folder> | --no-hd]"
+#endif
+                        "\n");
             return 0;
         }
     }
@@ -82,7 +119,21 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+    int hdScale = 0;
+#ifdef MEGARACE_HD
+    if (noHd) eng.hdDir.clear();
+    else hdScale = findHd(eng.hdDir);
+#else
+    (void)noHd;
+#endif
+    if (scale == 0) scale = std::max(3, hdScale);
     if (!eng.video.init(320, 200, scale, headless)) return 1;
+    if (hdScale) {
+        if (eng.video.enableHd(hdScale))
+            std::printf("HD mode: x%d videos from %s (F10 turns it off and on)\n", hdScale, eng.hdDir.c_str());
+        else
+            eng.hdDir.clear();
+    }
     eng.audio.init();   // non-fatal: the game runs silent without a device
 
     lua_State* L = luaL_newstate();
@@ -118,6 +169,11 @@ int main(int argc, char** argv) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) eng.quit = true;
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat &&
+                eng.video.hdScale()) {
+                eng.video.setHdOn(!eng.video.hdOn());
+                std::printf("HD %s\n", eng.video.hdOn() ? "on" : "off");
+            }
             eng.input.handle(ev);
         }
         Uint64 now = SDL_GetPerformanceCounter();
@@ -132,7 +188,7 @@ int main(int argc, char** argv) {
         if (headless && ++frame >= maxFrames) break;
     }
 
-    if (!shot.empty() && !eng.video.saveBmp(shot))
+    if (!shot.empty() && !eng.video.saveBmp(shot, true))
         std::fprintf(stderr, "screenshot failed: %s\n", SDL_GetError());
 
     callLua(L, "shutdown", 0, false);

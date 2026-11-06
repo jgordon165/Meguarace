@@ -1,0 +1,52 @@
+name: release-hd-windows
+
+# Meguarace HD for Windows x64 (see release-hd-linux.yml). x64 only: the
+# Real-ESRGAN program is 64-bit.
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release-x64:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Build
+      uses: ./.github/actions/build-windows
+      with:
+        platform: x64
+        configurations: Release
+        configure_options: -DMEGARACE_HD=ON
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    - name: Stage
+      run: cmake --install build --config Release --component game --prefix stage/Meguarace
+      shell: bash
+
+    - name: Bundle Real-ESRGAN
+      uses: ./.github/actions/bundle-realesrgan
+      with:
+        platform: windows
+
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-hd-windows-x64
+        staged: true
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-hd-windows-release-x64
+        if-no-files-found: error
+        path: dist/*.zip
+
+    - name: Upload debugging symbols
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-hd-windows-symbols-x64
+        path: build/Release/*.pdb

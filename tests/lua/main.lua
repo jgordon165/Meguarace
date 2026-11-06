@@ -573,6 +573,12 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("sys: HD mode fields", function()
+    -- ctest runs with --no-hd, so HD is off whatever packs the user has.
+    check(type(sys.hd_scale) == "number" and sys.hd_scale == 0, "hd_scale is 0 without packs")
+    check(type(sys.hd_path) == "string", "hd_path is a string")
+end)
+
 test("[data] subtitles: every language, cues match lines", function()
     if not data then skipped = skipped + 1; return "skip" end
     local subs = require("formats.subtitles")
