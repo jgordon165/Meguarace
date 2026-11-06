@@ -67,8 +67,9 @@ menus. To use a recording instead (say, from a real Sound Blaster), put
 Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`).
 
-In a race: Up accelerates, Down brakes, Left/Right steer, Space or Ctrl
-fires (F1 shows a debug line).
+In a race: Up accelerates, Down brakes, Left/Right steer, Space fires (F1
+shows a debug line). Options → Keyboard sets your own keys, on the
+original's key setup screen.
 The dashboard is each car's own: speed, energy and armour (SP/EN/DM)
 gauges, the THRILL meter, the weapon, the radar with the nearest rival and
 the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you
