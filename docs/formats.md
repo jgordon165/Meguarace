@@ -14,8 +14,9 @@ All values little-endian.
 | `RACE.LBM` | Installer artwork (IFF ILBM) |
 | `EACDEMO/` | Unrelated Electronic Arts demo; ignored |
 
-The disc has a single data track: no Red Book CD audio. Music and speech
-live in the video files' `sd` chunks.
+The disc has a single data track: no Red Book CD audio. Speech and the
+videos' sound live in the video files' `sd` chunks; the in-game music is six
+FM songs in `MEGARACE.DAT` (see Music).
 
 Launch switches seen in the readme (`RACEPRG AMR ADL SDB2225 JOY... HIM 386 WRIC:\MEGARACE\`)
 select sound, music and input drivers and the install path.
@@ -497,6 +498,69 @@ at 8 kHz.
 The icon is `code − 1` for codes 1–10 and `code − 7` for 17–25. The panel's
 position on each car's dashboard isn't read yet; the port draws it in the
 left box.
+
+## Music
+
+Six songs, HSQ-packed: `NEWSAN`, `MAEVA`, `DETRITUS`, `LENNY`, `ALARME` and
+`PAGA`. They are **HERAD** files, the FM music system Stéphane Picq used for
+Cryo (also in Dune), "SDB" version 2: one OPL2 chip, nine voices. The
+`DF*.HSQ` / `CR*.HSQ` files are the game's sound drivers (AdLib, Sound
+Blaster, Tandy, PC speaker, ...); the port doesn't need them. `DFMID.HSQ`
+and `NEWFAC1.LOP` are named in the EXE but aren't on this disc.
+
+**File layout** (after unpacking):
+
+| Offset | Meaning |
+|---|---|
+| 0x00 | u16 offset of the instrument table |
+| 0x02 | u16 × 21 track offsets (+2 = position in the file; 0 = no more tracks). The first is 0x32 (SDB, OPL2) or 0x52 (AGD, OPL3) |
+| 0x2C | u16 loop start measure |
+| 0x2E | u16 loop end measure |
+| 0x30 | u16 loop count (0 = forever) |
+| 0x32 | u16 speed |
+
+A track runs from its offset to the next one (the last to the instrument
+table). Instruments are 40 bytes each to the end of the file: mode (−1 =
+keymap), operator settings for modulator and carrier, then the macro bytes
+(velocity/aftertouch sensitivity of the output levels and feedback, pitch
+slide, transpose). A keymap picks an instrument per note from C2 up.
+
+**Tracks** are MIDI-like, one per voice: a variable-length delta time (7
+bits per byte, high bit = more) then an event. `8x` note off (version 2: one
+byte, the note), `9x` note on (note, velocity), `Cx` program, `Dx`
+aftertouch (ignored in version 2), `Ex` pitch bend (centre 0x40), `FF` end.
+Notes are MIDI numbers; the driver plays note − 24 with F-numbers 343, 364,
+385, 408, 433, 459, 486, 515, 546, 579, 614, 650 for C..B.
+
+**Timing.** The driver's timer runs at 200.299 Hz. Each interrupt subtracts
+256 from a counter and, when it goes negative, adds the song's speed and
+plays one sequencer tick, so a song runs at 200.299 × 256 / speed ticks per
+second (MegaRace: 833–1208, about 42–62 ticks/s). A measure is 96 ticks.
+Version-2 songs repeat forever: with a loop count set, the whole song; with
+none, the marked measures (an intro, then the loop).
+
+| Song | Title (TCRF) | Speed | Instruments | Loop |
+|---|---|---|---|---|
+| NEWSAN | NewSan | 992 | 48 | whole song |
+| MAEVA | Maeva | 833 | 42 | whole song |
+| DETRITUS | Factory Land | 958 | 48 | measures 13–104 |
+| LENNY | Fractalian Space | 867 | 52 | measures 13–105 |
+| ALARME | Terminal City | 967 | 46 | whole song |
+| PAGA | SkyHolder | 1208 | 47 | measures 5–85 |
+
+**Which song plays where** (RACEPRG.EXE): song *n* is resource 0x89 + *n*
+(0xC402), so 1 = NEWSAN … 6 = PAGA. A race starts DS:0x266[round] + 1
+(0x02AA): rounds 1–16 play 1, 2, 3, 4, 5, 1, 2, 4, 3, 5, 2, 3, 1, 4, 6, 6.
+After the post-race videos the game starts song 6 (0x5198) and later fades
+it with the driver's fade (0xC35E: 300 driver ticks, 1.5 s). Asking for the
+song already playing doesn't restart it (0xC33C). The port also plays song 6
+in the main menu (what the original plays there isn't traced).
+
+The port's player (src/formats/herad.cpp) was written from these notes and
+checked against AdPlug's HERAD player (Stas'M et al., the reference for the
+format): for all six songs, every chip register write matches at every
+timer tick. AdPlug leaves looping switched off; the port's loop follows the
+header as described above.
 
 ## Still to decode
 

@@ -12,6 +12,7 @@ local track  = require("formats.track")
 local cars   = require("formats.cars")
 local voc    = require("formats.voc")
 local rules  = require("race.rules")
+local music  = require("game.music")
 local S = {}
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
@@ -54,9 +55,10 @@ function S:enter(name, opts)
     self.finished = false
     self.spin, self.spin_t = 0, 0
     self.frame = -1
+    music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
-function S:leave() ui.install(); audio.stop_all() end
+function S:leave() ui.install(); audio.stop_all(); music.stop(true) end
 
 function S:place()
     local p = 1

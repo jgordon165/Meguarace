@@ -1,11 +1,14 @@
 #pragma once
-// Small software mixer: one streamed music source (CD audio tracks ripped
-// from the user's own disc) plus a handful of PCM voices for sound effects
-// decoded from the game's data files.
+// Small software mixer: the game's FM music (HERAD songs on an emulated
+// OPL2, src/fm.h), an optional recorded-music track (WAV), the video
+// soundtrack stream, and a handful of PCM voices for sound effects decoded
+// from the game's data files.
 
 #include <SDL.h>
+#include "fm.h"
 #include "resampler.h"
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -15,7 +18,15 @@ public:
     bool init();
     void shutdown();
 
-    // Music: 16-bit stereo samples already converted to the device format.
+    // FM music: an unpacked HERAD song from MEGARACE.DAT. Replaces any
+    // song already playing. stopAll() leaves it alone.
+    bool playSong(const uint8_t* data, size_t len, bool loop);
+    void stopSong();
+    void fadeSong(double seconds);   // fades out, then stops (the driver's fade)
+    bool songPlaying();
+    void setSongVolume(float v);
+
+    // Recorded music (optional --music folder): WAV, converted to the device format.
     bool playMusicWav(const std::string& hostPath, bool loop);
     void stopMusic();
     bool musicPlaying();
@@ -54,6 +65,9 @@ private:
     SDL_AudioSpec spec_{};
     std::mutex mtx_;
     Source music_;
+    std::unique_ptr<FmMusic> song_;
+    float songVol_ = 0.6f;
+    int songFade_ = 0, songFadeTotal_ = 0;   // frames left / length of a fade-out
     Source stream_;
     Resampler streamResampler_;     // persists across pushes (exact A/V timing)
     uint64_t streamPlayed_ = 0;

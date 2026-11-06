@@ -42,8 +42,17 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 - Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
   `RACEPRG.EXE`). Blue (or Esc) opens the **options**: Novice/Hardened, save,
   load, quit.
+- M turns the music on or off.
 - F12 opens the **asset explorer** (every file in the archive: play videos,
   race any track, D for the track debug viewer, V for raw pixels).
+
+**Music.** The disc has no CD audio: MegaRace's music is six FM-synthesizer
+songs inside `MEGARACE.DAT`, written for the AdLib / Sound Blaster chip. The
+port plays them on an emulated OPL2 chip ([ymfm](https://github.com/aaronsgiles/ymfm)),
+each race with the song the original gives that track, and SkyHolder in the
+menus. To use a recording instead (say, from a real Sound Blaster), put
+`NEWSAN.wav`, `MAEVA.wav`, `DETRITUS.wav`, `LENNY.wav`, `ALARME.wav` or
+`PAGA.wav` in a folder and pass it with `--music <folder>`.
 
 Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`).
@@ -61,8 +70,9 @@ car, R to change the rivals, and E/T/M/H to toggle the road edges, lane
 tiles, occlusion mask and info line. Esc or Enter skips a
 video. Set `MEGARACE_SKIP_INTRO=1` to skip the boot sequence.
 
-Tested against the US v1.0.1 CD. The disc has no CD audio tracks; music and
-speech are inside the videos.
+Tested against the US v1.0.1 CD. The disc has no CD audio tracks: speech and
+the videos' sound are in the video files, and the in-game music is FM songs
+(see above).
 
 Headless test run: `--frames 60 --screenshot out.bmp`.
 
@@ -98,7 +108,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | HNM video + soundtrack | Done (all 109 videos, 65,234 frames) |
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
 | Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
-| Menus, fonts, subtitles, VOC effects, explosions | To do |
+| FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
 | Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
 | Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE; rivals don't shoot back yet) |
@@ -109,15 +119,16 @@ Format notes: [docs/formats.md](docs/formats.md).
 ## Layout
 
 ```
-src/            C++ host: window, framebuffer, audio mixer, input, Lua API
-src/formats/    C++ decoders: MEGARACE.DAT, HSQ, HNM video
+src/            C++ host: window, framebuffer, audio mixer, FM music (fm.cpp), input, Lua API
+src/formats/    C++ decoders: MEGARACE.DAT, HSQ, HNM video, HERAD music
 scripts/        Lua game code
   main.lua        entry point (game.init/update/draw)
   core/           scene stack, binary reader, UI helpers, asset manifest
   formats/        track.lua (sections, projection, masks, lane tiles), cars.lua (car sprites,
                   dashboards, rivals), voc.lua (sound effects); sniff.lua identifies files
   race/           rules.lua: race rules from RACEPRG.EXE (pure Lua, unit-tested)
-  game/           data.lua (track names, default Hall of Fame from your EXE), save.lua
+  game/           data.lua (track names, default Hall of Fame from your EXE), save.lua,
+                  music.lua (which song plays where)
   ui/             font.lua (the game's sprite fonts)
   scenes/         menu, race, hall, options, video player, track viewer, explorer, hex view,
                   raw image view, no-data screen
@@ -132,7 +143,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
 | `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)` |
-| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played()`, optional `music(track)` for WAV tracks |
+| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played()`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |

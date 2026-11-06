@@ -41,6 +41,22 @@ elseif(APPLE)
     target_compile_definitions(lua_static PRIVATE LUA_USE_MACOSX)
 endif()
 
+# ---- ymfm (Yamaha FM chip emulators, BSD-3; we use its OPL2) ---------------
+# Pinned to a commit: the project has no release tags.
+# SOURCE_SUBDIR points at a folder with no CMakeLists.txt, so only the
+# sources are fetched (ymfm's own CMake would build every chip it has).
+FetchContent_Declare(ymfm
+    GIT_REPOSITORY https://github.com/aaronsgiles/ymfm.git
+    GIT_TAG        81aec25ccbb98f4873a255f7551ac4dadac59b4a
+    SOURCE_SUBDIR  sources-only)
+FetchContent_MakeAvailable(ymfm)
+add_library(ymfm_opl STATIC
+    ${ymfm_SOURCE_DIR}/src/ymfm_opl.cpp
+    ${ymfm_SOURCE_DIR}/src/ymfm_adpcm.cpp
+    ${ymfm_SOURCE_DIR}/src/ymfm_pcm.cpp)
+target_include_directories(ymfm_opl SYSTEM PUBLIC ${ymfm_SOURCE_DIR}/src)
+target_compile_options(ymfm_opl PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)   # third-party code
+
 # ---- Warnings ----------------------------------------------------------------
 function(megarace_warnings target)
     if(MSVC)
@@ -54,8 +70,11 @@ endfunction()
 add_library(megarace_formats STATIC
     src/vfs.cpp
     src/formats/binreader.cpp
-    src/formats/cryo.cpp)
+    src/formats/cryo.cpp
+    src/formats/herad.cpp
+    src/fm.cpp)
 target_include_directories(megarace_formats PUBLIC src)
+target_link_libraries(megarace_formats PUBLIC ymfm_opl)
 megarace_warnings(megarace_formats)
 
 # ---- Engine ----------------------------------------------------------------
