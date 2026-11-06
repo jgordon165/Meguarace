@@ -641,6 +641,22 @@ test("rival: steering (0x4210) and sideways step (0x38EF)", function()
     check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
 end)
 
+test("keys: bindings and names (0x611D)", function()
+    local keys = require("game.keys")
+    local st = {}
+    local k = keys.of(st)
+    check(k.left == "Left" and k.fire == "Space" and st.keys == k, "defaults filled in")
+    st.keys = { fire = "A" }
+    check(keys.of(st).fire == "A" and st.keys.accel == "Up", "missing ones filled, others kept")
+    check(keys.display("Left") == "\27   " and keys.display("Up") == "\24   ", "arrows as glyphs")
+    check(keys.display("Space") == "ESP " and keys.display("Right Shift") == "SFTD" and keys.display("Left Ctrl") == "CTLR",
+          "the original's names")
+    check(keys.display("A") == "A   " and keys.display("Keypad 5") == "KEYP", "a character, or 4 letters")
+    check(#keys.row(1, keys.DEFAULT) == 13 and keys.row(1, keys.DEFAULT):sub(1, 9) == "LEFT    :", "13-character rows")
+    check(keys.row(6) == "<OK OR ESC>  ", "the last row")
+    check(not keys.accepts("P") and not keys.accepts("Escape") and keys.accepts("Z"), "P and ESC refused")
+end)
+
 test("career: giving up (ESC, [0x68CB] = -4)", function()
     local C = require("game.career")
     local st = C.new("NOVICE")
