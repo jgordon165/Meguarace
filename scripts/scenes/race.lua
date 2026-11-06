@@ -1,5 +1,5 @@
 -- A race: the game's rules (race/rules.lua) on a track video.
---   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   F1 debug line   ESC give up (game over, as in the original)
+--   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE fire (keys: game/keys.lua)   F1 debug line   ESC give up (game over, as in the original)
 --
 -- From RACEPRG.EXE: the video advances at a fixed rate whenever you're
 -- moving; your speed decides how you gain on the rival. The lane is the
@@ -70,6 +70,7 @@ function S:enter(name, opts)
     self.demo = opts.demo                     -- attract mode: the game drives (RACEPRG [0x69E6])
     self.demo_fire_at = 0
     self.on_done = opts.on_done
+    self.keys = opts.keys or require("game.keys").DEFAULT   -- game/keys.lua
     self.ticks = 0
     self.clock = -COUNTDOWN
     self.last_section = nil
@@ -114,7 +115,8 @@ function S:update(dt)
     local s = self.rules
     local alive = not s.destroyed
     self.steer = 0
-    local left, right = input.down("Left"), input.down("Right")
+    local K = self.keys
+    local left, right = input.down(K.left), input.down(K.right)
     if self.demo then left, right = self:autopilot_steer() end
     if alive and left then self.steer = self.steer + 1 end
     if alive and right then self.steer = self.steer - 1 end   -- both cancel (0x2860)
@@ -133,7 +135,7 @@ function S:update(dt)
             self.spin = self.spin - 1
             if self.spin < 0 then self.spin = 2 end
         end
-        local accel, brake = input.down("Up"), input.down("Down")
+        local accel, brake = input.down(K.accel), input.down(K.brake)
         if self.demo then accel, brake = s.slide == nil, false end   -- full throttle unless spinning (0x2D0F)
         local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
         if self.demo then self:autopilot_fire() end
@@ -202,7 +204,7 @@ function S:update(dt)
         end
     end
 
-    if alive and (input.pressed("Space") or input.pressed("Left Ctrl") or input.pressed("Right Ctrl")) then
+    if alive and input.pressed(self.keys.fire) then
         if rules.fire(s) then voc.play("LASER") end
     end
     self.fx_t = self.fx_t + dt
@@ -256,7 +258,7 @@ function S:collisions(r, prev)
             collide.clear(s)
         end
     end
-    local dx, sway, rdx = collide.tick(s, r)
+    local dx, sway, rdx = collide.tick(s, r, math.max(0, self.frame))
     self.carx = self.carx + dx
     self.sway = sway
     if rdx ~= 0 and self.road_w and self.road_w > 0 then

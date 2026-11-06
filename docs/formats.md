@@ -390,12 +390,39 @@ selects, Esc closes.
 | tracks | CONTROL2 0 at (160,105) | the 16 tracks (from 1); the choice is the round |
 
 KEYBOARD, JOYSTICK and MOUSE show a KONTROL6 message at (160,130) until a
-key; KEYBOARD when the keyboard is already active opens a key-redefinition
-screen instead (0x5FD6, not ported). The port has only the keyboard, so
-JOYSTICK and MOUSE get messages 1 and 4. LOAD and SAVE use the port's one
-save rather than the original's slots. A car showcase that plays to its end
-holds its last frame for up to 800 ticks or until a key (0x5687); one cut
-short goes straight back (`[0x69EA]`).
+key; KEYBOARD when the keyboard is already active opens the key setup
+instead. The port has only the keyboard, so KEYBOARD always opens the key
+setup and JOYSTICK and MOUSE get messages 1 and 4.
+
+**Key setup** (0x5FD6…0x6178): the controls are rows at DS:0x1297 (a
+second set for Spanish at 0x12EB), each a scancode and 13 characters: label
+and a 4-character key name (`LEFT    :... `). Defaults `,` `.` A Z SPACE;
+the sixth row is `<OK OR ESC>`. The screen is CONTROL4 image 2 at
+(160,100) with the rows from (125,80), 6 pixels a character and 10 a row,
+in FONTOPT; the row being asked for is in FONTOPT2 and its key name in
+FONTOPT3. A key per row in turn (lower case raised; P and control
+characters other than RETURN refused); on the last row any key keeps them
+(0x6AF2), ESC at any point restores the copy taken at the start (0x60A9,
+0x60D4). Names (0x611D): the character, the arrows as glyphs 24–27, and
+ESP, RET, SFTD, SFTG, CTLR, ALT for space, return, right and left shift,
+ctrl and alt. The port keeps its own defaults (arrows and SPACE) and shows
+the current keys rather than the table's dots.
+
+**Saves** (SAVE 0x642A, LOAD 0x61CB): SAVE asks for a name on CONTROL4
+image 1 at (160,90): up to 8 letters and digits in FONTOPT from (128,98),
+8 pixels apart, `_` marking the next place; BACKSPACE takes one back,
+RETURN writes NAME.SAV, ESC leaves. The file holds the race points, the
+score, the level, the round and the rest of the career, the key table, the
+weapons table and the cars you can pick (0x658A). LOAD lists every `*.SAV`
+(up to 50, 0x625F) on CONTROL4 image 0 at (160,100): six names at a time
+from (132,80), a row every 10, the chosen one in FONTOPT2; Up/Down move
+and scroll, RETURN loads (then BA2 plays, 0x6352), ESC leaves. The port
+keeps each save as `slot_NAME.sav` in its preferences folder with the list
+of names in its main save; settings and the Hall of Fame stay outside.
+
+After a car showcase the original
+holds the last frame for up to 800 ticks or a key (0x5687); the port goes
+straight back.
 
 Monitor order = thumbnail order = showcase videos: JOSE, HOOPER, LUIS,
 OUZBEL, MARIA, PALOMA, OMEGA, RAMON (confirmed by comparing each
@@ -598,7 +625,7 @@ Held at one, you're scraping (0x23B8: `[0x68FF]`, `[0x6933]`): sound 6
 (0x302A), each cycle costing 1 armour. If you've steered for more than 6
 ticks in a row (`[0x6939]`) and your speed is over 100, you crash (0x2212):
 CHOCRR2, the 0x888 sway with a slide of 9 pixels a tick away from the wall
-that eases by 1 every other section (0x2271), and −8 armour when it ends
+that eases by 1 on every tick of an odd video frame (0x2271: `[0x6957]` & 1, two ticks in four), and −8 armour when it ends
 (0x2136). One crash per push: the counter is set to 1000 until you let go
 of the steering.
 
@@ -925,7 +952,6 @@ header as described above.
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
-- In the port a wall bounce eases every other tick, not every other section.
 - The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.

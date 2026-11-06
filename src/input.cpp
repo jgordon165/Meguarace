@@ -29,6 +29,15 @@ bool Input::anyPressed() const {
     return false;
 }
 
+std::string Input::firstPressed() const {
+    for (size_t i = 0; i < cur_.size(); ++i)
+        if (cur_[i] && !prev_[i]) {
+            const char* n = SDL_GetScancodeName(static_cast<SDL_Scancode>(i));
+            if (n && *n) return n;
+        }
+    return "";
+}
+
 bool Input::released(const std::string& key) const {
     auto sc = lookup(key);
     return sc != SDL_SCANCODE_UNKNOWN && !cur_[sc] && prev_[sc];

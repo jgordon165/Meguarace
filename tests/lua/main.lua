@@ -482,9 +482,11 @@ test("walls: scraping smoke, crashes, the bounce and its armour", function()
     check(K.wall(s, "left", 7) == "crash" and s.skid and s.skid.dx == 9, "7 ticks of steering at 150: crash, sliding right")
     check(K.wall(s, "left", 20) == nil, "one crash per push")
     local first = s.skid.dx
-    local _, sway = K.tick(s, nil); K.tick(s, nil)
-    check(sway == K.SKID.player[1][1] and s.skid.dx == first - 1, "the 0x888 sway; the slide eases")
-    for _ = 1, 20 do K.tick(s, nil) end
+    local _, sway = K.tick(s, nil, 0); K.tick(s, nil, 0)
+    check(sway == K.SKID.player[1][1] and s.skid.dx == first, "the 0x888 sway; no easing on an even frame")
+    K.tick(s, nil, 1); K.tick(s, nil, 1)
+    check(s.skid.dx == first - 2, "an odd frame: 1 a tick (0x2271)")
+    for _ = 1, 20 do K.tick(s, nil, 1) end
     check(s.skid == nil and s.armour == 69 - 8, "the bounce ends: 8 armour")
     K.release(s); s.speed = 90
     check(K.wall(s, "right", 30) == nil, "slow: no crash")
@@ -637,6 +639,50 @@ test("rival: steering (0x4210) and sideways step (0x38EF)", function()
     check(V.side_step(r, 40, 100, 10) == -1 and V.side_step(r, 60, 100, -10) == 1, "50..150: a pixel toward the middle")
     check(V.side_step(r, 80, 100, -1) == 0 and V.side_step(r, 90, 100, 1) == -1, "a pixel left of the middle stays; right moves (and 0xFFFE)")
     check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
+end)
+
+test("keys: bindings and names (0x611D)", function()
+    local keys = require("game.keys")
+    local st = {}
+    local k = keys.of(st)
+    check(k.left == "Left" and k.fire == "Space" and st.keys == k, "defaults filled in")
+    st.keys = { fire = "A" }
+    check(keys.of(st).fire == "A" and st.keys.accel == "Up", "missing ones filled, others kept")
+    check(keys.display("Left") == "\27   " and keys.display("Up") == "\24   ", "arrows as glyphs")
+    check(keys.display("Space") == "ESP " and keys.display("Right Shift") == "SFTD" and keys.display("Left Ctrl") == "CTLR",
+          "the original's names")
+    check(keys.display("A") == "A   " and keys.display("Keypad 5") == "KEYP", "a character, or 4 letters")
+    check(#keys.row(1, keys.DEFAULT) == 13 and keys.row(1, keys.DEFAULT):sub(1, 9) == "LEFT    :", "13-character rows")
+    check(keys.row(6) == "<OK OR ESC>  ", "the last row")
+    check(not keys.accepts("P") and not keys.accepts("Escape") and keys.accepts("Z"), "P and ESC refused")
+end)
+
+test("slots: names, what a save keeps, the list (0x642A, 0x61CB)", function()
+    local slots, C = require("game.slots"), require("game.career")
+    check(slots.valid("RACE1") and not slots.valid("") and not slots.valid("TOOLONGNAME")
+          and not slots.valid("a") and not slots.valid("X/Y"), "1-8 letters and digits")
+    check(slots.char_ok("Q") and slots.char_ok("7") and not slots.char_ok("_"), "characters")
+    local st = C.new("HARDENED")
+    st.round, st.total, st.car, st.keys, st.music, st.hall = 9, 4321, 3, { fire = "A" }, false, { 1 }
+    local snap = slots.snapshot(st)
+    check(snap.round == 9 and snap.total == 4321 and snap.level == "HARDENED" and snap.car == 3
+          and snap.keys.fire == "A" and snap.unlocked, "career, car, keys and cars kept")
+    check(snap.music == nil and snap.hall == nil, "settings and the Hall of Fame stay out")
+    local other = C.new("NOVICE")
+    other.music = true
+    slots.restore(other, snap)
+    check(other.round == 9 and other.level == "HARDENED" and other.music == true, "restore")
+    local t = {}
+    slots.remember(t, "A"); slots.remember(t, "B"); slots.remember(t, "A")
+    check(table.concat(t.slots, ",") == "B,A", "the list, newest last")
+    local S = require("scenes.slots")
+    local top, sel = 0, 5
+    top, sel = S.move(top, sel, 1, 10)
+    check(top == 1 and sel == 5, "past the sixth row the list scrolls")
+    top, sel = S.move(4, 5, 1, 10)
+    check(top == 4 and sel == 5, "not past the end")
+    top, sel = S.move(1, 0, -1, 10)
+    check(top == 0 and sel == 0, "and back up")
 end)
 
 test("career: giving up (ESC, [0x68CB] = -4)", function()

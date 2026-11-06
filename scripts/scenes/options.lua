@@ -14,11 +14,11 @@
 -- one every 16 rows (9 for the tracks) from y = 100 - 4 x count; every image
 -- is centred on its point (0x5991, 0x59CC).
 --
--- KEYBOARD, JOYSTICK and MOUSE answer with a KONTROL6 message at (160, 130)
--- until a key (0x5EBF). This port only has the keyboard, so JOYSTICK and
--- MOUSE get the original's "not available" messages. The original's key
--- redefinition (KEYBOARD when the keyboard is already active) and its save
--- slots aren't ported: LOAD and SAVE use the port's one save.
+-- JOYSTICK and MOUSE answer with a KONTROL6 message at (160, 130) until a
+-- key (0x5EBF). This port only has the keyboard, so they get the
+-- original's "not available" messages, and KEYBOARD (the control already)
+-- opens the key setup (scenes/keysetup.lua). LOAD and SAVE are the
+-- original's named saves (scenes/slots.lua).
 
 local scenes = require("core.scenes")
 local save   = require("game.save")
@@ -34,7 +34,7 @@ local KINDS = {
 S.KINDS = KINDS
 
 -- KONTROL6 messages.
-local MSG_KEYBOARD, MSG_NO_JOYSTICK, MSG_NO_MOUSE = 0, 1, 4
+local MSG_NO_JOYSTICK, MSG_NO_MOUSE = 1, 4       -- (0 is "keyboard now active")
 local MSG_X, MSG_Y = 160, 130
 
 -- Item centres for a kind: { x, y } per item.
@@ -81,13 +81,20 @@ end
 
 function S:act(a)
     local st = self.state
-    if a == "load" then
-        local loaded = save.load()
-        for k, v in pairs(loaded) do st[k] = v end
-        return self:close(true)                            -- 0x61CD: the menu is rebuilt
-    elseif a == "save" then
-        self.note = save.store(st) and "SAVED" or "SAVE FAILED"
-    elseif a == "keyboard" then self.msg = MSG_KEYBOARD
+    if a == "load" then                                  -- the saves (0x61CB, scenes/slots.lua)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "load", st, function(ok)
+            if not ok then return end
+            local menu = require("scenes.menu")
+            menu:rebuild()                                 -- 0x61CD: the menu is rebuilt
+            require("core.sequence").play({ career.file(require("game.slots").LOADED_VIDEO) })   -- BA2 (0x6352)
+        end)
+    elseif a == "save" then                              -- a name for it (0x642A)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "save", st)
+    elseif a == "keyboard" then                          -- already the control: set up keys (0x5FD6)
+        scenes.pop()                                     -- over the menu alone (0x5FEB)
+        scenes.push(require("scenes.keysetup"), st)
     elseif a == "joystick" then self.msg = MSG_NO_JOYSTICK
     elseif a == "mouse" then self.msg = MSG_NO_MOUSE
     elseif a == "quit" then
