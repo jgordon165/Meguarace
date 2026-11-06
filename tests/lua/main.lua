@@ -394,6 +394,28 @@ test("subtitles: .SUB groups and line placement", function()
     check(#subs.GROUP_VIDEO == 62, "62 subtitled videos")
 end)
 
+test("attract mode: the demo driver's firing and steering", function()
+    local race, rules = require("scenes.race"), require("race.rules")
+    local fake = setmetatable({ rules = rules.new("OM"), carx = 160, demo_fire_at = 0 }, { __index = race })
+    fake.current = { pos = 15, x_lane = 170 }
+    fake:autopilot_fire()
+    check(fake.rules.shot ~= nil and fake.demo_fire_at == 30, "rival 15/8 ahead, 10 px across: fires; next shot in 30 ticks")
+    fake.rules.shot = nil
+    fake:autopilot_fire()
+    check(fake.rules.shot == nil, "not again within 30 ticks")
+    fake.rules.tick = 30; fake.current.pos = 25
+    fake:autopilot_fire()
+    check(fake.rules.shot == nil, "25/8 ahead: too far (10..20)")
+    fake.current.pos = 15; fake.current.x_lane = 230
+    fake:autopilot_fire()
+    check(fake.rules.shot == nil, "70 px across: no")
+    local l, r = fake:autopilot_steer()
+    check(not l and r, "steers toward a near rival")
+    fake.current.pos = 100
+    l, r = fake:autopilot_steer()
+    check(not l and not r, "otherwise holds the middle")
+end)
+
 test("voc: decodes a type-1 block", function()
     local voc = require("formats.voc")
     local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)

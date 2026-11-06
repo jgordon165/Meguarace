@@ -46,6 +46,8 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 - Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
   `RACEPRG.EXE`). Make it at the end of a career and you type your name.
   Blue (or Esc) opens the **options**: Novice/Hardened, save, load, quit.
+- Leave the menu alone for two minutes and Lance butts in; leave it again
+  and a demo race runs (any key ends it).
 - M turns the music on or off. S cycles the subtitles: off, English (US),
   English (UK), French, German, Italian, Spanish.
 - F12 opens the **asset explorer** (every file in the archive: play videos,
@@ -128,7 +130,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
 | Subtitles in six languages, timed by the videos' own cues | Done (from RACEPRG.EXE) |
 | Hall of Fame: seven places, your run's line, name entry | Done (from RACEPRG.EXE) |
-| Attract mode (idle clip and demo race) | To do |
+| Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE; the demo's steering is the port's) |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
@@ -163,6 +165,6 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound()`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
-| `input` | `down(key) pressed(key) released(key)`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
+| `input` | `down(key) pressed(key) released(key) any()`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
 | `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted` |
 
