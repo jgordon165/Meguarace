@@ -323,6 +323,8 @@ static int hnm_decode(lua_State* L) {
     lua_pushinteger(L, f.y);              lua_setfield(L, -2, "y");
     lua_pushboolean(L, f.overlay);        lua_setfield(L, -2, "overlay");
     lua_pushboolean(L, f.paletteChanged); lua_setfield(L, -2, "palette_changed");
+    if (f.subtitleCue == 0x40) { lua_pushstring(L, "next");  lua_setfield(L, -2, "subtitle"); }
+    if (f.subtitleCue == 0x20) { lua_pushstring(L, "clear"); lua_setfield(L, -2, "subtitle"); }
     lua_pushinteger(L, lua_Integer(f.sound.size())); lua_setfield(L, -2, "sound_bytes");
     for (const auto& [tag, body] : f.chunks) {   // game data: "pt", "kl"
         pushBytes(L, body);

@@ -38,6 +38,7 @@ function M.defaults()
         round = 1,                 -- next track, 1..16
         total = 0,                 -- championship score so far
         music = true,              -- FM music on (M in the main menu)
+        subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
         hall = nil,                -- filled from the EXE's defaults on first run
     }
 end
@@ -51,12 +52,14 @@ end
 
 function M.store(s) return sys.save(M.FILE, serialize(s)) end
 
--- Inserts a result into the Hall of Fame (top 8). Returns its rank or nil.
+M.HALL_PLACES = 7               -- RACEPRG 0x68C1: seven places, then your run
+
+-- Inserts a result into the Hall of Fame. Returns its rank or nil.
 function M.add_score(s, entry)
     s.hall = s.hall or {}
     table.insert(s.hall, entry)
     table.sort(s.hall, function(a, b) return a.score > b.score end)
-    while #s.hall > 8 do table.remove(s.hall) end
+    while #s.hall > M.HALL_PLACES do table.remove(s.hall) end
     for i, e in ipairs(s.hall) do if e == entry then return i end end
     return nil
 end

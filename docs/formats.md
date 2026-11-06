@@ -362,7 +362,9 @@ thumbnail with its video).
 
 From RACEPRG.EXE (read at runtime from the player's copy):
 - **Default Hall of Fame:** 8 × { u16 score, name[18], "00000 ", track[10],
-  level[4] }, starting 2 bytes before "BIG BOB".
+  level[4] }, starting 2 bytes before "BIG BOB" (DS:0x1344): the 7 places,
+  then the line for your own run ("ENFORCER SCORE", DS:0x145C). See Hall of
+  Fame.
 - **Track display names:** 16 × 16 bytes after "EASYHARD": NEW SAN-1,
   MAEVA -1, NEW FAC-1, NG LOOP, SUB-URB 1, NEW SAN 2, MAEVA 2, PARTICLE,
   NEW FAC 2, JUNKYARD, MAEVA3, NEWFAC3, NEW SAN 3, LASTDRIVE, TOKYO, HOLDER.
@@ -675,6 +677,39 @@ button lets you pick any track (0x55C7).
 **Quitting** (options, 0x5113): B99 after a wreck, BA1 with fewer than four
 clean rounds, else B98 and AZUR; then the credits.
 
+## Subtitles
+
+`MEGA<LANG>.SUB` (AMER, ENGL, FREN, GERM, ITAL, SPAN): u16 offsets, the
+first being the table's size (63 entries, the last the end), then the
+groups, each a run of lines `{ u8 length, text, 0xFF }`. Group *k* belongs to
+the video numbered `DS:0x158C[k] − 1` (62 videos: INTRO, B64, B65, B66, the
+round and scenery clips, the outcome clips, VWBT2–5; 0x5BF2). The language
+is the install's choice (`[0x5145]` & 0x1C, 0x5233).
+
+**Timing is in the videos:** the first word of a frame's video header
+carries two bits above the 9-bit width: 0x4000 shows the next line, 0x2000
+clears it (0xCEC5 → 0xD24F). Every subtitled video has exactly one 0x4000
+cue per line.
+
+**Drawing** (0xD287): rows 191–199, starting at x = 160 − 2.25 × length,
+each character from `DFCHAR.BIN` in a cell as wide as its width, colour 255
+on 0. `DFCHAR.BIN` is 256 widths, then 9-byte glyphs (a byte per row, high
+bit left) from character 0. The accented letters sit on ASCII punctuation
+(the French "à" is `{`). The videos leave colour 255 black; the port sets it
+white while subtitles are on.
+
+## Hall of Fame
+
+Seven places and a line for your run, 40 bytes each (DS:0x1344…0x145C),
+kept in a file. At game over (0x6847) the table is sorted; a score at least
+the 7th place's earns a place (0x68C1). The name entry (0x66D6) shows
+CONTROL4 frame 3 centred on (160, 90) and types in the FONTOPT font from
+(96, 98), 8 pixels apart, with a `_` cursor: up to 16 characters, A–Z (lower
+case raised), 0–9 and space, BACKSPACE; ENTER keeps it (one character at
+least), ESC leaves the table as it was. The new place gets the score, the
+track's name (DS:0x148C + 16 × track) and EASY/HARD; the 8th line always
+gets your run (0x693C).
+
 ## Music
 
 Six songs, HSQ-packed: `NEWSAN`, `MAEVA`, `DETRITUS`, `LENNY`, `ALARME` and
@@ -744,12 +779,10 @@ header as described above.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
 - Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
 - The idle/attract clips in the menu (B65 after 3000 idle ticks, then a demo race: 0x4E9E, 0x555F).
-- The name entry in the Hall of Fame (0x6847).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).
 - HSQ graphics (`_JOS.HSQ`, `CASQUE.HSQ`, `PANEL2.HSQ`...): sprite/image layouts.
-- `.SUB` subtitle timing (text is plain; a header of offsets precedes it).
 - `.RAW` fonts.
