@@ -34,18 +34,149 @@ R.TILE_SOUND = {
 R.TILE_LABEL = {
     [1] = "ENERGY DRAIN", [2] = "POINTS -10", [3] = "BRAKE", [4] = "SPIN", [5] = "WEAPON LOST",
     [6] = "MALUS 6", [7] = "SKID", [8] = "BONUS 8", [9] = "MALUS 9", [10] = "MALUS 10",
-    [17] = "ENERGY +", [18] = "POINTS +10", [19] = "SUPER SPEED", [20] = "WEAPON 1",
+    [17] = "ENERGY +", [18] = "POINTS +10", [19] = "SUPER SPEED", [20] = "CHARGED SHOT",
     [21] = "WEAPON 3", [22] = "WEAPON 2", [23] = "BONUS 23", [24] = "BONUS 24", [25] = "BOOST",
 }
 
 function R.is_bonus(code) return code >= 17 end
 
-function R.new()
+-- Per-car table at DS:0x7B0, 10 bytes per car, indexed by [0x81E] and copied
+-- to [0x800]..[0x812] at the start of a race (RACEPRG 0x038C). The index
+-- order is the T<code> dashboard order (resource 0x24 + [0x81A]: TJO, TRA,
+-- TOU, TPA, TLU, TOM, THO, TMA), i.e. formats/cars.lua CODES.
+--   guns     [0x800..0x804]  which of weapons 1, 2, 3 the car can carry
+--   super    [0x806]         can keep weapon 1's "destroy on hit" charge
+--   armour   [0x808]         starting value of the third gauge [0xD2E]
+--   power    [0x80A]         damage per hit, and the base of the fire cost
+--   handling [0x80C]         (read at 0x1A02/0x1E66/0x27A8; not traced yet)
+--   flag24, flag23 [0x80E], [0x810]   per-car switches for codes 24/23
+--   timer    [0x812]         x4 at race start: length of codes 6/9's effect
+local CAR_TABLE = {
+    JO = { 1, 0, 0, 0, 120,  8, 5, 1, 1, 200 },
+    RA = { 1, 1, 1, 1,  70, 20, 4, 0, 0, 200 },
+    OU = { 1, 1, 1, 1,  70, 20, 6, 1, 1, 200 },
+    PA = { 1, 1, 0, 0, 120, 16, 6, 0, 0, 100 },
+    LU = { 1, 1, 1, 0, 100, 10, 6, 1, 1, 200 },
+    OM = { 1, 1, 0, 0,  80, 10, 4, 1, 1, 100 },
+    HO = { 1, 1, 0, 0, 110, 10, 4, 0, 0, 100 },
+    MA = { 1, 1, 1, 0, 100, 16, 2, 1, 1, 200 },
+}
+
+function R.car_stats(code)
+    local t = CAR_TABLE[code] or CAR_TABLE.RA
     return {
+        code = CAR_TABLE[code] and code or "RA",
+        guns = { t[1] == 1, t[2] == 1, t[3] == 1 }, super = t[4] == 1,
+        armour = t[5], power = t[6], handling = t[7],
+        flag24 = t[8] == 1, flag23 = t[9] == 1, timer = t[10] * 4,
+    }
+end
+
+-- Weapons ------------------------------------------------------------------
+-- The shot (RACEPRG 0x2D1B fire, 0x2E14 per frame, 0x2F93 hit test) uses the
+-- FUMEE sprite set: a muzzle flash at the car (frames 11..13) and the bolt a
+-- little ahead of it (14..17). If the bolt is over the rival, it stops there
+-- and plays the impact (18..22); otherwise the shot ends after frame 17.
+R.RIVAL_HEALTH  = 100          -- [0x814]: damage [0xD30] that destroys the rival
+R.HIT_POINTS    = 5            -- [0x68D5]: points paid out per hit
+R.EXPLOSION_FRAMES = 24        -- EXPLOSE frames played over a destroyed rival
+R.EXPLOSION_POINTS = 5         -- per explosion frame (RACEPRG 0x4699)
+R.SHOT = { muzzle = 11, bolt = 14, bolt_end = 18, impact_end = 23 }
+
+-- Muzzle offset from the car and bolt offset from the muzzle, by the car's
+-- view angle [0xCA4] (|angle| thresholds 2,3,5,7,9; tables at 0x2DD5 and
+-- DS:0xD86). The sign follows the angle: the shot heads toward the centre.
+R.SHOT_AIM = {
+    { below = 2,   muzzle = 0,  dx = 0,  dy = -17 },
+    { below = 3,   muzzle = 4,  dx = 8,  dy = -14 },
+    { below = 5,   muzzle = 12, dx = 18, dy = -10 },
+    { below = 7,   muzzle = 20, dx = 30, dy = -8 },
+    { below = 9,   muzzle = 40, dx = 40, dy = -7 },
+    { below = 1e9, muzzle = 48, dx = 55, dy = -6 },
+}
+function R.shot_aim(angle)
+    local a = math.abs(angle)
+    local sign = angle < 0 and -1 or 1
+    for _, e in ipairs(R.SHOT_AIM) do
+        if a < e.below then return sign * e.muzzle, sign * e.dx, e.dy end
+    end
+end
+
+-- Weapon 3 needs gun 3, else it drops to 2, then 1, then none; the weapon-1
+-- charge needs `super` (RACEPRG 0x1FF1, run after every tile).
+function R.cap_weapon(s)
+    local w, g = s.weapon, s.car.guns
+    if w == 3 and not g[3] then w = 2 end
+    if w == 2 and not g[2] then w = 1 end
+    if w == 1 and not g[1] then w = 0 end
+    s.weapon = w
+    if not s.car.super then s.super = false end
+end
+
+-- Energy per shot: power/2, x8 for a charged weapon 1, +4 for weapons 2, 3.
+function R.fire_cost(s)
+    local c = s.car.power // 2
+    if s.weapon == 1 and s.super then c = c * 8 end
+    if s.weapon >= 2 then c = c + 4 end
+    return c
+end
+
+-- Fire button pressed (RACEPRG 0x2962): needs a weapon and energy left. A
+-- new shot replaces one still in flight. Returns true if it fired.
+function R.fire(s)
+    if s.weapon == 0 or s.energy <= 0 then return false end
+    s.energy = math.max(0, s.energy - R.fire_cost(s))
+    s.shot = { muzzle = R.SHOT.muzzle, frame = R.SHOT.bolt, hit = false,
+               guns = s.weapon, super = s.weapon == 1 and s.super }
+    return true
+end
+
+-- Advances the shot one frame. Returns "done" when it ends, and "kill" when
+-- a charged weapon-1 shot finishes on a rival (RACEPRG 0x2E49).
+function R.shot_step(s)
+    local sh = s.shot
+    if not sh then return nil end
+    sh.muzzle = sh.muzzle + 1
+    if sh.muzzle == 14 then sh.muzzle = 15 end
+    sh.frame = sh.frame + 1
+    if not sh.hit and sh.frame >= R.SHOT.bolt_end then s.shot = nil; return "done" end
+    if sh.frame >= R.SHOT.impact_end then
+        s.shot = nil
+        return sh.super and "kill" or "done"
+    end
+    return nil
+end
+
+-- The bolt reached the rival: it stops and plays the impact, the rival takes
+-- `power` damage and you get HIT_POINTS. Returns true if the rival is now
+-- destroyed. (The game moves the damage across one unit per gun drawn per
+-- frame, [0x818]; this port applies it at once.)
+function R.hit(s, rival)
+    local sh = s.shot
+    if not sh or sh.hit then return false end
+    sh.hit, sh.frame = true, R.SHOT.bolt_end
+    s.points = s.points + R.HIT_POINTS
+    return R.damage(rival, s.car.power)
+end
+
+function R.damage(rival, n)
+    if rival.destroyed then return false end
+    rival.damage = math.min(R.RIVAL_HEALTH, (rival.damage or 0) + n)
+    if rival.damage >= R.RIVAL_HEALTH then rival.destroyed = true; return true end
+    return false
+end
+
+function R.new(car)
+    local stats = R.car_stats(car)
+    local s = {
+        car = stats,
         speed = 0,              -- [0xC9E]
         energy = 200,           -- [0x6911]
         points = 0,             -- [0x690D] (raised by code 18, lowered by code 2)
-        weapon = 0,             -- [0xD5A]
+        armour = stats.armour,  -- [0xD2E]
+        weapon = 1,             -- [0xD5A]: every car starts with weapon 1 (DS:0xD66)
+        super = false,          -- [0xD5E]: weapon 1 charged (code 20)
+        shot = nil,
         drain = 50,             -- [0x68DB]: next code-1 drain / code-17 gain size
         tick = 0,               -- [0x7038]
         brake_until_slow = false,   -- code 3, [0x68CF]
@@ -54,6 +185,8 @@ function R.new()
         slide = nil,                -- code 4/7 slide: { steps, drift }
         message = nil, message_until = -1,
     }
+    R.cap_weapon(s)
+    return s
 end
 
 -- One game tick. input: { accel = bool, brake = bool }.
@@ -114,11 +247,11 @@ function R.apply_tile(s, code, turn)
     elseif code == 5 then
         s.weapon = 0; s.energy = 0
     elseif code == 20 then
-        s.weapon = 1
+        s.weapon = 1; s.super = true
     elseif code == 22 then
-        s.weapon = 2; s.energy = math.min(R.ENERGY_MAX, s.energy + 60)
+        s.weapon = 2; s.super = false; s.energy = math.min(R.ENERGY_MAX, s.energy + 60)
     elseif code == 21 then
-        s.weapon = 3; s.energy = math.min(R.ENERGY_MAX, s.energy + 120)
+        s.weapon = 3; s.super = false; s.energy = math.min(R.ENERGY_MAX, s.energy + 120)
     elseif code == 19 then
         if s.boost_until <= s.tick then s.boost_until = s.tick + 400 end
     elseif code == 25 then
@@ -130,6 +263,7 @@ function R.apply_tile(s, code, turn)
     elseif code == 8 or code == 23 or code == 24 then
         s.timers[code] = s.tick + 200
     end
+    R.cap_weapon(s)
     say(s, R.TILE_LABEL[code] or ("TILE " .. code))
     return R.TILE_SOUND[code]
 end
