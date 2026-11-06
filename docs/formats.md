@@ -612,6 +612,69 @@ The port runs the AI exactly as above. Its own choices: the steering rate
 (0.012 road widths a tick), the bump collision, and that rivals within
 one section of you aren't drawn (the camera is one section behind your car).
 
+## Career
+
+Everything between races runs from 0x4DB3 (code in `scripts/game/career.lua`).
+
+**Videos by number** (`[0x69E4]`, played by 0x53B1): the table at DS:0x59BC
+holds a flags word and a file name per number. 0x00–0x1F are the track
+videos, 0x20 HALL1, 0x21 CRYO, 0x23 INTRO, 0x24 MINDSCAP, 0x25 FIN, 0x26
+PANEL1, 0x27–0x2E the car showcases, 0x30–0x6F Lance Boyle's clips
+(`B*.HNM`), the idents (0x55–0x58 VWBT2–5, 0x63 VWBT) and 0x70 CREDIT. In a
+run of clips one key ends the clip and the other the whole run
+(`[0x69E8]`, 0x5C98).
+
+**Before a round** (0x4E38…0x4E85): INTRO (on a new career), the ident
+(VWBT on a new career, a random VWBT2–4 after moving on: 0x5151), then,
+until the game is completed: Lance on the round, video 0x31 + round
+(B01, B09, B17, B29, B24, B04, B12, B27, B20, B26, B14, B23, B07, B30, B92,
+B32), Lance on its scenery (0x5353) and B64. The scenery clip is
+`DS:0x1274[round] + k − 1`, k = 0 on your first race there, 1 if you've
+raced there without a clean round, 2 after a clean round. Records are per
+scenery family (`[0x1256][round]` → 0x124C NS, 0x124E MV, 0x1250 FC, 0x1252
+SUB/JNK, 0x1254 NGL/PAR/LST/TOKY): B34–B36, B37–B39, B40–B42, B43–B45,
+B46–B48. Before a race on round 1 on NOVICE: B66 (0x4EBB).
+
+**After a race** (0x4F2F…0x5151):
+
+| Result | Clips | Then |
+|---|---|---|
+| every opponent destroyed, under 800 points | BA9 | next round |
+| … 800–1199 | BA5, BB1, one of BB3–BB6 | next round |
+| … 1200+ | BB2, one of B83–B86 | next round |
+| laps run out, ≤ 1 left, 1200+ | BA3 | next round |
+| laps run out, otherwise | B79 | game over (or TOKY, below) |
+| wrecked | B80 | game over |
+
+The race's points add to the score `[0x6A02]` first.
+
+**Game over** (0x516D): the Hall of Fame (HALL1, 0x54A7), then the whole
+career resets (0x6A7C: round, score, records, streaks; not the level) and the
+show starts again from INTRO. There are no retries.
+
+**Seasons.** A career starts on NOVICE (`[0x68CD]` = 1). Moving on from
+round 14 (LST) starts round 1 on HARDENED (0x50D3). On HARDENED, LST counts
+only if every opponent is destroyed (laps and wrecks score 0 there, 0x4F92);
+doing it completes the game.
+
+**Bonus tracks.**
+- *HOLD* (round 16): after three clean rounds in a row (`[0x69B2]`, reset by
+  any round that isn't clean), the next round is HOLD (0x50E8). HOLD always
+  counts as cleared; a wreck there scores nothing.
+- *TOKY* (round 15): a round you fail on the laps with 800+ points, when
+  you've banked three clean rounds since the last TOKY (`[0x69B4]`), sends you
+  to TOKY instead of game over, at most three times (`[0x69B6]`, 0x502B).
+- After either, you go on to the round after the one you last played in the
+  championship (`[0x69F6]` + 1).
+
+**The finale** (0x5267): the Hall of Fame, then B82, one of BB3–BB6, B89,
+FIN, and the credits (CREDIT over SkyHolder, 0x5198). The score resets and
+`[0x69AA]` is set: from then on the round clips are skipped and the race
+button lets you pick any track (0x55C7).
+
+**Quitting** (options, 0x5113): B99 after a wreck, BA1 with fewer than four
+clean rounds, else B98 and AZUR; then the credits.
+
 ## Music
 
 Six songs, HSQ-packed: `NEWSAN`, `MAEVA`, `DETRITUS`, `LENNY`, `ALARME` and
@@ -680,7 +743,8 @@ header as described above.
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
 - Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
-- The bonus-track rules (TOKY/HOLD after enough clean rounds, `[0x69B4]`/`[0x69B6]`) and the post-race videos (`[0x69E4]` 0x59–0x62).
+- The idle/attract clips in the menu (B65 after 3000 idle ticks, then a demo race: 0x4E9E, 0x555F).
+- The name entry in the Hall of Fame (0x6847).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.

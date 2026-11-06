@@ -9,19 +9,6 @@ local manifest = require("core.manifest")
 
 game = {}
 
--- Original boot order: publisher logo, developer logo, then the intro.
-local function playSequence(list, done)
-    local i = 0
-    local function step()
-        i = i + 1
-        if list[i] and dat.exists(list[i]) then
-            scenes.push(require("scenes.player"), list[i], { on_done = step })
-        elseif done then
-            done()
-        end
-    end
-    step()
-end
 
 function game.init()
     sys.log("data folder: " .. sys.data_path .. (fs.mounted() and "" or " (NOT FOUND)"))
@@ -39,12 +26,15 @@ function game.init()
     end
 
     -- Main menu (F12 there opens the asset explorer). The boot videos play
-    -- on top of it; any key skips one. MEGARACE_SKIP_INTRO=1 skips them all.
+    -- on top of it, as in RACEPRG.EXE (0x4DFB..0x4E85): the publisher and
+    -- developer logos, the show's intro, the channel ident and Lance on the
+    -- round ahead. ENTER skips one, ESC skips the rest.
+    -- MEGARACE_SKIP_INTRO=1 skips them all.
     local menu = require("scenes.menu")
     menu.report = report
     scenes.switch(menu)
     if not os.getenv("MEGARACE_SKIP_INTRO") then
-        playSequence(manifest.archive.intro)
+        menu:pre_round("boot", { "MINDSCAP.HNM", "CRYO.HNM" })
     end
 end
 

@@ -37,8 +37,12 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 
 - Arrows move between the eight car monitors and the three buttons; Enter on
   a monitor picks that car and plays its showcase video.
-- Green starts the next round of the championship (16 tracks in the game's
-  order, a channel ident first, then the race). Win a round to move on.
+- Green starts the next round. The career is the original's: Lance Boyle
+  introduces each round and reacts to how you did; fail to qualify (or get
+  wrecked) and it's game over and the Hall of Fame. Season 1 is Novice,
+  season 2 Hardened; clean rounds earn the bonus tracks HOLD and TOKY;
+  finish season 2 for the finale, after which you can pick any track.
+  In a run of clips Enter skips one, Esc skips the rest.
 - Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
   `RACEPRG.EXE`). Blue (or Esc) opens the **options**: Novice/Hardened, save,
   load, quit.
@@ -120,7 +124,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |
 | Rivals one at a time with the original AI, opponents per round, laps, qualifying, scoring | Done (from RACEPRG.EXE) |
-| Post-race videos, bonus tracks, subtitles | To do |
+| Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
+| Subtitles, attract mode, Hall of Fame name entry | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 

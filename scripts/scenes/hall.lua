@@ -7,8 +7,8 @@ local scenes = require("core.scenes")
 local font   = require("ui.font")
 local S = {}
 
-function S:enter(state, highlight)
-    self.state, self.highlight = state, highlight
+function S:enter(state, highlight, on_done)
+    self.state, self.highlight, self.on_done = state, highlight, on_done
     self.bg = assert(hnm.open("HALL1.HNM"))
     self.bg:decode(0)
     self.bg:apply_palette()
@@ -18,7 +18,11 @@ end
 
 function S:update(dt)
     self.t = self.t + dt
-    if input.pressed("Return") or input.pressed("Escape") or input.pressed("Space") then scenes.pop() end
+    if input.pressed("Return") or input.pressed("Escape") or input.pressed("Space") then
+        local cb = self.on_done
+        scenes.pop()
+        if cb then cb() end
+    end
 end
 
 function S:draw()

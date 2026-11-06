@@ -3,6 +3,11 @@
 -- CD player); silent ones (the track videos) run at the original 12.5 fps.
 --
 --   scenes.push(require("scenes.player"), "INTRO.HNM", { on_done = fn, loop = false })
+--
+-- ENTER/SPACE skip the video; ESC skips it and tells on_done("all"), which a
+-- sequence takes as "skip the rest" (RACEPRG 0x5C98: one key ends the clip,
+-- the other the whole run of clips). opts.mute plays the picture only (the
+-- credits roll over the music).
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
@@ -42,7 +47,7 @@ function S:decodeAhead()
         local i = self.decoded + 1
         local info = self.v:decode(i)
         self.bytesBefore[i] = self.queuedBytes
-        if info.sound_bytes > 0 and audio.available() then
+        if info.sound_bytes > 0 and audio.available() and not self.opts.mute then
             -- With an audio device, the sound is the clock. Without one
             -- (no sound card, or it failed to open), fall back to the timer
             -- instead of waiting for audio that will never play.
@@ -76,16 +81,15 @@ function S:present(target)
     self.shown = target
 end
 
-function S:finish()
+function S:finish(how)
     local cb = self.opts.on_done
     scenes.pop()
-    if cb then cb() end
+    if cb then cb(how) end
 end
 
 function S:update(dt)
-    if input.pressed("Escape") or input.pressed("Return") or input.pressed("Space") then
-        return self:finish()
-    end
+    if input.pressed("Escape") then return self:finish("all") end
+    if input.pressed("Return") or input.pressed("Space") then return self:finish() end
     if input.pressed("P") then self.paused = not self.paused end
     if self.paused then return end
 

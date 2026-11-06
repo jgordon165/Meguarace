@@ -43,7 +43,9 @@ function S:act(a)
         for k, v in pairs(loaded) do st[k] = v end
         self.note = "LOADED"
     elseif a == "input_na" then self.note = "KEYBOARD ONLY FOR NOW"
-    elseif a == "quit" then sys.quit()
+    elseif a == "quit" then
+        scenes.pop()
+        require("scenes.menu"):farewell()     -- Lance's farewell and the credits (0x5113)
     end
 end
 

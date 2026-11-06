@@ -5,6 +5,9 @@
 -- plays its showcase video. Buttons: green = race the next round, yellow =
 -- Hall of Fame, blue = options.
 --
+-- The career between races (Lance Boyle's clips, game over, the second
+-- season, bonus tracks, the finale) is game/career.lua, from RACEPRG.EXE.
+--
 -- Overlay positions were found by matching PANEL2's images against the
 -- PANEL1 picture (bars and buttons match pixel for pixel; the car
 -- thumbnails sit on the monitor screens next to their bars).
@@ -13,6 +16,8 @@ local scenes = require("core.scenes")
 local data   = require("game.data")
 local save   = require("game.save")
 local music  = require("game.music")
+local career = require("game.career")
+local sequence = require("core.sequence")
 local S = {}
 
 local THUMB = { { 47, 3 }, { 222, 3 }, { 26, 33 }, { 237, 33 }, { 20, 65 }, { 242, 65 }, { 27, 99 }, { 230, 99 } }
@@ -35,8 +40,21 @@ local function move(f, dx, dy)
     return 8 + math.max(1, math.min(3, b + dx))
 end
 
+-- Career fields for saves from before the career existed.
+local function ensure_career(st)
+    for k, v in pairs(career.new(st.level)) do if st[k] == nil then st[k] = v end end
+    if st.round > #data.TRACKS then st.round = 1 end
+end
+
+local function files(ids)
+    local out = {}
+    for _, id in ipairs(ids) do out[#out + 1] = career.file(id) end
+    return out
+end
+
 function S:enter()
     self.state = self.state or save.load()
+    ensure_career(self.state)
     if not self.state.hall then
         self.state.hall = data.default_hall()
         save.store(self.state)
@@ -56,58 +74,91 @@ function S:restore()
     self.panel:apply_palette()
 end
 
+-- The clips before a round, then back to the menu. how: "boot" (after the
+-- logos: the show's intro first), "new" (a new career) or "moved_on".
+function S:pre_round(how, lead)
+    local ids = career.pre_round(self.state, how == "boot" and "new" or how)
+    local list = lead and { table.unpack(lead) } or {}
+    for _, f in ipairs(files(ids)) do list[#list + 1] = f end
+    sequence.play(list)
+end
+
 function S:start_round()
+    local st = self.state
+    if st.completed then                                 -- free choice after the finale
+        scenes.push(require("scenes.trackpick"), st.round, function(r)
+            st.round = r
+            self:launch()
+        end)
+        return
+    end
+    self:launch()
+end
+
+function S:launch()
     local st = self.state
     local round = data.TRACKS[st.round]
     local car = data.MENU_CARS[st.car].code
-    -- Rivals: the gang for this round, skipping your own model.
+    -- Rival model: the gang for this round, skipping your own model.
     local order = {}
     for _, c in ipairs(data.RIVAL_ORDER) do if c ~= car then order[#order + 1] = c end end
     local rival = order[(st.round - 1) % #order + 1]
-    local idents = { "VWBT.HNM", "VWBT2.HNM", "VWBT3.HNM", "VWBT4.HNM", "VWBT5.HNM" }
-    local ident = idents[(st.round - 1) % #idents + 1]
     local me = self
-    scenes.push(require("scenes.player"), ident, { on_done = function()
+    sequence.play(files(career.before_race(st)), function()
         scenes.push(require("scenes.race"), round.video, {
             car = car, rival = rival, level = st.level, total = st.total, round = st.round,
             title = data.track_names()[st.round],
             on_done = function(result) me:race_done(result) end,
         })
-    end })
+    end)
 end
 
--- Championship (RACEPRG 0x4F8B): the race's points add to your score; a
--- wreck on the last track scores nothing (0x4F6F). You move on to the next
--- track if you qualified: every opponent destroyed, or the laps run out
--- with at most one left and 1200 points (race/rival.lua).
+local function hall_entry(st, e)
+    local names = data.track_names()
+    return save.add_score(st, { name = "ENFORCER", score = e.score,
+        track = names[e.round] or "", level = e.level == "HARDENED" and "HARD" or "EASY" })
+end
+
+-- After a race (RACEPRG 0x4F2F..0x52CB): Lance's clips for how it went,
+-- then the next round, game over or the finale.
 function S:race_done(result)
     local st = self.state
-    local gained = result.points or 0
-    if result.outcome == "wrecked" and st.round == #data.TRACKS then gained = 0 end
-    st.total = st.total + gained
-    local names = data.track_names()
-    local msg
-    if result.qualified then
-        if st.round == #data.TRACKS then
-            local rank = save.add_score(st, { name = "ENFORCER", score = st.total,
-                track = names[st.round], level = st.level == "HARDENED" and "HARD" or "EASY" })
-            st.round, st.total = 1, 0
-            save.store(st)
-            scenes.push(require("scenes.player"), "FIN.HNM", { on_done = function()
-                scenes.push(require("scenes.hall"), st, rank)
-            end })
-            return
-        end
-        st.round = st.round + 1
-        msg = string.format("QUALIFIED  +%d", gained)
-    elseif result.outcome == "wrecked" then
-        msg = string.format("DESTROYED  +%d  TRY AGAIN", gained)
-    else
-        msg = string.format("%d OPPONENTS LEFT  +%d  TRY AGAIN", result.left or 0, gained)
-    end
+    local out = career.after_race(st, result)
     save.store(st)
-    self.note, self.note_t = msg, 4
-    self:restore()
+    local me = self
+    sequence.play(files(out.videos), function()
+        if out.action == "next" then
+            me:pre_round("moved_on")
+        elseif out.action == "gameover" then
+            local rank = hall_entry(st, career.gameover(st))
+            save.store(st)
+            scenes.push(require("scenes.hall"), st, rank, function() me:pre_round("new") end)
+        else                                             -- the game completed
+            local rank = hall_entry(st, { score = st.total, round = st.round, level = st.level })
+            career.after_complete(st)
+            save.store(st)
+            scenes.push(require("scenes.hall"), st, rank, function()
+                sequence.play(files(career.complete(st, {})), function() me:credits(function() me:pre_round("new") end) end)
+            end)
+        end
+    end)
+end
+
+-- The credits roll over SkyHolder, which then fades (RACEPRG 0x5198).
+function S:credits(done)
+    music.play(music.AFTER_RACE)
+    sequence.play({ career.file(0x70) }, function()
+        music.stop(true)
+        if done then done() end
+    end, { mute = true })
+end
+
+-- Quit from the options (RACEPRG 0x5113): Lance's farewell, the credits, exit.
+function S:farewell()
+    local me = self
+    sequence.play(files(career.farewell(self.state)), function()
+        me:credits(function() sys.quit() end)
+    end)
 end
 
 function S:update(dt)
@@ -177,7 +228,8 @@ function S:draw()
     -- Round and score on the globe's strip.
     gfx.setcolor(C_FOCUS + 1, 235, 235, 240)
     local names = data.track_names()
-    local line = string.format("ROUND %d  %s  SCORE %d", self.state.round, names[self.state.round], self.state.total)
+    local st = self.state
+    local line = string.format("%s  ROUND %d  %s  SCORE %d", st.level, st.round, names[st.round] or "", st.total)
     gfx.fill(160 - #line * 2 - 3, 136, #line * 4 + 6, 8, 0)
     gfx.text(160 - #line * 2, 137, line, C_FOCUS + 1)
     if self.note then
