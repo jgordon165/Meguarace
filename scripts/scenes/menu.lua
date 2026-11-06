@@ -69,23 +69,25 @@ function S:start_round()
     local me = self
     scenes.push(require("scenes.player"), ident, { on_done = function()
         scenes.push(require("scenes.race"), round.video, {
-            car = car, rival = rival, level = st.level, total = st.total,
+            car = car, rival = rival, level = st.level, total = st.total, round = st.round,
             title = data.track_names()[st.round],
             on_done = function(result) me:race_done(result) end,
         })
     end })
 end
 
--- Championship scoring (this port's own; the original formula isn't read yet):
--- 1st 3000, 2nd 2000, 3rd 1000, 4th 0, plus 10 per tile point. Winning a
--- round moves you to the next track.
+-- Championship (RACEPRG 0x4F8B): the race's points add to your score; a
+-- wreck on the last track scores nothing (0x4F6F). You move on to the next
+-- track if you qualified: every opponent destroyed, or the laps run out
+-- with at most one left and 1200 points (race/rival.lua).
 function S:race_done(result)
     local st = self.state
-    local gained = math.max(0, (4 - result.place)) * 1000 + result.points * 10
+    local gained = result.points or 0
+    if result.outcome == "wrecked" and st.round == #data.TRACKS then gained = 0 end
     st.total = st.total + gained
     local names = data.track_names()
     local msg
-    if result.place == 1 then
+    if result.qualified then
         if st.round == #data.TRACKS then
             local rank = save.add_score(st, { name = "ENFORCER", score = st.total,
                 track = names[st.round], level = st.level == "HARDENED" and "HARD" or "EASY" })
@@ -97,9 +99,11 @@ function S:race_done(result)
             return
         end
         st.round = st.round + 1
-        msg = string.format("ROUND WON  +%d", gained)
+        msg = string.format("QUALIFIED  +%d", gained)
+    elseif result.outcome == "wrecked" then
+        msg = string.format("DESTROYED  +%d  TRY AGAIN", gained)
     else
-        msg = string.format("FINISHED %d  +%d  TRY AGAIN", result.place, gained)
+        msg = string.format("%d OPPONENTS LEFT  +%d  TRY AGAIN", result.left or 0, gained)
     end
     save.store(st)
     self.note, self.note_t = msg, 4

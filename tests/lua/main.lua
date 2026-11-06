@@ -206,7 +206,7 @@ end)
 test("rules: rival shots, armour, THRILL, tiles 6 and 9", function()
     local rules = require("race.rules")
     local s = rules.new("RA")                       -- armour 70, timer 800
-    check(rules.rival_fire(s) and s.energy == 199, "rival fires; costs you 1 energy")
+    check(rules.rival_fire(s) and s.energy == 399, "rival fires; costs you 1 energy (of 400)")
     check(not rules.rival_fire(s), "one rival shot at a time")
     local res
     for _ = 1, 10 do res = res or rules.rival_shot_step(s) end
@@ -264,11 +264,48 @@ test("hud: gauge frames, radar, per-car tables", function()
     check(v.speed == 0 and v.energy == 0 and v.armour == 0, "tile 9: every gauge reads 0")
 end)
 
-test("rules: rivals gain or drop back by speed difference", function()
-    local rules = require("race.rules")
-    check(rules.rival_relative(12.5, 180, 150) < 0, "faster player: rival drops back")
-    check(rules.rival_relative(12.5, 100, 150) > 0, "slower player: rival pulls away")
-    check(rules.rival_relative(12.5, 150, 150) == 0, "same speed: no change")
+test("rival: kinds, movement, AI states, qualifying", function()
+    local V = require("race.rival")
+    check(V.kind_for(1) == "centre" and V.kind_for(2) == "weaver" and V.kind_for(5) == "rusher", "kind by opponents left")
+    check(V.OPPONENTS[1] == 4 and V.OPPONENTS[5] == 6 and V.OPPONENTS[16] == 7, "opponents per round")
+    -- movement table (0x42C6)
+    local a, b = V.step_rate(5); check(a == 0, "under 10 apart: no movement")
+    a, b = V.step_rate(-15); check(a == 1 and b == 10, "10..19: an eighth every 10 ticks")
+    a, b = V.step_rate(45); check(a == 1 and b == 2, "40..59: every 2 ticks")
+    a, b = V.step_rate(100); check(a == 2 and b == 1, "60+: 2 a tick")
+    a, b = V.step_rate(200); check(a == 8 and b == 1, "180+: a section a tick")
+    local r = V.new(5, 40, 0)
+    check(r.kind == "rusher" and r.state == "rush" and r.speed == 230, "a rusher starts at 230")
+    for _ = 1, 20 do V.tick(r, 180) end
+    check(r.pos == 40 + 10, "50 faster: an eighth every 2 ticks")
+    -- rusher: rush until 21 sections ahead, then keep near you
+    V.decide(r, { player_speed = 180 }); check(r.state == "rush", "still rushing at 50/8")
+    r.pos = 170; V.decide(r, { player_speed = 180 }); check(r.state == "chase", "21 sections: chase")
+    V.decide(r, { player_speed = 180 }); check(r.speed == 80, "far ahead: 100 slower than you")
+    r.pos = 20; V.decide(r, { player_speed = 180 }); check(r.speed == 150, "2.5 sections: 30 slower")
+    V.decide(r, { player_speed = 90 }); check(r.speed == 140, "you're slow: 50 faster")
+    r.pos = -1; V.decide(r, { player_speed = 180 }); check(r.state == "behind", "passed: behind")
+    check(V.decide(r, { player_speed = 180, lined_up = true, shot_free = true }) and r.speed == 160, "just behind, lined up: fires, at 160")
+    r.pos = -5
+    check(not V.decide(r, { player_speed = 180, lined_up = true, shot_free = true }), "more than 4/8 behind: no shot")
+    r.pos = -3
+    check(not V.decide(r, { player_speed = 180, lined_up = false, shot_free = true }), "not lined up: no shot")
+    -- weaver
+    local w = V.new(2, 100, 180)
+    V.decide(w, { player_speed = 180 }); check(w.state == "chase", "weaver chases")
+    w.pos = 39; V.decide(w, { player_speed = 180 }); check(w.state == "close" and w.steer == -1, "within 5 sections: close, steering left")
+    w.pos = -5; check(V.decide(w, { player_speed = 180, lined_up = true, shot_free = true }), "fires from -5/8")
+    w.pos = -11; check(not V.decide(w, { player_speed = 180, lined_up = true, shot_free = true }), "not from -11/8")
+    w.pos = 41; V.decide(w, { player_speed = 180 }); check(w.state == "chase", "back to chasing at 5 sections")
+    -- left behind
+    local l = V.new(2, -60, 100)
+    local res
+    for _ = 1, 400 do res = res or V.tick(l, 100) end
+    check(res == "lost", "400 ticks 6+ sections behind: out")
+    check(V.decision_interval("HARDENED") == 50 and V.decision_interval("NOVICE") == 100, "AI every 100 ticks, 50 on HARDENED")
+    check(V.qualifies("won", 0, 0), "all destroyed: qualified")
+    check(V.qualifies("laps", 1, 1200) and not V.qualifies("laps", 1, 1199) and not V.qualifies("laps", 2, 5000), "laps: at most 1 left and 1200 points")
+    check(not V.qualifies("wrecked", 0, 9999), "wrecked: not qualified")
 end)
 
 test("voc: decodes a type-1 block", function()

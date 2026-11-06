@@ -2,9 +2,14 @@
 --   UP accelerate   DOWN brake   LEFT/RIGHT steer   SPACE/CTRL fire   F1 debug line   ESC quit
 --
 -- From RACEPRG.EXE: the video advances at a fixed rate whenever you're
--- moving; your speed decides how you gain on the rivals. The lane is the
+-- moving; your speed decides how you gain on the rival. The lane is the
 -- screen band under your car, and the tile in it takes effect as you reach
--- each section. The race is the length of the race video (three laps).
+-- each section.
+--
+-- The opponents come one at a time (race/rival.lua): destroy the one on the
+-- road and the next arrives. Destroy them all to win the round; when the
+-- laps run out (3, 2 on HOLD) you qualify with at most one left and 1200
+-- points.
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
@@ -12,6 +17,7 @@ local track  = require("formats.track")
 local cars   = require("formats.cars")
 local voc    = require("formats.voc")
 local rules  = require("race.rules")
+local rivalai = require("race.rival")
 local hud    = require("race.hud")
 local font   = require("ui.rawfont")
 local music  = require("game.music")
@@ -22,7 +28,6 @@ local PLAYER_AHEAD = 1      -- sections between the camera and your car
 local STEER = 140           -- screen pixels per second
 local COUNTDOWN = 2.5       -- seconds of "GET READY"
 local FX_FPS = 12.5         -- shot and explosion frames per second (one per video frame)
-local SHOT_RANGE = 12       -- sections ahead a shot can reach (this port's value)
 local GUN_SPREAD = { { 0 }, { -6, 6 }, { -6, 0, 6 } }   -- bolts per weapon (RACEPRG 0x2EF3)
 
 -- Colours 112..127 belong to the effects: FUMEE and EXPLOSE draw with 112..126
@@ -43,14 +48,17 @@ function S:enter(name, opts)
     self.fx = spr.open("FUMEE")              -- muzzle flash, bolt, impact
     self.boom = spr.open("EXPLOSE")          -- destroyed rival
     self.fx_t = 0
-    -- Rival speeds are this port's placeholders; HARDENED makes them quicker.
-    local scale = (opts.level == "HARDENED") and 1.06 or 0.94
-    self.rivals = {}
-    for k, def in ipairs({ { 6, 0.25, 150 }, { 14, 0.75, 162 }, { 26, 0.5, 172 } }) do
-        self.rivals[k] = { ahead = def[1], u = def[2], speed = def[3] * scale, bump = 0, damage = 0 }
-    end
     self.title = opts.title
-    self.last_round = name == "HOLD"          -- no opponents digit on the last track
+    self.hold = name == "HOLD"                -- the last track: parked rivals, no AI
+    self.last_round = self.hold               -- no opponents digit there
+    self.level = opts.level
+    self.laps = self.hold and 2 or 3          -- [0x68C5]
+    -- Opponents to beat (DS:0x846; HOLD draws 2..8).
+    local round = opts.round or 1
+    self.left = self.hold and math.random(2, 8) or (rivalai.OPPONENTS[round] or 4)
+    self.rivals = {}
+    self:spawn(rivalai.new(self.left, self.hold and rivalai.NEXT_AHEAD or rivalai.START_AHEAD, 0))
+    self.next_decision = 0
     self.total = opts.total or 0              -- championship score before this race
     self.debug = false
     self.on_done = opts.on_done
@@ -65,10 +73,12 @@ end
 
 function S:leave() ui.install(); audio.stop_all(); music.stop(true) end
 
-function S:place()
-    local p = 1
-    for _, r in ipairs(self.rivals) do if not r.out and r.ahead > 0 then p = p + 1 end end
-    return p
+-- Puts rival r on the road (the only one: they come one at a time).
+function S:spawn(r)
+    r.bump = 0
+    r.ahead = PLAYER_AHEAD + r.pos / 8       -- sections ahead of the camera, for drawing
+    self.rivals = { r }
+    self.current = r
 end
 
 function S:update(dt)
@@ -77,7 +87,7 @@ function S:update(dt)
     self.clock = self.clock + dt
     if self.finished then
         if input.pressed("Return") or input.pressed("Space") then
-            local cb, result = self.on_done, { place = self.result, points = self.rules.points }
+            local cb, result = self.on_done, self.result
             scenes.pop()
             if cb then cb(result) end
         end
@@ -97,6 +107,7 @@ function S:update(dt)
         self.ticks = self.ticks - 1
         local _, drift = rules.step(s, { accel = alive and input.down("Up"), brake = not alive or input.down("Down") })
         self.carx = self.carx + drift
+        self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
         local stepv = s.speed // 40 + 1
@@ -109,9 +120,11 @@ function S:update(dt)
     -- Scenery: fixed rate while moving.
     local moving = s.speed > 0
     if moving then self.pos = self.pos + TRACK_FPS * dt end
-    if self.pos >= self.T.frames - 1 then
-        self.pos = self.T.frames - 1
-        self:finish(false)
+    local last = self.T.frames - 1
+    if self.T.lap > 0 then last = math.min(last, self.laps * self.T.lap) end
+    if self.pos >= last then
+        self.pos = last
+        self:finish("laps")
         return
     end
 
@@ -130,45 +143,61 @@ function S:update(dt)
     if alive and (input.pressed("Space") or input.pressed("Left Ctrl") or input.pressed("Right Ctrl")) then
         if rules.fire(s) then voc.play("LASER") end
     end
-    -- A rival 3..10 sections behind you, lined up with your car, fires.
-    for _, r in ipairs(self.rivals) do
-        if not r.destroyed and not r.out and self:lined_up(r, rules.RIVAL_FIRE_BEHIND) then
-            if rules.rival_fire(s) then
-                s.rshot.from = r
-                voc.play("LASER", 0.5)
-            end
-        end
-    end
     self.fx_t = self.fx_t + dt
     while self.fx_t >= 1 / FX_FPS do
         self.fx_t = self.fx_t - 1 / FX_FPS
         self:effects_frame()
     end
 
-    -- Rivals gain or drop back by speed difference; bumping costs speed.
-    for _, r in ipairs(self.rivals) do
-        r.ahead = r.ahead + rules.rival_relative(TRACK_FPS, s.speed, r.speed) * dt
+    -- Bumping into the rival costs speed and pushes it ahead (the port's own
+    -- collision; the game's is around 0x3BA5..0x3C71).
+    local r = self.current
+    if r then
         r.bump = math.max(0, r.bump - dt)
-        if alive and not r.destroyed and r.ahead > 0.5 and r.ahead < 2.5 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
+        if alive and not r.destroyed and r.pos > -4 and r.pos < 12 and r.bump == 0 and r.x and math.abs(r.x - self.carx) < 45 then
             s.speed = math.max(0, s.speed - 40)
             rules.bump(s)
-            r.ahead = r.ahead + 1.5
+            r.pos = r.pos + 12
             r.bump = 0.6
             voc.play("CHOC4")
         end
+        r.ahead = PLAYER_AHEAD + r.pos / 8
     end
 
     self.spin_t = self.spin_t + dt * (s.speed / 60)
     if self.spin_t > 0.06 then self.spin_t = 0; self.spin = 1 - self.spin end
 end
 
--- Is rival r `behind` = { min, max } sections behind your car and lined up
--- with it (its place across the road inside your car's width)?
-function S:lined_up(r, behind)
-    local rel = r.ahead - PLAYER_AHEAD
-    if rel > -behind[1] or rel < -behind[2] then return false end
-    if not self.carbox or not r.x_lane then return false end
+-- Is rival r lined up with your car (its place across the road inside your
+-- car's width, [0xCC4]..[0xCC6])?
+function S:lined_up(r)
+    if not r or not self.carbox or not r.x_lane then return false end
     return r.x_lane >= self.carbox[1] and r.x_lane <= self.carbox[1] + self.carbox[3]
+end
+
+-- One game tick for the rival: movement, being left behind, and every 100
+-- ticks (50 on HARDENED) an AI decision while you're moving (RACEPRG 0x3467).
+function S:rival_tick()
+    local s, r = self.rules, self.current
+    if not r or r.out then return end
+    if self.hold and not r.destroyed then r.speed = 0 end   -- HOLD's rivals are parked (0x4319)
+    local res = rivalai.tick(r, s.speed)
+    if not r.destroyed then
+        if res == "lost" or (self.hold and r.pos <= rivalai.LOST_BEHIND) then
+            self:destroy(r)                                 -- left behind (0x3E7F)
+            return
+        end
+    end
+    if self.hold or r.destroyed or s.speed <= 0 or s.tick < self.next_decision then return end
+    self.next_decision = s.tick + rivalai.decision_interval(self.level)
+    local fire = rivalai.decide(r, {
+        player_speed = s.speed, spinning = s.slide ~= nil,
+        lined_up = self:lined_up(r), x = r.x_lane, shot_free = s.rshot == nil,
+    })
+    if fire and rules.rival_fire(s) then
+        s.rshot.from = r
+        voc.play("LASER", 0.5)
+    end
 end
 
 -- Where the shot is this frame: muzzle and centre bolt (nil before the
@@ -196,7 +225,8 @@ function S:effects_frame()
         local _, _, bx = self:shot_position()
         if bx then
             for _, r in ipairs(self.rivals) do
-                if r.box and not r.destroyed and r.ahead <= SHOT_RANGE
+                local _, _, _, range = rules.shot_aim(self.view)
+                if r.box and not r.destroyed and r.pos >= 0 and r.pos <= range
                    and bx >= r.box[1] and bx <= r.box[1] + r.box[3] then
                     s.shot_target = r
                     voc.play("CHOCTIR")
@@ -212,19 +242,24 @@ function S:effects_frame()
         if res == "hit" then voc.play("CHOC4")
         elseif res == "destroyed" then self:wreck() end
     end
-    if s.rshot and not s.rshot.hit and self:lined_up(s.rshot.from, rules.RIVAL_HIT_BEHIND) then
+    local from = s.rshot and s.rshot.from
+    if from and not s.rshot.hit and not from.destroyed and self:lined_up(from)
+       and from.pos <= -rules.RIVAL_HIT_BEHIND[1] and from.pos >= -rules.RIVAL_HIT_BEHIND[2] then
         rules.rival_hit(s)
         voc.play("CHOCTIR")
     end
     if self.wreck_frame then
         self.wreck_frame = self.wreck_frame + 1
-        if self.wreck_frame >= rules.EXPLOSION_FRAMES then self:finish(true) end
+        if self.wreck_frame >= rules.EXPLOSION_FRAMES then self:finish("wrecked") end
     end
     for _, r in ipairs(self.rivals) do
         if r.boom and not r.out then
             r.boom = r.boom + 1
             if r.box then s.points = s.points + rules.EXPLOSION_POINTS end
-            if r.boom >= rules.EXPLOSION_FRAMES then r.out = true end
+            if r.boom >= rules.EXPLOSION_FRAMES then
+                r.out = true
+                self:next_rival()
+            end
         end
     end
 end
@@ -237,13 +272,27 @@ function S:wreck()
     voc.play("EXPLOD2")
 end
 
-function S:finish(wrecked)
+-- After a rival's explosion the next one comes in, 28 sections ahead at
+-- your speed; when none are left the round is won (RACEPRG 0x3F89).
+function S:next_rival()
+    self.left = self.left - 1
+    if self.left <= 0 then
+        self.left = 0
+        self:finish("won")
+        return
+    end
+    self:spawn(rivalai.new(self.left, rivalai.NEXT_AHEAD, self.rules.speed))
+    self.next_decision = self.rules.tick
+end
+
+-- outcome: "won", "laps" or "wrecked".
+function S:finish(outcome)
+    if self.finished then return end
     self.finished = true
-    self.wrecked = wrecked
-    self.entrants = 1
-    for _, r in ipairs(self.rivals) do if not r.out then self.entrants = self.entrants + 1 end end
-    self.result = wrecked and self.entrants or self:place()
-    voc.play(self.result == 1 and "BONUS11" or "MALUS2")
+    local s = self.rules
+    local qualified = rivalai.qualifies(outcome, self.left, s.points)
+    self.result = { outcome = outcome, left = self.left, points = s.points, qualified = qualified }
+    voc.play(qualified and "BONUS11" or "MALUS2")
 end
 
 -- A rival at full damage blows up and falls back (RACEPRG 0x3E98: EXPLOD2,
@@ -324,15 +373,9 @@ function S:draw_gauges()
         return
     end
     if self.radar_quiet_until and s.tick < self.radar_quiet_until then return end
-    local near, best
-    for _, r in ipairs(self.rivals) do
-        if not r.out and not r.destroyed then
-            local d = math.abs(r.ahead - PLAYER_AHEAD)
-            if not best or d < best then near, best = r, d end
-        end
-    end
-    if near then
-        local f = rd[3] + 3 + hud.blip(near.ahead - PLAYER_AHEAD)
+    local near = self.current
+    if near and not near.out and not near.destroyed then
+        local f = rd[3] + 3 + hud.blip(near.pos // 8)
         local bw = set:size(f) or 0
         draw_top(set, f, hud.blip_x(rd, near.u, bw), y)
     end
@@ -342,13 +385,11 @@ end
 -- left, the score in six digits at the top right.
 function S:draw_status(lap)
     font.draw(2, 6, "LAPS:", C_TEXT)
-    font.draw(50, 6, tostring(math.max(0, 3 - (lap - 1))), C_TEXT)
+    font.draw(50, 6, tostring(math.max(0, self.laps - (lap - 1))), C_TEXT)
     font.draw(250, 6, string.format("%06d", math.min(999999, self.total + self.rules.points)), C_TEXT)
     local at = hud.OPPONENTS_AT[self.car.code]
     if at and at[1] ~= 0 and not self.last_round then
-        local left = 0
-        for _, r in ipairs(self.rivals) do if not r.out then left = left + 1 end end
-        font.draw_small(at[1], at[2] + hud.DASH_Y, tostring(math.min(9, left)), C_TEXT)
+        font.draw_small(at[1], at[2] + hud.DASH_Y, tostring(math.min(9, self.left)), C_TEXT)
     end
 end
 
@@ -481,15 +522,14 @@ function S:draw()
     self:draw_scanner(base)
     self:draw_gauges()
 
-    local lap = T.lap > 0 and math.min(3, f // T.lap + 1) or 1
+    local lap = T.lap > 0 and math.min(self.laps, f // T.lap + 1) or 1
     self:draw_status(lap)
     if self.debug then
-        local left = 0
-        for _, r in ipairs(self.rivals) do if not r.out then left = left + 1 end end
+        local r = self.current
         gfx.fill(0, 20, 320, 8, 0)
-        gfx.text(2, 21, string.format("POS %d/%d SPD %d EN %d AR %d WPN %s THRILL %d",
-            self:place(), left + 1, s.speed // 10, s.energy, s.armour,
-            s.weapon == 0 and "-" or (s.weapon .. (s.super and "*" or "")), s.thrill), C_TEXT)
+        gfx.text(2, 21, string.format("OPP %d RIV %s %+d/8 V%d SPD %d EN %d AR %d PTS %d THR %d",
+            self.left, r and r.state or "-", r and r.pos or 0, r and r.speed or 0,
+            s.speed // 10, s.energy, s.armour, s.points, s.thrill), C_TEXT)
     end
 
     if s.message and s.tick < s.message_until then
@@ -507,12 +547,14 @@ function S:draw()
         gfx.text(156, 74, "GO", C_GOOD)
     end
     if self.finished then
-        local t1 = self.wrecked and "DESTROYED" or "END OF RACE"
-        local t2 = string.format("YOU FINISHED %d OF %d", self.result, self.entrants)
+        local res = self.result
+        local t1 = ({ won = "ALL OPPONENTS DESTROYED", laps = "END OF RACE", wrecked = "DESTROYED" })[res.outcome]
+        local t2 = res.qualified and "QUALIFIED" or
+            (res.outcome == "laps" and string.format("%d OPPONENTS LEFT - NOT QUALIFIED", res.left) or "NOT QUALIFIED")
         local t3 = "PRESS ENTER"
-        gfx.fill(90, 64, 140, 38, 0)
+        gfx.fill(60, 64, 200, 38, 0)
         gfx.text(160 - #t1 * 2, 68, t1, C_TEXT)
-        gfx.text(160 - #t2 * 2, 80, t2, self.result == 1 and C_GOOD or C_WARN)
+        gfx.text(160 - #t2 * 2, 80, t2, res.qualified and C_GOOD or C_WARN)
         gfx.text(160 - #t3 * 2, 92, t3, C_TEXT)
     end
 end
