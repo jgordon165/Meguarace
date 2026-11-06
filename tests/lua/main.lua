@@ -125,9 +125,24 @@ test("rules: tiles", function()
     check(rules.apply_tile(s, 17) and s.energy == 220, "second 17: +70")
     check(rules.apply_tile(s, 1) == "MALUS9" and s.energy == 150, "1: drain 70 (last size), then 50")
     rules.apply_tile(s, 18); rules.apply_tile(s, 18)
-    check(s.points == 20, "18: points +10")
+    check(s.points == 10 and s.points_due == 10, "18: +10, the first paid at once by the second")
+    for _ = 1, 10 do rules.step(s, {}) end
+    check(s.points == 20 and not s.points_up, "the rest counts in one a tick")
     rules.apply_tile(s, 2)
-    check(s.points == 10, "2: points -10")
+    for _ = 1, 5 do rules.step(s, {}) end
+    check(s.points == 15, "2: -10, one a tick")
+    for _ = 1, 10 do rules.step(s, {}) end
+    check(s.points == 10 and not s.points_down, "and stops after 10")
+    local q = rules.new("RA")
+    q.points = 14
+    rules.apply_tile(q, 2)
+    for _ = 1, 20 do rules.step(q, {}) end
+    check(q.points == 9 and q.points_down, "counting out stops below 10")
+    q.points = 30
+    rules.apply_tile(q, 18)
+    check(q.points == 35, "a payment first adds what was still due (5 left from the charge)")
+    rules.apply_tile(q, 2)
+    check(q.points == 25, "a charge first takes off what was still due, even a payment's")
     rules.apply_tile(s, 21)
     check(s.weapon == 3, "21: weapon 3")
     check(rules.apply_tile(s, 5) == "PLUARME" and s.weapon == 0 and s.energy == 0, "5: weapon and energy lost")
@@ -189,7 +204,9 @@ test("rules: fire cost, shot frames, hits", function()
         check(not rules.hit(s, rival), "hit " .. i .. " doesn't destroy")
         check(not rules.hit(s, rival), "one hit per shot")
     end
-    check(rival.damage == 80 and s.points == 20, "20 damage and 5 points per hit")
+    check(rival.damage == 80 and s.points == 15 and s.points_due == 5, "20 damage and 5 points per hit")
+    for _ = 1, 5 do rules.step(s, {}) end
+    check(s.points == 20, "the last hit's points count in")
     rules.fire(s)
     check(rules.hit(s, rival) and rival.destroyed, "fifth hit destroys (health 100)")
     -- charged shot: destroys on the impact's last frame
@@ -409,11 +426,94 @@ test("attract mode: the demo driver's firing and steering", function()
     fake.current.pos = 15; fake.current.x_lane = 230
     fake:autopilot_fire()
     check(fake.rules.shot == nil, "70 px across: no")
+    fake.curv, fake.carx = 0, 100
     local l, r = fake:autopilot_steer()
-    check(not l and r, "steers toward a near rival")
-    fake.current.pos = 100
-    l, r = fake:autopilot_steer()
-    check(not l and not r, "otherwise holds the middle")
+    check(not l and r, "on the straight, left of 130: steers right")
+    fake.carx = 200; l, r = fake:autopilot_steer()
+    check(l and not r, "right of 190: steers left")
+    fake.carx = 160; l, r = fake:autopilot_steer()
+    check(not l and not r, "130..190: holds")
+    fake.curv, fake.carx = 15, 100; l, r = fake:autopilot_steer()
+    check(not l and not r, "on a curve: no steering")
+end)
+
+test("collisions: kinds and responses", function()
+    local K, rules = require("race.collision"), require("race.rules")
+    local me = { 140, 180 }
+    check(K.classify(3, true, { 150, 190 }, me) == "ahead", "moving, 3/8 ahead, overlapping: you ran into it")
+    check(K.classify(-2, true, { 150, 190 }, me) == "behind", "moving, 2/8 behind: it ran into you")
+    check(K.classify(3, false, { 120, 160 }, me) == "left", "not moving, its right edge inside you: on your left")
+    check(K.classify(3, false, { 170, 210 }, me) == "right", "on your right")
+    check(K.classify(9, true, { 150, 190 }, me) == nil and K.classify(-5, true, { 150, 190 }, me) == nil, "out of reach")
+    check(K.classify(3, true, { 190, 230 }, me) == nil, "not overlapping")
+    check(K.classify(3, true, { 150, 190 }, me, true) == nil, "a destroyed rival doesn't collide")
+
+    local s, r = rules.new("RA"), { speed = 150, damage = 0 }
+    s.speed = 170
+    check(K.respond(s, r, "ahead", false) and not K.respond(s, r, "ahead", false), "CHOC4 once per contact")
+    check(s.speed == 130 and s.brake_until_slow and r.speed == 230 and r.skid, "ahead: -20 twice, forced braking, rival +40 twice and skids")
+    K.clear(s)
+    local t, q = rules.new("RA"), { speed = 150, damage = 0 }
+    t.speed = 150
+    K.respond(t, q, "behind", true)
+    check(t.speed == 180 and q.speed == 130 and t.skid and t.skid.dx == -2, "behind: +30 / -20, you skid away from it")
+    local moved = 0
+    for _ = 1, 7 do local dx = K.tick(t, q); moved = moved + dx end
+    check(moved == -14 and t.armour == 70, "a 7-tick skid, 2 px a tick")
+    K.tick(t, q)
+    check(t.armour == 62 and t.skid == nil, "then 8 armour")
+    local u, w = rules.new("RA"), { speed = 150, damage = 0 }
+    K.respond(u, w, "left", false)
+    local dx, _, rdx = K.tick(u, w)
+    check(dx == 7 and rdx == -7 - 2, "side: pushed 7 apart, the rival skidding away too")
+    dx = K.tick(u, w); check(dx == 6, "easing off by 1")
+    local h, hr = rules.new("RA"), { speed = 0, damage = 0 }
+    K.respond(h, hr, "ahead", false, true)
+    check(h.armour == 0 and hr.damage == 100, "HOLD: ramming finishes both")
+end)
+
+test("walls: scraping smoke, crashes, the bounce and its armour", function()
+    local K, rules = require("race.collision"), require("race.rules")
+    local s = rules.new("RA")                         -- armour 70
+    s.speed = 150
+    check(K.wall(s, "left", 3) == nil and s.scraping == "left", "a brief touch: scraping, no crash")
+    for _ = 1, 5 do K.smoke(s) end
+    check(s.armour == 69, "a full smoke cycle costs 1 armour")
+    check(K.wall(s, "left", 7) == "crash" and s.skid and s.skid.dx == 9, "7 ticks of steering at 150: crash, sliding right")
+    check(K.wall(s, "left", 20) == nil, "one crash per push")
+    local first = s.skid.dx
+    local _, sway = K.tick(s, nil); K.tick(s, nil)
+    check(sway == K.SKID.player[1][1] and s.skid.dx == first - 1, "the 0x888 sway; the slide eases")
+    for _ = 1, 20 do K.tick(s, nil) end
+    check(s.skid == nil and s.armour == 69 - 8, "the bounce ends: 8 armour")
+    K.release(s); s.speed = 90
+    check(K.wall(s, "right", 30) == nil, "slow: no crash")
+    s.speed = 150
+    check(K.wall(s, "right", 30) == "crash" and s.skid.dx == -9, "right wall: slide left")
+    K.wall(s, nil, 0)
+    check(s.scraping == nil, "off the wall")
+end)
+
+test("handling: curvature, the outward push, the car's cap", function()
+    local H = require("race.handling")
+    check(H.heading_delta(100, 130) == 30 and H.heading_delta(2870, 10) == 20 and H.heading_delta(10, 2870) == -20, "heading change, wrapped at 2880")
+    local hist = {}
+    local c
+    for _ = 1, 4 do c = H.curvature(hist, 30) end
+    check(c == 15 and #hist == 4, "average of the last four halves")
+    check(H.curvature({}, -3) == -1, "rounds down, as sar does")
+    check(H.push(5, 180, false, 6) == 0, "within +-5: no push")
+    check(H.push(20, 180, false, 6) == 6 and H.push(20, 180, false, 2) == 2, "capped by handling")
+    check(H.push(10, 100, false, 6) == 2, "10 x 10 / 50")
+    check(H.push(-20, 120, true, 6) == 0, "steering at 150 or less: none")
+    check(H.push(-20, 180, true, 6) == -6, "steering faster: still pushed")
+    check(H.tick_dx(4, 160, 8, 180, false) == 4, "not steering: moved")
+    check(H.tick_dx(4, 160, 12, 180, false) == 8, "sharp and fast: twice")
+    check(H.tick_dx(4, 160, 12, 180, true) == 4, "steering, sharp and fast: once")
+    check(H.tick_dx(-4, 50, 8, 100, false) == -1 and H.tick_dx(-4, 20, 8, 100, false) == 0, "eases near the edge")
+    check(H.tick_dx(4, 270, 8, 100, false) == 1 and H.tick_dx(4, 300, 8, 100, false) == 0, "both edges")
+    local fakeT = { sections = { { heading = 0 }, { heading = 30 } } }
+    check(H.frame_delta(fakeT, 0, 1) == 30 and H.frame_delta(fakeT, 0, 12) == 0, "FC3 has no curvature")
 end)
 
 test("voc: decodes a type-1 block", function()
@@ -450,6 +550,96 @@ test("save: hall of fame keeps the top 7", function()
     check(rank == 5, "450 ranks 5th")
     check(#st.hall == 7 and st.hall[7].score == 300, "lowest dropped")
     check(save.add_score(st, { name = "LOW", score = 1 }) == nil, "too low: not entered")
+end)
+
+test("career: car unlocks (DS:0x103C, 0x104C)", function()
+    local C, save = require("game.career"), require("game.save")
+    local st = C.new("NOVICE")
+    local open = {}
+    for m = 1, 8 do if st.unlocked[m] then open[#open + 1] = m end end
+    check(table.concat(open, ",") == "1,3,4", "a new career has JO, LU, OU")
+    st.round = 1
+    C.after_race(st, { outcome = "won", left = 0, points = 1500 }, function() return 1 end)
+    check(st.unlocked[8], "clearing round 1 unlocks RA")
+    st.round = 3
+    C.after_race(st, { outcome = "laps", left = 1, points = 1300 }, function() return 1 end)
+    check(not st.unlocked[2], "round 3 not cleared: HO stays locked")
+    st.round = C.TOKY
+    C.after_race(st, { outcome = "won", left = 0, points = 1500 }, function() return 1 end)
+    local n = 0
+    for m = 1, 8 do if st.unlocked[m] then n = n + 1 end end
+    check(n == 4, "bonus tracks unlock nothing")
+    local back = save.parse(save.serialize(st))
+    check(back.unlocked[8] == true and back.unlocked[2] == false, "unlocks survive a save")
+    C.gameover(st)
+    check(not st.unlocked[8] and st.unlocked[1], "game over: back to the first three")
+    C.reset(st, "HARDENED")
+    check(st.level == "HARDENED" and st.round == 1 and st.total == 0, "level panel: a new career")
+end)
+
+test("rival: steering (0x4210) and sideways step (0x38EF)", function()
+    local V = require("race.rival")
+    local r = V.new(2, 20, 200)
+    r.steer = 1
+    local seen = {}
+    for i = 1, 6 do V.steer_tick(r); seen[i] = r.vel end
+    check(seen[1] == 2 and seen[2] == 4 and seen[3] == 5 and seen[6] == 5, "speed builds 2, 4, then 5 at 200")
+    check(r.lean == -6, "lean tips against the direction, to -6")
+    r.speed = 50                                     -- s10 5: step 5 // 4 + 4 = 5, cap 5
+    r.vel, r.lean = 0, 0
+    V.steer_tick(r)
+    check(r.vel == 2, "at 50: (0 + 5) capped 5, halved: 2")
+    r.speed, r.vel, r.lean = 200, 5, -6
+    r.steer = -1
+    V.steer_tick(r)
+    check(r.vel == 0 and r.lean == -5, "reversing: halved (2), doubled less the step (0), halved")
+    r.steer = 0
+    r.vel, r.lean = 4, 3
+    V.steer_tick(r); check(r.lean == 2 and r.vel == 3, "let go: lean back 1, speed back 1 on an even lean")
+    V.steer_tick(r); check(r.lean == 1 and r.vel == 3, "odd lean: speed holds")
+    r.steer, r.pos = 1, 60
+    V.steer_tick(r); check(r.lean == 0, "no steering from 50 eighths on")
+    -- the step
+    r.pos, r.vel, r.lean, r.step_at = 20, 4, -2, 0
+    check(V.side_step(r, 1, 100, 0) == 4, "within 50: its speed")
+    check(V.side_step(r, 5, 100, 0) == 0 and V.side_step(r, 7, 100, 0) == 4, "once every 6 ticks")
+    r.lean = 3
+    check(V.side_step(r, 20, 100, 0) == 0, "a lean the other way holds it")
+    r.pos = 80
+    check(V.side_step(r, 40, 100, 10) == -1 and V.side_step(r, 60, 100, -10) == 1, "50..150: a pixel toward the middle")
+    check(V.side_step(r, 80, 100, -1) == 0 and V.side_step(r, 90, 100, 1) == -1, "a pixel left of the middle stays; right moves (and 0xFFFE)")
+    check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
+end)
+
+test("career: giving up (ESC, [0x68CB] = -4)", function()
+    local C = require("game.career")
+    local st = C.new("NOVICE")
+    st.round, st.total = 4, 1000
+    local out = C.after_race(st, { outcome = "quit", left = 3, points = 300 })
+    check(out.action == "gameover" and #out.videos == 0 and st.total == 1300, "game over, no clip, points kept")
+    st = C.new("NOVICE")
+    st.round, st.total = C.HOLD, 1000
+    out = C.after_race(st, { outcome = "quit", left = 3, points = 300 })
+    check(out.action == "gameover" and st.total == 1000, "on HOLD: game over, no points")
+end)
+
+test("menu: focus steps past locked cars and wraps (0x561E)", function()
+    local C = require("game.career")
+    local un = C.new().unlocked                     -- monitors 0, 2, 3 open
+    check(C.step_focus(0, 1, un) == 2, "0 -> 2, skipping HO")
+    check(C.step_focus(3, 1, un) == 8, "3 -> the left button")
+    check(C.step_focus(10, 1, un) == 0, "wraps past the right button")
+    check(C.step_focus(0, -1, un) == 10, "and back")
+    check(C.step_focus(8, -1, un) == 3, "left button back to OU")
+end)
+
+test("menu: panel layouts (0x57F8, 0x5991)", function()
+    local O = require("scenes.options")
+    local lv, op, tr = O.layout("level"), O.layout("options"), O.layout("tracks")
+    check(#lv == 2 and lv[1][2] == 92 and lv[2][2] == 108, "level: two items at y 92, 108")
+    check(#op == 6 and op[1][2] == 76 and op[6][2] == 156, "options: six from y 76, every 16")
+    check(#tr == 16 and tr[1][2] == 36 and tr[16][2] == 171, "tracks: sixteen from y 36, every 9")
+    check(#require("scenes.menu").CENTRE == 30, "30 menu image centres")
 end)
 
 -- bytes reader ----------------------------------------------------------------

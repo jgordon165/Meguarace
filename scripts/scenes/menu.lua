@@ -1,9 +1,19 @@
--- Main menu: PANEL1.HNM backdrop with PANEL2.HSQ overlays.
---   ARROWS move   ENTER choose   ESC options   M music on/off   S subtitles   F12 asset explorer
+-- Main menu (RACEPRG 0x54C9): PANEL1.HNM with PANEL2.HSQ images over it.
+--   ARROWS move   ENTER race / open   SPACE or ESC car showcase
+--   M music on/off   S subtitles   F12 asset explorer (the last three are this port's)
 --
--- Monitors (two columns of four) are the eight cars: ENTER picks the car and
--- plays its showcase video. Buttons: green = race the next round, yellow =
--- Hall of Fame, blue = options.
+-- Focus runs 0..10 ([0x69FA]): the eight monitors (cars), then the buttons
+-- left, middle, right. Any arrow steps it (right/down +1, left/up -1),
+-- wrapping and skipping cars you haven't unlocked (game/career.lua).
+--   * ENTER on a monitor races the next round with that car; once the game
+--     is completed it asks for a track first (0x55AB). SPACE or ESC plays
+--     the car's showcase, video 0x27 + focus (0x5662).
+--   * ENTER on a button: left = level (a new career), middle = options,
+--     right = Hall of Fame (0x57F8; scenes/options.lua).
+-- Drawing (0x569C): an unlocked monitor shows its car (image m) and its name
+-- bar, lit when focused (8 + m, else 16 + m); a locked one stays dark. The
+-- buttons are 27 + b, or 24 + b when focused. Every image is centred on its
+-- point in DS:0xFA4 (0x57AE).
 --
 -- The career between races (Lance Boyle's clips, game over, the second
 -- season, bonus tracks, the finale) is game/career.lua, from RACEPRG.EXE.
@@ -12,10 +22,6 @@
 -- plays B65 (Lance: "only about a zillion viewers out there..."); left alone
 -- again it runs a demo race on the first track with OMEGA's car, which any
 -- key ends. Then the show starts again from the intro.
---
--- Overlay positions were found by matching PANEL2's images against the
--- PANEL1 picture (bars and buttons match pixel for pixel; the car
--- thumbnails sit on the monitor screens next to their bars).
 
 local scenes = require("core.scenes")
 local data   = require("game.data")
@@ -26,31 +32,23 @@ local sequence = require("core.sequence")
 local subs   = require("formats.subtitles")
 local S = {}
 
-local THUMB = { { 47, 3 }, { 222, 3 }, { 26, 33 }, { 237, 33 }, { 20, 65 }, { 242, 65 }, { 27, 99 }, { 230, 99 } }
-local BAR   = { { 102, 4 }, { 206, 4 }, { 84, 33 }, { 223, 33 }, { 80, 65 }, { 226, 65 }, { 92, 100 }, { 213, 100 } }
-local BUTTON = { { 58, 146 }, { 133, 146 }, { 211, 146 } }   -- green, yellow, blue
+-- Centres of PANEL2's images 0..29 (DS:0xFA4): car pictures, lit bars,
+-- dark bars, lit buttons, dark buttons.
+S.CENTRE = {
+    { 72, 18 }, { 247, 18 }, { 53, 48 }, { 264, 48 }, { 48, 83 }, { 272, 83 }, { 59, 120 }, { 261, 120 },
+    { 107, 19 }, { 212, 20 }, { 90, 48 }, { 229, 48 }, { 86, 81 }, { 232, 81 }, { 99, 120 }, { 220, 119 },
+    { 107, 19 }, { 212, 20 }, { 90, 48 }, { 229, 48 }, { 86, 81 }, { 232, 81 }, { 99, 120 }, { 220, 119 },
+    { 86, 168 }, { 161, 168 }, { 239, 168 }, { 86, 168 }, { 161, 168 }, { 239, 168 },
+}
 local BAR_LIT, BAR_OFF, BUTTON_LIT, BUTTON_OFF = 8, 16, 24, 27
-local C_FOCUS = 120
+local C_NOTE = 120
 local IDLE_SECONDS = 3000 / 25      -- 3000 ticks ([0x69EC], 0x555A) at the port's 25 ticks a second
-
--- Focus: 1..8 monitors, 9..11 buttons.
-local function move(f, dx, dy)
-    if f <= 8 then
-        local col, row = (f - 1) % 2, (f - 1) // 2
-        if dx ~= 0 then col = math.max(0, math.min(1, col + dx)) end
-        if dy > 0 and row == 3 then return col == 0 and 9 or 11 end
-        row = math.max(0, math.min(3, row + dy))
-        return row * 2 + col + 1
-    end
-    local b = f - 8
-    if dy < 0 then return b == 1 and 7 or (b == 3 and 8 or 7) end
-    return 8 + math.max(1, math.min(3, b + dx))
-end
 
 -- Career fields for saves from before the career existed.
 local function ensure_career(st)
     for k, v in pairs(career.new(st.level)) do if st[k] == nil then st[k] = v end end
     if st.round > #data.TRACKS then st.round = 1 end
+    if type(st.unlocked) ~= "table" or #st.unlocked ~= 8 then st.unlocked = career.new().unlocked end
     -- Saves from before the Hall of Fame had 7 places held the EXE's 8th
     -- record ("ENFORCER SCORE", your run's line) as a place.
     if st.hall then
@@ -82,9 +80,19 @@ function S:enter()
     end
     self.bg = assert(hnm.open("PANEL1.HNM"))
     self.panel = assert(spr.open("PANEL2"))
-    self.focus = self.focus or 9
+    self.focus = self.focus or 0
     self.t = 0
+    self:rebuild()
     self:restore()
+end
+
+-- After a new career or a load: keep the focus off locked cars.
+function S:rebuild()
+    local st = self.state
+    if self.focus <= 7 and not st.unlocked[self.focus + 1] then
+        self.focus = career.step_focus(self.focus, 1, st.unlocked)
+    end
+    if not st.unlocked[st.car or 1] then st.car = career.START_CARS[1] end
 end
 
 -- Redraws backdrop palette + overlays (after returning from another scene).
@@ -105,10 +113,13 @@ function S:pre_round(how, lead)
     sequence.play(list)
 end
 
-function S:start_round()
+-- ENTER on monitor `m` (1..8).
+function S:start_round(m)
     local st = self.state
+    st.car = m
+    save.store(st)
     if st.completed then                                 -- free choice after the finale
-        scenes.push(require("scenes.trackpick"), st.round, function(r)
+        scenes.push(require("scenes.options"), "tracks", st, function(r)
             st.round = r
             self:launch()
         end)
@@ -197,6 +208,8 @@ function S:attract()
         demo = true, car = "OM", rival = "LU", level = st.level, total = 0, round = 1,
         on_done = function()
             st.car = 1                                   -- the car choice resets ([0x69FA] = 0)
+            me.focus = 0
+            me:rebuild()
             me:pre_round("new")
         end,
     })
@@ -216,7 +229,6 @@ function S:update(dt)
     end
     if self.note_t then self.note_t = self.note_t - dt; if self.note_t <= 0 then self.note = nil end end
     if input.pressed("F12") then scenes.push(require("scenes.explorer"), self.report); return end
-    if input.pressed("Escape") then scenes.push(require("scenes.options"), self.state); return end
     if input.pressed("S") then                           -- OFF -> AMER -> ENGL -> ... -> OFF
         local st, langs = self.state, subs.LANGUAGES
         local idx = 0
@@ -236,62 +248,52 @@ function S:update(dt)
         self.note, self.note_t = self.state.music and "MUSIC ON" or "MUSIC OFF", 2
         return
     end
-    local f = self.focus
-    if input.pressed("Left") then f = move(f, -1, 0) end
-    if input.pressed("Right") then f = move(f, 1, 0) end
-    if input.pressed("Up") then f = move(f, 0, -1) end
-    if input.pressed("Down") then f = move(f, 0, 1) end
+    local f, un = self.focus, self.state.unlocked
+    if input.pressed("Right") or input.pressed("Down") then f = career.step_focus(f, 1, un) end
+    if input.pressed("Left") or input.pressed("Up") then f = career.step_focus(f, -1, un) end
     self.focus = f
-    if input.pressed("Return") or input.pressed("Space") then
-        if f <= 8 then
-            self.state.car = f
-            save.store(self.state)
-            scenes.push(require("scenes.player"), data.MENU_CARS[f].video .. ".HNM")
-        elseif f == 9 then
-            self:start_round()
-        elseif f == 10 then
-            scenes.push(require("scenes.hall"), self.state)
-        else
-            scenes.push(require("scenes.options"), self.state)
-        end
+    if input.pressed("Return") then
+        if f <= 7 then self:start_round(f + 1)
+        elseif f == 8 then scenes.push(require("scenes.options"), "level", self.state)
+        elseif f == 9 then scenes.push(require("scenes.options"), "options", self.state)
+        else scenes.push(require("scenes.hall"), self.state) end
+    elseif (input.pressed("Space") or input.pressed("Escape")) and f <= 7 then
+        scenes.push(require("scenes.player"), data.MENU_CARS[f + 1].video .. ".HNM")
     end
 end
 
 -- Called when a pushed scene (video, race, hall, options) returns.
 function S:resume() self:restore() end
 
+local function centred(set, i)
+    local w, h = set:size(i)
+    local c = S.CENTRE[i + 1]
+    if w and c then set:draw(i, c[1] - w // 2, c[2] - h // 2) end
+end
+
 function S:draw()
     gfx.clear(0)
     self.bg:draw(0, 0)
-    local car = self.state.car
-    for i = 1, 8 do
-        self.panel:draw(i - 1, THUMB[i][1], THUMB[i][2])
-        self.panel:draw((i == car and BAR_LIT or BAR_OFF) + i - 1, BAR[i][1], BAR[i][2])
-    end
-    for b = 1, 3 do
-        local lit = self.focus == 8 + b and (self.t * 3) % 1 < 0.6
-        self.panel:draw((lit and BUTTON_LIT or BUTTON_OFF) + b - 1, BUTTON[b][1], BUTTON[b][2])
-    end
-    if self.focus <= 8 then
-        local i = self.focus
-        local w, h = self.panel:size(i - 1)
-        if (self.t * 3) % 1 < 0.6 then
-            gfx.setcolor(C_FOCUS, 255, 210, 60)
-            local x, y = THUMB[i][1] - 1, THUMB[i][2] - 1
-            gfx.line(x, y, x + w + 1, y, C_FOCUS); gfx.line(x, y + h + 1, x + w + 1, y + h + 1, C_FOCUS)
-            gfx.line(x, y, x, y + h + 1, C_FOCUS); gfx.line(x + w + 1, y, x + w + 1, y + h + 1, C_FOCUS)
+    local p, st = self.panel, self.state
+    for m = 0, 7 do
+        if st.unlocked[m + 1] then
+            centred(p, m)
+            centred(p, (self.focus == m and BAR_LIT or BAR_OFF) + m)
         end
     end
-    -- Round and score on the globe's strip.
-    gfx.setcolor(C_FOCUS + 1, 235, 235, 240)
+    for b = 0, 2 do
+        centred(p, (self.focus == 8 + b and BUTTON_LIT or BUTTON_OFF) + b)
+    end
+    -- This port's: level, round and score on the globe's strip.
+    gfx.setcolor(C_NOTE + 1, 235, 235, 240)
     local names = data.track_names()
-    local st = self.state
     local line = string.format("%s  ROUND %d  %s  SCORE %d", st.level, st.round, names[st.round] or "", st.total)
     gfx.fill(160 - #line * 2 - 3, 136, #line * 4 + 6, 8, 0)
-    gfx.text(160 - #line * 2, 137, line, C_FOCUS + 1)
+    gfx.text(160 - #line * 2, 137, line, C_NOTE + 1)
     if self.note then
+        gfx.setcolor(C_NOTE, 255, 210, 60)
         gfx.fill(160 - #self.note * 2 - 3, 126, #self.note * 4 + 6, 8, 0)
-        gfx.text(160 - #self.note * 2, 127, self.note, C_FOCUS)
+        gfx.text(160 - #self.note * 2, 127, self.note, C_NOTE)
     end
 end
 

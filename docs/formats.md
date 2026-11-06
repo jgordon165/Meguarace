@@ -299,7 +299,7 @@ Codes in game order: `JO` Jose, `RA` Ramon, `OU` Ouzbel, `PA` Paloma, `LU` Luis,
 | File | Contents |
 |---|---|
 | `<XX>_A` | 17 body images, from straight behind (0) round to head-on (16), plus the palette |
-| `<XX>_B`, `<XX>_C` | wheel frames drawn over the body, alternated to spin the wheels. Bottom-left aligned on images 0–10; offsets for 11–16 are not decoded yet |
+| `<XX>_B`, `<XX>_C` | wheel frames drawn over the body to spin the wheels: the same image number, centred on the body's x and level with its bottom, on every view (0x2594). Only while moving; the phase `[0xCDA]` steps 2, 1, 0 every 36 − 2 × (speed / 10) ticks, 0 drawing the body alone (0x25F8) |
 | `_JOS _RAM _OUZ _PAL _LUI _OME _HOO _MAR` | rival version: 11 rear views (0–10) in colours 192–255, plus 9 data tables |
 | `T<XX>_2` | dashboard: two 160×47/48 halves, drawn at y = 152 |
 | `T<XX>` | dashboard gauge pieces |
@@ -343,18 +343,59 @@ NS2 MV2 PAR FC2 JNK MV3 FC3 NS3 LST TOKY HOLD.
 | `PANEL2.HSQ` | overlays: 0–7 car thumbnails, 8–15 lit bars, 16–23 bars as on the backdrop, 24–26 buttons highlighted, 27–29 buttons as on the backdrop, 30 palette strip |
 | `I_<NAME>.HNM` | car showcase videos |
 | `HALL1.HNM` | Hall of Fame backdrop |
-| `CONTROL.HSQ` | options: 0 OPTIONS panel, 1 LEVEL panel, then (off, lit) pairs NOVICE 2/3, HARDENED 4/5, LOAD 6/7, SAVE 8/9, KEYBOARD 10/11, JOYSTICK 12/13, MOUSE 14/15, QUIT 16/17. `KONTROL`/`QONTROL` are other languages |
+| `KONTROL.HSQ` | the menu's panels (resource 0x4D): 0 OPTIONS panel, 1 LEVEL panel, then (off, lit) pairs NOVICE 2/3, HARDENED 4/5, LOAD 6/7, SAVE 8/9, KEYBOARD 10/11, JOYSTICK 12/13, MOUSE 14/15, QUIT 16/17. `CONTROL` holds the same in English, `QONTROL` in Spanish |
+| `KONTROL6.HSQ` | input messages (0x5F): 0 keyboard now active, 1 joystick needs INSTALL, 2 joystick now active, 3 mouse now active, 4 no mouse driver |
+| `CONTROL2.HSQ` | track choice (0x58): 0 panel, then (off, lit) pairs for the 16 tracks, 1/2 … 31/32 |
 | `FONTHALL.HSQ` | 9×9 font, glyph index = ASCII code (96 glyphs; DOS arrows at 24–27) |
 | `VWBT*.HNM` | channel idents (played before each race in this port) |
 
-Overlay positions on `PANEL1`, found by matching `PANEL2`'s images against
-the backdrop pixel for pixel (bars and buttons match exactly):
+**The menu** (RACEPRG 0x54C9). Every `PANEL2` image is centred on its
+point in DS:0xFA4 ({x, y} per image, drawn at x − w/2, y − h/2: 0x57AE):
 
-| | Slot 1–8 (left, right per row, top to bottom) |
+| Images | Centres |
 |---|---|
-| bar | (102,4) (206,4) (84,33) (223,33) (80,65) (226,65) (92,100) (213,100) |
-| thumbnail | (47,3) (222,3) (26,33) (237,33) (20,65) (242,65) (27,99) (230,99) |
-| buttons | green (58,146), yellow (133,146), blue (211,146) |
+| 0–7 cars | (72,18) (247,18) (53,48) (264,48) (48,83) (272,83) (59,120) (261,120) |
+| 8–15, 16–23 bars | (107,19) (212,20) (90,48) (229,48) (86,81) (232,81) (99,120) (220,119) |
+| 24–26, 27–29 buttons | (86,168) (161,168) (239,168) |
+
+The focus `[0x69FA]` runs 0–10: the monitors, then the buttons left, middle,
+right. Right and Down step it +1, Left and Up −1, wrapping, past monitors
+whose car is locked (0x561E). Drawing (0x569C): an unlocked monitor shows
+its car (image m) and its bar, 8 + m when focused, else 16 + m; a locked one
+keeps the backdrop's empty screen. A button is 24 + b when focused, else
+27 + b.
+
+Keys (0x59F5; scancodes in `[0x703F + code]`): Enter on a monitor races the
+next round with that car, or once the game is completed (`[0x69AA]`) asks for
+the track first (0x55AB); Space or Esc plays the showcase, video 0x27 +
+monitor (0x5662). Enter on a button opens its panel (0x57F8): left = level,
+middle = options, right = the Hall of Fame (0x548C).
+
+**Cars you can pick** (`[0x101C]`, a word per monitor): a new career copies
+DS:0x103C, which opens JOSE, LUIS and OUZBEL (0x6A7C, also at game over).
+After a race where every opponent was destroyed on rounds 1–14 (0x4F4B),
+0x51AB ORs in DS:0x104C + 32 × round, which opens one more: round 1 RAMON,
+2 MARIA, 3 HOOPER, 4 OMEGA, 5 PALOMA, 6 RAMON, 7 MARIA, 8 OMEGA, 9 HOOPER,
+10 PALOMA, 11 MARIA, 12 HOOPER, 13 RAMON, 14 OMEGA.
+
+**Panels** (0x57F8, 0x5991): a list over the menu. Items are (off, lit)
+pairs from `[0x6A00]`, centred on x = 160, from y = 100 − 4 × count, one
+every 16 rows (9 for the tracks). Up/Down move (wrapping), Enter or Space
+selects, Esc closes.
+
+| Panel | Picture | Items |
+|---|---|---|
+| level | KONTROL 1 at (160,95) | NOVICE, HARDENED (from 2). Starts with the current level; picking one sets `[0x68CD]` and starts a new career (0x6A7C) |
+| options | KONTROL 0 at (160,108) | LOAD 0x61CB, SAVE 0x642A, KEYBOARD 0x5FC1, JOYSTICK 0x5EBF, MOUSE 0x5EF8, QUIT 0x5113 (from 6) |
+| tracks | CONTROL2 0 at (160,105) | the 16 tracks (from 1); the choice is the round |
+
+KEYBOARD, JOYSTICK and MOUSE show a KONTROL6 message at (160,130) until a
+key; KEYBOARD when the keyboard is already active opens a key-redefinition
+screen instead (0x5FD6, not ported). The port has only the keyboard, so
+JOYSTICK and MOUSE get messages 1 and 4. LOAD and SAVE use the port's one
+save rather than the original's slots. After a car showcase the original
+holds the last frame for up to 800 ticks or a key (0x5687); the port goes
+straight back.
 
 Monitor order = thumbnail order = showcase videos: JOSE, HOOPER, LUIS,
 OUZBEL, MARIA, PALOMA, OMEGA, RAMON (confirmed by comparing each
@@ -404,7 +445,7 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | Code | Sound | Effect (variable) |
 |---|---|---|
 | 1 | MALUS9 | energy − drain size `[0x68DB]` (then drain size = 50) |
-| 2 | MALUS11 | `[0x690D]` − 10 (if ≥ 10); called "points" here |
+| 2 | MALUS11 | points − 10, counted out one a tick (see Points) |
 | 3 | — | forced braking until speed ≤ 130 (`[0x68CF]`) |
 | 4 | — | spin: steering sequence + 5 px/tick drift (speed > 15), else as 7 |
 | 5 | PLUARME | weapon lost, energy 0 |
@@ -414,7 +455,7 @@ Implemented in `scripts/race/rules.lua`; addresses are in the MZ load image.
 | 9 | MALUS6 | gauges out: `[0x68E7]` for `[0x812]` ticks (every dashboard gauge reads 0) |
 | 10 | MALUS2 | timer `[0x68FB]`, 800 ticks (not traced yet) |
 | 17 | ENERGYP | energy + `[0x68DB]` (then 70) |
-| 18 | BONUS1 | `[0x690D]` + 10 |
+| 18 | BONUS1 | points + 10, counted in one a tick (see Points) |
 | 19 | BONUS11 | super speed: speed held at 280 for 400 ticks (`[0x6903]`) |
 | 20 | BONUS10 | weapon 1, charged (`[0xD5E]`): a hit destroys the rival |
 | 21 | BONUS10 | weapon 3, energy + 120 |
@@ -437,7 +478,7 @@ race (0x038C). It is indexed by `[0x81E]`, the same index that picks the car's
 `T<XX>` file (resource 0x24 + `[0x81A]`: TJO, TRA, TOU, TPA, TLU, TOM, THO,
 TMA), so the order is JO, RA, OU, PA, LU, OM, HO, MA.
 
-| Car | gun 1 | gun 2 | gun 3 | charge | armour | power | `[0x80C]` | `[0x80E]` | `[0x810]` | `[0x812]` |
+| Car | gun 1 | gun 2 | gun 3 | charge | armour | power | handling | `[0x80E]` | `[0x810]` | `[0x812]` |
 |---|---|---|---|---|---|---|---|---|---|---|
 | JO | 1 | 0 | 0 | 0 | 120 | 8 | 5 | 1 | 1 | 200 |
 | RA | 1 | 1 | 1 | 1 | 70 | 20 | 4 | 0 | 0 | 200 |
@@ -448,7 +489,8 @@ TMA), so the order is JO, RA, OU, PA, LU, OM, HO, MA.
 | HO | 1 | 1 | 0 | 0 | 110 | 10 | 4 | 0 | 0 | 100 |
 | MA | 1 | 1 | 1 | 0 | 100 | 16 | 2 | 1 | 1 | 200 |
 
-Armour starts the third gauge `[0xD2E]`. Power is the damage per hit and the
+Handling `[0x80C]` caps how far a curve pushes you (see Handling). Armour
+starts the third gauge `[0xD2E]`. Power is the damage per hit and the
 base of the fire cost. `[0x812]` is multiplied by 4 at the start.
 
 ### Weapons
@@ -492,8 +534,56 @@ and still lined up; at the end of the impact you lose 20 armour (0x4801).
 At 0 armour (0x1940) `EXPLOD2` plays, `EXPLOSE` plays over your car (gone
 after frame 15) and the race is lost (`[0x68CB]` = −2).
 
-Other armour losses, not in the port yet: −8 at the end of some slides
-(0x2136, `[0x6933]`) and −1 per smoke cycle while `[0x68FF]` is set (0x3098).
+Other armour losses: −8 when a skid ends with `[0x6933]` set (0x2136: after a
+collision skid or a wall crash), −1 per smoke cycle while scraping a wall
+(0x3098). See Collisions and walls.
+
+### Handling
+
+Curves push the car outward (0x1838…0x1A40, 0x2290…0x236A;
+`scripts/race/handling.lua`). Each video frame the heading change from the
+camera's section to the next (pt word 27, 2880 a turn, wrapped: 0x6DCC,
+`[0x6B58]`) is halved and the last four are averaged into the curvature
+`[0xCFC]`. NGL's first 420 frames and all of FC3, TOKY and HOLD have none
+(DS:0x2D6 per round × 4, 0x6E6A). A rising heading bends the road left on
+screen.
+
+The push `[0x691F]` (0x19CB) is 0 for a curvature within ±5, otherwise
+curvature × (speed / 10) / 50; 0 while you steer at 150 or less; capped at
+the car's handling `[0x80C]` (MA 2 … JO 5, OU/PA/LU 6). Each tick it moves
+you when you aren't steering, and once more at 160 and over on a sharp
+curve (beyond ±11). Toward an edge it eases: 1 pixel within 60 of it, none
+within 30 (x 60/30 on the left, 260/290 on the right: 0x232F). No push
+during a skid or at a wall. A push of 6 or more leans the body
+(`[0x691D]`, ±6).
+
+### Collisions and walls
+
+**The rival** (0x3A8F…0x3CF9, `scripts/race/collision.lua`): it's in reach
+0–7 eighths ahead or 1–4 behind with the two cars' screen spans
+overlapping. If it moved this tick it's a rear-end collision and it goes
+back to where it was; otherwise it's alongside.
+
+| `[0x694F]` | Contact | Effect |
+|---|---|---|
+| 4 | you ran into it | your speed −20 and braking down to 130, its speed +40, a boost ends; THRILL 10; it skids. On HOLD both cars are finished |
+| 8 | it ran into you | your speed +30, its −20; THRILL 30; you skid |
+| 1 / other | alongside, left / right | 7-pixel pushes apart easing by 1 a tick; THRILL 50; it skids |
+
+A skid (0x3C72) is a sway script with a 2-pixel-a-tick slide away from the
+other car (yours DS:0x896 or 0x888, the rival's 0x8A6/0x89E); CHOC4 plays.
+
+**The walls.** Your car's x `[0xCB6]` stays within the track's limits:
+DS:0x31A[round × 4] on the left (0 on every track except JNK: 60) and 320
+minus it on the right (0x0311, `[0xCD2]`/`[0xCD6]`), not the road's edges.
+Held at one, you're scraping (0x23B8: `[0x68FF]`, `[0x6933]`): sound 6
+(CRRR3) loops and FUMEE frames 6–10 puff 20 pixels out on that side
+(0x302A), each cycle costing 1 armour. If you've steered for more than 6
+ticks in a row (`[0x6939]`) and your speed is over 100, you crash (0x2212):
+CHOCRR2, the 0x888 sway with a slide of 9 pixels a tick away from the wall
+that eases by 1 every other section (0x2271), and −8 armour when it ends
+(0x2136). One crash per push: the counter is set to 1000 until you let go
+of the steering.
 
 This port runs shot and explosion frames at 12.5 per second, applies a hit's
 damage at once, uses 12 sections as the range, draws the damage bar over the
@@ -599,7 +689,24 @@ indexed by the opponents left: 1 → C, 2 → B, more → A.
 - (A fourth type, 0x35DF/0x35F6, blocks your line and speeds up near you; the
   table only uses it for more opponents than any round has.)
 
-Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213).
+Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213). Each
+tick (0x4210) it tips a lean `[0x691C]` (−6…6, against the direction) and
+builds a sideways speed `[0x6943]`: the old speed, halved if it points the
+other way, is doubled, the step added (speed/40, plus 4 when that is under
+2; 4 from 100 on), capped at ±speed/10 (at most 10) and halved, so it tops
+out at 5 pixels. Let go, the lean goes back toward 0 one a tick and the
+speed by one whenever the lean is even.
+
+The rival's place `[0xDBA]` is a screen x at its depth, between the road's
+inner edges `[0xE2D]`/`[0xE31]` less half its width (0x3B21). Every 6
+ticks (0x38EF, when the road there is 32 pixels or wider) it moves: within
+50 eighths by its sideways speed (none when the lean points the other way)
+plus a collision bump `[0x6947]`; up to 150, a pixel toward the middle of
+the road; from 150 on it is put in the middle every tick (0x3A18). Hitting
+an edge resets the lean (0x39EC). The curve under the rival (`[0xE23]`,
+0x3F06) only feeds its tilt `[0x691E]`, not its place. The port moves the
+rival by these pixels but keeps its place as a fraction of the road, so on
+a curve it follows the road where the original's stays put on screen.
 
 **Left behind:** 6+ sections behind for 400 ticks and it counts as destroyed
 (0x3E4D…0x3E8D); on HOLD, as soon as it's 6 behind.
@@ -607,12 +714,23 @@ Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213).
 **End of the race** (0x4F4B…0x5064): `[0x68CB]` −3 every opponent
 destroyed, −1 laps run out (`[0x68C5]`: 3, HOLD 2), −2 wrecked. The race's
 points `[0x690D]` add to the score `[0x6A02]` (none for a wreck on HOLD).
+ESC gives up (−4, 0x0A2B): the points count (not on HOLD, 0x4F78) and the
+career ends with no clip. However the race ends, a rival destroyed but still
+exploding counts as gone (0x0A3B: its damage `[0xD30]` at the limit `[0x814]`).
+
+**Points** `[0x690D]` come from three places: 5 per hit, 5 per frame of a
+rival's explosion (0x4699, at once), and the tiles (+10 code 18, −10 code
+2). Hits and tiles don't land at once (0x1C5D): the amount waits in
+`[0x68D5]` and moves one a tick, counting in (`[0x68D1]`) up to 65000 or out
+(`[0x68D3]`) down to 10. A payment (0x2FF1, 0x1F10) first adds whatever was
+still due; a charge (0x1EE1) first takes it off, if you have that many,
+even when it was a payment still counting in. Whatever is still due when the
+race ends is lost. There is no lap, time or finishing bonus.
 You go on to the next track after −3, or after −1 with at most one opponent
 left and 1200 points or more. Energy starts at 400 (0x0561).
 
-The port runs the AI exactly as above. Its own choices: the steering rate
-(0.012 road widths a tick), the bump collision, and that rivals within
-one section of you aren't drawn (the camera is one section behind your car).
+The port runs the AI exactly as above. Its own choice: the steering rate
+(0.012 road widths a tick).
 
 ## Career
 
@@ -679,8 +797,10 @@ button lets you pick any track (0x55C7).
 (`[0x69DC]` = 0) B65 plays and the menu comes back; the next time a demo race
 runs (`[0x69E6]`): the first track (0x06EC), car entry 6 of DS:0x826 (OMEGA,
 0x0262), rival `_LUI` (`[0x866]` = 0x31, 0x0255). The demo drives at full
-throttle unless spinning (0x2D0F) and fires when the rival is 10–20 eighths
-ahead and within 50 pixels across, at most every 30 ticks (0x2C02);
+throttle unless spinning (0x2D0F); on the straight (curvature within ±11) it
+steers toward x 130–190, on curves not at all (`[0x6808]`, 0x22FD); it fires
+when the rival is 10–20 eighths ahead and within 50 pixels across, at most
+every 30 ticks (0x2C02);
 `PRESS BUTTON TO START` blinks at (60, 32) every 50 ticks (0x14B8). Any key
 ends it (0x082A); then the car choice resets and the show starts again from
 INTRO (0x4F2F). `[0x69DC]` resets after every real race (0x4F23).
@@ -787,11 +907,10 @@ header as described above.
 ## Still to decode
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
-- `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
-- Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
-- The demo driver's steering input `[0x6808]` (the port steers to the rival or the middle).
-- The original options-menu layout and championship scoring.
-- Wheel-frame offsets for car images 11–16.
+- The rival's tilt on curves (`[0x691E]`, 0x3F34), not drawn yet.
+- In the port a wall bounce eases every other tick, not every other section.
+- The body lean from a strong curve push (`[0x691D]`), not drawn yet.
+- The original's save slots and key redefinition.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.
 - The six graphics files with the table at the end.
 - Lane direction (is lane 0 left or right).

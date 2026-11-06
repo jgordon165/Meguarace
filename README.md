@@ -35,17 +35,20 @@ build\Release\megarace.exe --data V:\
 It plays the original boot sequence (Mindscape, Cryo, the intro with Lance
 Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 
-- Arrows move between the eight car monitors and the three buttons; Enter on
-  a monitor picks that car and plays its showcase video.
-- Green starts the next round. The career is the original's: Lance Boyle
+- Arrows move between the car monitors and the three buttons. You start with
+  three cars; destroying every opponent on a championship round unlocks
+  another. Enter on a monitor races the next round with that car; Space (or
+  Esc) plays its showcase video.
+- The career is the original's: Lance Boyle
   introduces each round and reacts to how you did; fail to qualify (or get
   wrecked) and it's game over and the Hall of Fame. Season 1 is Novice,
   season 2 Hardened; clean rounds earn the bonus tracks HOLD and TOKY;
   finish season 2 for the finale, after which you can pick any track.
   In a run of clips Enter skips one, Esc skips the rest.
-- Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
-  `RACEPRG.EXE`). Make it at the end of a career and you type your name.
-  Blue (or Esc) opens the **options**: Novice/Hardened, save, load, quit.
+- The left button picks the **level** (Novice or Hardened), which starts a
+  new career. The middle one opens the **options**: load, save, input, quit.
+  The right one shows the **Hall of Fame** (seeded with the defaults stored
+  in your `RACEPRG.EXE`). Make it at the end of a career and you type your name.
 - Leave the menu alone for two minutes and Lance butts in; leave it again
   and a demo race runs (any key ends it).
 - M turns the music on or off. S cycles the subtitles: off, English (US),
@@ -72,7 +75,9 @@ the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you
 shoot back; run out of armour and you're destroyed. Drive over the lane tiles for their effects (energy, points, weapons,
 super speed, skids, spins). The opponents come one at a time, each with the
 original's AI: destroy them all to win the round, or finish the laps with at
-most one left and 1200 points to qualify. Each car has its own guns, armour and firepower, read from
+most one left and 1200 points to qualify. Points come from hits, explosions and tiles,
+and count in on the score one a tick. Esc gives up the race, which as in the
+original ends the career. Each car has its own guns, armour and firepower, read from
 the game's car table.
 
 The track viewer drives along a track video with the game's own cars: your
@@ -131,10 +136,11 @@ GitHub Actions (same layout as the Aleph One fork):
 | HSQ decompression | Done (all 91 files) |
 | HNM video + soundtrack | Done (all 109 videos, 65,234 frames) |
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
-| Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
+| Car sprites, dashboards, palettes, rival cars, spinning wheels | Done (from RACEPRG.EXE) |
+| Collisions with the rival, walls (scraping, crashes), every armour loss | Done (from RACEPRG.EXE) |
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
 | Racing: speed, lanes, lane tiles and their sounds, laps | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
-| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
+| Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (menu and panels laid out and behaving as RACEPRG.EXE) |
 | Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE) |
 | Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |
@@ -142,7 +148,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
 | Subtitles in six languages, timed by the videos' own cues | Done (from RACEPRG.EXE) |
 | Hall of Fame: seven places, your run's line, name entry | Done (from RACEPRG.EXE) |
-| Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE; the demo's steering is the port's) |
+| Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE) |
+| Handling: curves push you outward, capped per car | Done (from RACEPRG.EXE) |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
