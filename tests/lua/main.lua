@@ -409,11 +409,15 @@ test("attract mode: the demo driver's firing and steering", function()
     fake.current.pos = 15; fake.current.x_lane = 230
     fake:autopilot_fire()
     check(fake.rules.shot == nil, "70 px across: no")
+    fake.curv, fake.carx = 0, 100
     local l, r = fake:autopilot_steer()
-    check(not l and r, "steers toward a near rival")
-    fake.current.pos = 100
-    l, r = fake:autopilot_steer()
-    check(not l and not r, "otherwise holds the middle")
+    check(not l and r, "on the straight, left of 130: steers right")
+    fake.carx = 200; l, r = fake:autopilot_steer()
+    check(l and not r, "right of 190: steers left")
+    fake.carx = 160; l, r = fake:autopilot_steer()
+    check(not l and not r, "130..190: holds")
+    fake.curv, fake.carx = 15, 100; l, r = fake:autopilot_steer()
+    check(not l and not r, "on a curve: no steering")
 end)
 
 test("collisions: kinds and responses", function()
@@ -471,6 +475,28 @@ test("walls: scraping smoke, crashes, the bounce and its armour", function()
     check(K.wall(s, "right", 30) == "crash" and s.skid.dx == -9, "right wall: slide left")
     K.wall(s, nil, 0)
     check(s.scraping == nil, "off the wall")
+end)
+
+test("handling: curvature, the outward push, the car's cap", function()
+    local H = require("race.handling")
+    check(H.heading_delta(100, 130) == 30 and H.heading_delta(2870, 10) == 20 and H.heading_delta(10, 2870) == -20, "heading change, wrapped at 2880")
+    local hist = {}
+    local c
+    for _ = 1, 4 do c = H.curvature(hist, 30) end
+    check(c == 15 and #hist == 4, "average of the last four halves")
+    check(H.curvature({}, -3) == -1, "rounds down, as sar does")
+    check(H.push(5, 180, false, 6) == 0, "within +-5: no push")
+    check(H.push(20, 180, false, 6) == 6 and H.push(20, 180, false, 2) == 2, "capped by handling")
+    check(H.push(10, 100, false, 6) == 2, "10 x 10 / 50")
+    check(H.push(-20, 120, true, 6) == 0, "steering at 150 or less: none")
+    check(H.push(-20, 180, true, 6) == -6, "steering faster: still pushed")
+    check(H.tick_dx(4, 160, 8, 180, false) == 4, "not steering: moved")
+    check(H.tick_dx(4, 160, 12, 180, false) == 8, "sharp and fast: twice")
+    check(H.tick_dx(4, 160, 12, 180, true) == 4, "steering, sharp and fast: once")
+    check(H.tick_dx(-4, 50, 8, 100, false) == -1 and H.tick_dx(-4, 20, 8, 100, false) == 0, "eases near the edge")
+    check(H.tick_dx(4, 270, 8, 100, false) == 1 and H.tick_dx(4, 300, 8, 100, false) == 0, "both edges")
+    local fakeT = { sections = { { heading = 0 }, { heading = 30 } } }
+    check(H.frame_delta(fakeT, 0, 1) == 30 and H.frame_delta(fakeT, 0, 12) == 0, "FC3 has no curvature")
 end)
 
 test("voc: decodes a type-1 block", function()

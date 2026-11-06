@@ -19,6 +19,7 @@ local voc    = require("formats.voc")
 local rules  = require("race.rules")
 local rivalai = require("race.rival")
 local collide = require("race.collision")
+local handling = require("race.handling")
 local hud    = require("race.hud")
 local font   = require("ui.rawfont")
 local music  = require("game.music")
@@ -63,6 +64,8 @@ function S:enter(name, opts)
     self.total = opts.total or 0              -- championship score before this race
     self.debug = false
     self.x_limit = name:match("^JNK") and 60 or 0
+    self.round = opts.round or 1
+    self.curv, self.curv_hist, self.curv_frame = 0, {}, -1
     self.demo = opts.demo                     -- attract mode: the game drives (RACEPRG [0x69E6])
     self.demo_fire_at = 0
     self.on_done = opts.on_done
@@ -128,6 +131,11 @@ function S:update(dt)
         local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
         if self.demo then self:autopilot_fire() end
         self.carx = self.carx + drift
+        -- Curves push you outward, up to the car's handling (race/handling.lua).
+        local steering = self.steer ~= 0
+        local p = handling.push(self.curv, s.speed, steering, s.car.handling)
+        if s.skid or s.scraping then p = 0 end
+        self.carx = self.carx + handling.tick_dx(p, self.carx, self.curv, s.speed, steering)
         -- Walls: steering ticks in a row ([0x6939]), then scrape or crash.
         self.steer_ticks = self.steer ~= 0 and (self.steer_ticks or 0) + 1 or 0
         if alive and collide.wall(s, self.at_wall, self.steer_ticks) == "crash" then voc.play("CHOCRR2") end
@@ -154,6 +162,12 @@ function S:update(dt)
     -- Scenery: fixed rate while moving.
     local moving = s.speed > 0
     if moving then self.pos = self.pos + TRACK_FPS * dt end
+    -- Curvature: once per video frame (RACEPRG 0x1838).
+    local fnow = math.floor(self.pos)
+    while self.curv_frame < fnow do
+        self.curv_frame = self.curv_frame + 1
+        self.curv = handling.curvature(self.curv_hist, handling.frame_delta(self.T, self.curv_frame, self.round))
+    end
     local last = self.T.frames - 1
     if self.T.lap > 0 then last = math.min(last, self.laps * self.T.lap) end
     if self.pos >= last then
@@ -188,16 +202,13 @@ function S:update(dt)
 
 end
 
--- Attract mode's driver. Firing is the game's (0x2C02): with the rival 10-20
--- eighths ahead and within 50 pixels across, a shot at most every 30 ticks.
--- Steering is this port's: toward the rival when it's near, else the middle
--- of the road (the game's steering input in demo mode, [0x6808], isn't
--- traced yet).
+-- Attract mode's driver (the game's): on the straight it steers toward
+-- x 130..190, on curves not at all ([0x6808], 0x22FD); it fires with the
+-- rival 10-20 eighths ahead and within 50 pixels across, at most every 30
+-- ticks (0x2C02).
 function S:autopilot_steer()
-    local r = self.current
-    local target = 160
-    if r and not r.destroyed and r.x_lane and r.pos > -8 and r.pos < 40 then target = r.x_lane end
-    return self.carx > target + 6, self.carx < target - 6
+    local d = handling.demo_steer(self.curv or 0, self.carx)
+    return d < 0, d > 0
 end
 
 function S:autopilot_fire()

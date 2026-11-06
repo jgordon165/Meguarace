@@ -48,7 +48,7 @@ function R.is_bonus(code) return code >= 17 end
 --   super    [0x806]         can keep weapon 1's "destroy on hit" charge
 --   armour   [0x808]         starting value of the third gauge [0xD2E]
 --   power    [0x80A]         damage per hit, and the base of the fire cost
---   handling [0x80C]         (read at 0x1A02/0x1E66/0x27A8; not traced yet)
+--   handling [0x80C]         the most a curve pushes you, pixels a tick (race/handling.lua)
 --   flag24, flag23 [0x80E], [0x810]   per-car switches for codes 24/23
 --   timer    [0x812]         x4 at race start: length of codes 6/9's effect
 local CAR_TABLE = {

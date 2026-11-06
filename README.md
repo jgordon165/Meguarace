@@ -131,7 +131,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
 | Subtitles in six languages, timed by the videos' own cues | Done (from RACEPRG.EXE) |
 | Hall of Fame: seven places, your run's line, name entry | Done (from RACEPRG.EXE) |
-| Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE; the demo's steering is the port's) |
+| Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE) |
+| Handling: curves push you outward, capped per car | Done (from RACEPRG.EXE) |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
