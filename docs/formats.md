@@ -393,9 +393,9 @@ KEYBOARD, JOYSTICK and MOUSE show a KONTROL6 message at (160,130) until a
 key; KEYBOARD when the keyboard is already active opens a key-redefinition
 screen instead (0x5FD6, not ported). The port has only the keyboard, so
 JOYSTICK and MOUSE get messages 1 and 4. LOAD and SAVE use the port's one
-save rather than the original's slots. After a car showcase the original
-holds the last frame for up to 800 ticks or a key (0x5687); the port goes
-straight back.
+save rather than the original's slots. A car showcase that plays to its end
+holds its last frame for up to 800 ticks or until a key (0x5687); one cut
+short goes straight back (`[0x69EA]`).
 
 Monitor order = thumbnail order = showcase videos: JOSE, HOOPER, LUIS,
 OUZBEL, MARIA, PALOMA, OMEGA, RAMON (confirmed by comparing each
