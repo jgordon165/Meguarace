@@ -657,6 +657,34 @@ test("keys: bindings and names (0x611D)", function()
     check(not keys.accepts("P") and not keys.accepts("Escape") and keys.accepts("Z"), "P and ESC refused")
 end)
 
+test("slots: names, what a save keeps, the list (0x642A, 0x61CB)", function()
+    local slots, C = require("game.slots"), require("game.career")
+    check(slots.valid("RACE1") and not slots.valid("") and not slots.valid("TOOLONGNAME")
+          and not slots.valid("a") and not slots.valid("X/Y"), "1-8 letters and digits")
+    check(slots.char_ok("Q") and slots.char_ok("7") and not slots.char_ok("_"), "characters")
+    local st = C.new("HARDENED")
+    st.round, st.total, st.car, st.keys, st.music, st.hall = 9, 4321, 3, { fire = "A" }, false, { 1 }
+    local snap = slots.snapshot(st)
+    check(snap.round == 9 and snap.total == 4321 and snap.level == "HARDENED" and snap.car == 3
+          and snap.keys.fire == "A" and snap.unlocked, "career, car, keys and cars kept")
+    check(snap.music == nil and snap.hall == nil, "settings and the Hall of Fame stay out")
+    local other = C.new("NOVICE")
+    other.music = true
+    slots.restore(other, snap)
+    check(other.round == 9 and other.level == "HARDENED" and other.music == true, "restore")
+    local t = {}
+    slots.remember(t, "A"); slots.remember(t, "B"); slots.remember(t, "A")
+    check(table.concat(t.slots, ",") == "B,A", "the list, newest last")
+    local S = require("scenes.slots")
+    local top, sel = 0, 5
+    top, sel = S.move(top, sel, 1, 10)
+    check(top == 1 and sel == 5, "past the sixth row the list scrolls")
+    top, sel = S.move(4, 5, 1, 10)
+    check(top == 4 and sel == 5, "not past the end")
+    top, sel = S.move(1, 0, -1, 10)
+    check(top == 0 and sel == 0, "and back up")
+end)
+
 test("career: giving up (ESC, [0x68CB] = -4)", function()
     local C = require("game.career")
     local st = C.new("NOVICE")

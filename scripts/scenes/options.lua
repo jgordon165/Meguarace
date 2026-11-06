@@ -17,8 +17,8 @@
 -- JOYSTICK and MOUSE answer with a KONTROL6 message at (160, 130) until a
 -- key (0x5EBF). This port only has the keyboard, so they get the
 -- original's "not available" messages, and KEYBOARD (the control already)
--- opens the key setup (scenes/keysetup.lua). The original's save slots
--- aren't ported: LOAD and SAVE use the port's one save.
+-- opens the key setup (scenes/keysetup.lua). LOAD and SAVE are the
+-- original's named saves (scenes/slots.lua).
 
 local scenes = require("core.scenes")
 local save   = require("game.save")
@@ -81,12 +81,17 @@ end
 
 function S:act(a)
     local st = self.state
-    if a == "load" then
-        local loaded = save.load()
-        for k, v in pairs(loaded) do st[k] = v end
-        return self:close(true)                            -- 0x61CD: the menu is rebuilt
-    elseif a == "save" then
-        self.note = save.store(st) and "SAVED" or "SAVE FAILED"
+    if a == "load" then                                  -- the saves (0x61CB, scenes/slots.lua)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "load", st, function(ok)
+            if not ok then return end
+            local menu = require("scenes.menu")
+            menu:rebuild()                                 -- 0x61CD: the menu is rebuilt
+            require("core.sequence").play({ career.file(require("game.slots").LOADED_VIDEO) })   -- BA2 (0x6352)
+        end)
+    elseif a == "save" then                              -- a name for it (0x642A)
+        scenes.pop()
+        scenes.push(require("scenes.slots"), "save", st)
     elseif a == "keyboard" then                          -- already the control: set up keys (0x5FD6)
         scenes.pop()                                     -- over the menu alone (0x5FEB)
         scenes.push(require("scenes.keysetup"), st)
