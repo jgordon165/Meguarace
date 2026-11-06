@@ -308,6 +308,76 @@ test("rival: kinds, movement, AI states, qualifying", function()
     check(not V.qualifies("wrecked", 0, 9999), "wrecked: not qualified")
 end)
 
+test("career: clips, game over, seasons, bonus tracks, finale", function()
+    local C = require("game.career")
+    local one = function() return 1 end           -- rand(n) -> 1: the first of each choice
+    local st = C.new("NOVICE")
+    local pre = C.pre_round(st, "new", one)
+    check(pre[1] == 0x23 and pre[2] == 0x63 and pre[3] == 0x31 and pre[4] == 0x41 and pre[5] == 0x30,
+          "new career: INTRO, VWBT, round 1 (B01), first visit to NS (B34), B64")
+    check(C.before_race(st)[1] == 0x51, "round 1 on NOVICE: B66 first")
+
+    -- a clean round with 900 points: BA5, BB1, BB3; on to round 2
+    local out = C.after_race(st, { outcome = "won", left = 0, points = 900 }, one)
+    check(out.action == "next" and st.round == 2 and st.total == 900, "won: next round, points scored")
+    check(out.videos[1] == 0x5C and out.videos[2] == 0x53 and out.videos[3] == 0x64, "800-1199: BA5, BB1, BB3")
+    pre = C.pre_round(st, "moved_on", one)
+    check(pre[1] == 0x55 and pre[2] == 0x32 and pre[3] == 0x44, "moved on: VWBT2, B09, first visit to MV (B37)")
+
+    -- qualified on points after the laps: BA3
+    out = C.after_race(st, { outcome = "laps", left = 1, points = 1300 }, one)
+    check(out.action == "next" and out.videos[1] == 0x5B and st.round == 3, "laps, 1 left, 1300: BA3, qualified")
+    check(st.hold_streak == 0, "not clean: the HOLD streak resets")
+
+    -- not qualified: B79 and game over; the career resets, the level stays
+    out = C.after_race(st, { outcome = "laps", left = 3, points = 500 }, one)
+    check(out.action == "gameover" and out.videos[1] == 0x59, "not qualified: B79, game over")
+    local e = C.gameover(st)
+    check(e.score == 900 + 1300 + 500 and st.round == 1 and st.total == 0, "Hall of Fame entry, career reset")
+
+    -- wrecked: B80
+    out = C.after_race(st, { outcome = "wrecked", left = 2, points = 100 }, one)
+    check(out.action == "gameover" and out.videos[1] == 0x5A, "wrecked: B80")
+    C.gameover(st)
+
+    -- three clean rounds in a row -> HOLD, then back to the next round
+    for r = 1, 3 do C.after_race(st, { outcome = "won", left = 0, points = 1500 }, one) end
+    check(st.round == C.HOLD and st.main_round == 3, "three clean rounds: HOLD")
+    out = C.after_race(st, { outcome = "laps", left = 0, points = 300 }, one)
+    check(out.action == "next" and st.round == 4, "after HOLD: round 4")
+    check(st.families.NS.attempts == 1 and st.families.NS.clears == 1, "records per scenery family")
+    pre = C.pre_round(st, "moved_on", one)
+    check(pre[3] == 0x4D, "round 4, first visit to its scenery: B46")
+
+    -- TOKY: fail to qualify with 800+ points and three clean rounds banked
+    check(st.toky_bank == 3, "three clean rounds banked")
+    out = C.after_race(st, { outcome = "laps", left = 3, points = 850 }, one)
+    check(out.action == "next" and st.round == C.TOKY and st.toky_bank == 0, "a second chance: TOKY")
+    out = C.after_race(st, { outcome = "won", left = 0, points = 1500 }, one)
+    check(st.round == 5, "after TOKY: past the round you failed")
+
+    -- season 2: qualifying on round 14 goes to round 1 on HARDENED
+    local s2 = C.new("NOVICE"); s2.round, s2.main_round = 14, 14
+    C.after_race(s2, { outcome = "laps", left = 1, points = 1200 }, one)
+    check(s2.round == 1 and s2.level == "HARDENED", "season 2 on HARDENED")
+    -- on HARDENED, LST needs every opponent destroyed
+    s2.round = 14
+    out = C.after_race(s2, { outcome = "laps", left = 1, points = 5000 }, one)
+    check(out.action == "gameover", "HARDENED LST on points: not enough")
+    s2 = C.new("HARDENED"); s2.round = 14
+    out = C.after_race(s2, { outcome = "won", left = 0, points = 100 }, one)
+    check(out.action == "complete" and out.videos[1] == 0x5E and out.videos[#out.videos] == 0x25, "finale: B82 .. FIN")
+    C.after_complete(s2)
+    check(s2.completed and s2.total == 0, "completed: free choice, score reset")
+    check(#C.pre_round(s2, "new", one) == 2, "after the finale only the intro and the ident")
+
+    -- farewell
+    local f = C.new(); f.last_outcome = "wrecked"
+    check(C.farewell(f)[1] == 0x60, "quit after a wreck: B99")
+    f.last_outcome = "won"; check(C.farewell(f)[1] == 0x61, "few clean rounds: BA1")
+    f.cleared_rounds = 4; local fw = C.farewell(f); check(fw[1] == 0x62 and fw[2] == 0x5F, "else B98 + AZUR")
+end)
+
 test("voc: decodes a type-1 block", function()
     local voc = require("formats.voc")
     local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)
@@ -457,6 +527,12 @@ test("[data] every dashboard's gauge images", function()
     for _, f in ipairs({ "FONTE1.RAW", "FONTE2.RAW", "FONTE6_6.RAW" }) do
         check(dat.exists(f), f)
     end
+end)
+
+test("[data] every career clip", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local C = require("game.career")
+    for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
 test("[data] game data from RACEPRG.EXE", function()
