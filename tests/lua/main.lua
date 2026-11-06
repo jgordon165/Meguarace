@@ -482,9 +482,11 @@ test("walls: scraping smoke, crashes, the bounce and its armour", function()
     check(K.wall(s, "left", 7) == "crash" and s.skid and s.skid.dx == 9, "7 ticks of steering at 150: crash, sliding right")
     check(K.wall(s, "left", 20) == nil, "one crash per push")
     local first = s.skid.dx
-    local _, sway = K.tick(s, nil); K.tick(s, nil)
-    check(sway == K.SKID.player[1][1] and s.skid.dx == first - 1, "the 0x888 sway; the slide eases")
-    for _ = 1, 20 do K.tick(s, nil) end
+    local _, sway = K.tick(s, nil, 0); K.tick(s, nil, 0)
+    check(sway == K.SKID.player[1][1] and s.skid.dx == first, "the 0x888 sway; no easing on an even frame")
+    K.tick(s, nil, 1); K.tick(s, nil, 1)
+    check(s.skid.dx == first - 2, "an odd frame: 1 a tick (0x2271)")
+    for _ = 1, 20 do K.tick(s, nil, 1) end
     check(s.skid == nil and s.armour == 69 - 8, "the bounce ends: 8 armour")
     K.release(s); s.speed = 90
     check(K.wall(s, "right", 30) == nil, "slow: no crash")
