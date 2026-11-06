@@ -27,7 +27,6 @@ local S = {}
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
-local STEER = 140           -- screen pixels per second
 local RIVAL_U = { 0.1, 0.9 }  -- the rival stays this far across the road (edges less half its width, 0x3B21)
 local COUNTDOWN = 2.5       -- seconds of "GET READY"
 local FX_FPS = 12.5         -- shot and explosion frames per second (one per video frame)
@@ -45,6 +44,7 @@ function S:enter(name, opts)
     self.rules = rules.new(opts.car or "JO")
     self.pos = 0.0
     self.carx, self.view, self.steer = 160, 0, 0
+    self.steering, self.body_lean = { lean = 0, vel = 0, ticks = 0 }, 0
     self.car = cars.open(opts.car or "JO")
     self.rival = cars.open_rival(opts.rival or "RA")
     self.zones = spr.open("ZONES_") or spr.open("ZONES")   -- scanner panel + icons
@@ -116,9 +116,9 @@ function S:update(dt)
     self.steer = 0
     local left, right = input.down("Left"), input.down("Right")
     if self.demo then left, right = self:autopilot_steer() end
-    if alive and left then self.carx = self.carx - STEER * dt; self.steer = 1 end
-    if alive and right then self.carx = self.carx + STEER * dt; self.steer = -1 end
-    if not (alive and (left or right)) then collide.release(s) end
+    if alive and left then self.steer = self.steer + 1 end
+    if alive and right then self.steer = self.steer - 1 end   -- both cancel (0x2860)
+    if self.steer == 0 then collide.release(s) end
 
     -- Game ticks.
     self.ticks = self.ticks + dt * rules.TICKS_PER_SECOND
@@ -141,11 +141,18 @@ function S:update(dt)
         -- Curves push you outward, up to the car's handling (race/handling.lua).
         local steering = self.steer ~= 0
         local p = handling.push(self.curv, s.speed, steering, s.car.handling)
+        self.body_lean = handling.body_lean(self.body_lean, p)
         if s.skid or s.scraping then p = 0 end
+        -- Your steering (0x2833): a sideways speed that builds and eases.
+        local st = self.steering
+        -- A skid or a slide starting stops it (0x1A82, 0x1E84, 0x2252, 0x3C21).
+        if (s.skid and not self.was_skid) or (s.slide and not self.was_slide) then st.vel = 0 end
+        self.was_skid, self.was_slide = s.skid ~= nil, s.slide ~= nil
+        if not s.slide then handling.steer(st, -self.steer, s.speed, s.car.handling, p) end
+        self.carx = self.carx + st.vel
         self.carx = self.carx + handling.tick_dx(p, self.carx, self.curv, s.speed, steering)
         -- Walls: steering ticks in a row ([0x6939]), then scrape or crash.
-        self.steer_ticks = self.steer ~= 0 and (self.steer_ticks or 0) + 1 or 0
-        if alive and collide.wall(s, self.at_wall, self.steer_ticks) == "crash" then voc.play("CHOCRR2") end
+        if alive and collide.wall(s, self.at_wall, st.ticks) == "crash" then voc.play("CHOCRR2") end
         self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
@@ -249,7 +256,7 @@ function S:collisions(r, prev)
             collide.clear(s)
         end
     end
-    local dx, sway, rdx = collide.tick(s, r)
+    local dx, sway, rdx = collide.tick(s, r, math.max(0, self.frame))
     self.carx = self.carx + dx
     self.sway = sway
     if rdx ~= 0 and self.road_w and self.road_w > 0 then
@@ -600,7 +607,7 @@ function S:draw()
                 local scale = math.max(0.05, (rx - lx) / ref)
                 local sec = T.sections[base + ahead]
                 local dh = ((sec.heading - cam.heading + 1440) % 2880) - 1440
-                local angle = (dh / 8) * 96 / 180 + (160 - x) / 8 * scale
+                local angle = (dh / 8) * 96 / 180 + (160 - x) / 8 * scale - r.lean   -- less its lean (0x4574)
                 local L = T:mask(f, ahead)
                 if L then gfx.clip(L.lines, track.VIDEO_Y) end
                 local fx_scale = math.max(0.4, math.min(1, scale * 1.5))
@@ -628,7 +635,7 @@ function S:draw()
         local y = ply + (pry - ply) * (self.carx - plx) / math.max(1, prx - plx)
         local left, top, w, h
         if not self.wreck_frame or self.wreck_frame < 15 then
-            left, top, w, h = self.car:draw(math.floor(self.view + 3 * self.steer + (self.sway or 0)), self.carx, y, 1.0,
+            left, top, w, h = self.car:draw(math.floor(self.view - self.steering.lean - self.body_lean + (self.sway or 0)), self.carx, y, 1.0,
                                             (s.speed > 0 and self.spin > 0) and (self.spin - 1) or nil)
         end
         if left then self.carbox = { left, top, w, h } end
