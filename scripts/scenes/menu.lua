@@ -1,5 +1,5 @@
 -- Main menu: PANEL1.HNM backdrop with PANEL2.HSQ overlays.
---   ARROWS move   ENTER choose   ESC options   M music on/off   F12 asset explorer
+--   ARROWS move   ENTER choose   ESC options   M music on/off   S subtitles   F12 asset explorer
 --
 -- Monitors (two columns of four) are the eight cars: ENTER picks the car and
 -- plays its showcase video. Buttons: green = race the next round, yellow =
@@ -18,6 +18,7 @@ local save   = require("game.save")
 local music  = require("game.music")
 local career = require("game.career")
 local sequence = require("core.sequence")
+local subs   = require("formats.subtitles")
 local S = {}
 
 local THUMB = { { 47, 3 }, { 222, 3 }, { 26, 33 }, { 237, 33 }, { 20, 65 }, { 242, 65 }, { 27, 99 }, { 230, 99 } }
@@ -44,6 +45,14 @@ end
 local function ensure_career(st)
     for k, v in pairs(career.new(st.level)) do if st[k] == nil then st[k] = v end end
     if st.round > #data.TRACKS then st.round = 1 end
+    -- Saves from before the Hall of Fame had 7 places held the EXE's 8th
+    -- record ("ENFORCER SCORE", your run's line) as a place.
+    if st.hall then
+        for i = #st.hall, 1, -1 do
+            if st.hall[i].name == "ENFORCER SCORE" then table.remove(st.hall, i) end
+        end
+        while #st.hall > save.HALL_PLACES do table.remove(st.hall) end
+    end
 end
 
 local function files(ids)
@@ -52,9 +61,15 @@ local function files(ids)
     return out
 end
 
+local function apply_subtitles(st)
+    local code = st.subtitles
+    require("scenes.player").language = (code and code ~= "OFF") and code or nil
+end
+
 function S:enter()
     self.state = self.state or save.load()
     ensure_career(self.state)
+    apply_subtitles(self.state)
     if not self.state.hall then
         self.state.hall = data.default_hall()
         save.store(self.state)
@@ -113,10 +128,10 @@ function S:launch()
     end)
 end
 
-local function hall_entry(st, e)
+-- A Hall of Fame entry for a finished career; the hall asks for the name.
+local function hall_entry(e)
     local names = data.track_names()
-    return save.add_score(st, { name = "ENFORCER", score = e.score,
-        track = names[e.round] or "", level = e.level == "HARDENED" and "HARD" or "EASY" })
+    return { score = e.score, track = names[e.round] or "", level = e.level == "HARDENED" and "HARD" or "EASY" }
 end
 
 -- After a race (RACEPRG 0x4F2F..0x52CB): Lance's clips for how it went,
@@ -130,16 +145,16 @@ function S:race_done(result)
         if out.action == "next" then
             me:pre_round("moved_on")
         elseif out.action == "gameover" then
-            local rank = hall_entry(st, career.gameover(st))
+            local entry = hall_entry(career.gameover(st))
             save.store(st)
-            scenes.push(require("scenes.hall"), st, rank, function() me:pre_round("new") end)
+            scenes.push(require("scenes.hall"), st, nil, function() me:pre_round("new") end, entry)
         else                                             -- the game completed
-            local rank = hall_entry(st, { score = st.total, round = st.round, level = st.level })
+            local entry = hall_entry({ score = st.total, round = st.round, level = st.level })
             career.after_complete(st)
             save.store(st)
-            scenes.push(require("scenes.hall"), st, rank, function()
+            scenes.push(require("scenes.hall"), st, nil, function()
                 sequence.play(files(career.complete(st, {})), function() me:credits(function() me:pre_round("new") end) end)
-            end)
+            end, entry)
         end
     end)
 end
@@ -171,6 +186,17 @@ function S:update(dt)
     if self.note_t then self.note_t = self.note_t - dt; if self.note_t <= 0 then self.note = nil end end
     if input.pressed("F12") then scenes.push(require("scenes.explorer"), self.report); return end
     if input.pressed("Escape") then scenes.push(require("scenes.options"), self.state); return end
+    if input.pressed("S") then                           -- OFF -> AMER -> ENGL -> ... -> OFF
+        local st, langs = self.state, subs.LANGUAGES
+        local idx = 0
+        for i, l in ipairs(langs) do if l.code == st.subtitles then idx = i end end
+        idx = (idx + 1) % (#langs + 1)
+        st.subtitles = idx == 0 and "OFF" or langs[idx].code
+        save.store(st)
+        apply_subtitles(st)
+        self.note, self.note_t = "SUBTITLES " .. (idx == 0 and "OFF" or langs[idx].name), 2
+        return
+    end
     if input.pressed("M") then
         self.state.music = self.state.music == false
         save.store(self.state)

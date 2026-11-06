@@ -12,7 +12,12 @@
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
 local music  = require("game.music")
+local subs   = require("formats.subtitles")
 local S = {}
+
+-- Subtitle language code (formats/subtitles.lua), or nil for none. Set by
+-- the menu from the saved settings.
+S.language = nil
 
 local SILENT_FPS = 12.5
 local PREBUFFER  = 0.25    -- seconds of audio queued ahead of the picture
@@ -29,6 +34,9 @@ function S:enter(name, opts)
     self.queuedBytes = 0
     self.paused = false
     self.queue = {}
+    self.lines = S.language and subs.for_video(subs.load(S.language), name) or nil
+    self.line = 0
+    self.showing, self.cleared = nil, false
     gfx.clear(0)
     audio.stream_reset()
     self:decodeAhead()
@@ -70,9 +78,22 @@ function S:present(target)
     for i = self.shown + 1, target do
         local info = self.queue[i]
         if info then
-            if i == 0 or info.palette_changed then self.v:apply_palette() end
+            if i == 0 or info.palette_changed then
+                self.v:apply_palette()
+                -- The videos leave colour 255 black; subtitles are white in it.
+                if self.lines then gfx.setcolor(255, 255, 255, 255) end
+            end
             if info.video then
                 gfx.blit(info.x, info.y, info.w, info.h, info.pixels, info.overlay and 0 or -1)
+            end
+            if self.lines and info.subtitle then      -- the frame's cue (RACEPRG 0xD24F)
+                if info.subtitle == "next" then
+                    self.line = self.line + 1
+                    self.showing = self.lines[self.line]
+                else
+                    self.showing = nil
+                end
+                self.cleared = true
             end
             if self.opts.on_frame then self.opts.on_frame(i, info) end
             self.queue[i] = nil
@@ -119,7 +140,15 @@ function S:update(dt)
 end
 
 function S:draw()
-    -- The framebuffer holds the latest composited frame; nothing to redraw.
+    -- The framebuffer holds the latest composited frame; only the subtitle
+    -- line is drawn again on top (the frames cover its rows).
+    if self.showing then
+        subs.clear()
+        subs.draw(self.showing)
+    elseif self.cleared then
+        subs.clear()
+        self.cleared = false
+    end
     if self.opts.hud then
         gfx.fill(0, 191, 320, 9, 0)
         gfx.text(2, 193, string.format("%s  %d/%d", self.name, self.shown + 1, self.count), 15)

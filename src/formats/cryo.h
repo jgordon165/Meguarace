@@ -65,6 +65,9 @@ public:
         bool overlay = false;               // mode 0xFF: index 0 is transparent
         bool hasVideo = false;
         bool paletteChanged = false;
+        // Subtitle cue in the video header's high bits (RACEPRG 0xD24F):
+        // 0x40 show the next line, 0x20 clear the line, 0 nothing.
+        int subtitleCue = 0;
         std::vector<uint8_t> pixels;        // w*h indices
         std::vector<uint8_t> sound;         // 8-bit unsigned PCM for this frame
         std::map<std::string, std::vector<uint8_t>> chunks;   // "pt", "kl", ...

@@ -44,9 +44,10 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
   finish season 2 for the finale, after which you can pick any track.
   In a run of clips Enter skips one, Esc skips the rest.
 - Yellow shows the **Hall of Fame** (seeded with the defaults stored in your
-  `RACEPRG.EXE`). Blue (or Esc) opens the **options**: Novice/Hardened, save,
-  load, quit.
-- M turns the music on or off.
+  `RACEPRG.EXE`). Make it at the end of a career and you type your name.
+  Blue (or Esc) opens the **options**: Novice/Hardened, save, load, quit.
+- M turns the music on or off. S cycles the subtitles: off, English (US),
+  English (UK), French, German, Italian, Spanish.
 - F12 opens the **asset explorer** (every file in the archive: play videos,
   race any track, D for the track debug viewer, V for raw pixels).
 
@@ -125,7 +126,9 @@ GitHub Actions (same layout as the Aleph One fork):
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |
 | Rivals one at a time with the original AI, opponents per round, laps, qualifying, scoring | Done (from RACEPRG.EXE) |
 | Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
-| Subtitles, attract mode, Hall of Fame name entry | To do |
+| Subtitles in six languages, timed by the videos' own cues | Done (from RACEPRG.EXE) |
+| Hall of Fame: seven places, your run's line, name entry | Done (from RACEPRG.EXE) |
+| Attract mode (idle clip and demo race) | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 

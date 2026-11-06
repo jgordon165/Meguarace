@@ -50,7 +50,11 @@ end
 
 -- Default Hall of Fame: 8 entries of { u16 score, name[18], "00000 ",
 -- track[10], level[4] } starting at "BIG BOB" - 2.
-function M.default_hall()
+-- The EXE's table at DS:0x1344 holds 8 records of 40 bytes: the 7 places
+-- of the Hall of Fame, then the line for your own run (0x145C, written at
+-- every game over: RACEPRG 0x693C). default_hall() returns the 7 places,
+-- sorted; default_last_run() the 8th record ("ENFORCER SCORE").
+local function records()
     local out = {}
     local d = load_exe()
     local at = d and d:find("BIG BOB", 1, true)
@@ -66,8 +70,16 @@ function M.default_hall()
                           level = trim(text:sub(35, 38)) }
         p = p + 40
     end
+    return out
+end
+
+function M.default_hall()
+    local out = {}
+    for i, r in ipairs(records()) do if i <= 7 then out[#out + 1] = r end end
     table.sort(out, function(a, b) return a.score > b.score end)
     return out
 end
+
+function M.default_last_run() return records()[8] end
 
 return M

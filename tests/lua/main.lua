@@ -378,6 +378,22 @@ test("career: clips, game over, seasons, bonus tracks, finale", function()
     f.cleared_rounds = 4; local fw = C.farewell(f); check(fw[1] == 0x62 and fw[2] == 0x5F, "else B98 + AZUR")
 end)
 
+test("subtitles: .SUB groups and line placement", function()
+    local subs = require("formats.subtitles")
+    -- two groups: { "HI", "THERE" } and { "BYE" }
+    local g1 = string.char(2) .. "HI" .. "\xff" .. string.char(5) .. "THERE" .. "\xff"
+    local g2 = string.char(3) .. "BYE" .. "\xff"
+    local function u16(v) return string.char(v & 255, v >> 8) end
+    local d = u16(4) .. u16(4 + #g1) .. g1 .. g2
+    local groups = subs.parse(d)
+    check(groups and #groups[0] == 2 and groups[0][2] == "THERE" and groups[1][1] == "BYE", "groups and lines")
+    check(subs.for_video(groups, "intro.hnm")[1] == "HI", "group 0 is INTRO")
+    check(subs.for_video(groups, "B64.HNM")[1] == "BYE", "group 1 is B64")
+    check(subs.for_video(groups, "NS11.HNM") == nil, "no group: no subtitles")
+    check(subs.start_x("Welcome to NewSan!") == 160 - (18 * 9) // 4, "x = 160 - 2.25 * length")
+    check(#subs.GROUP_VIDEO == 62, "62 subtitled videos")
+end)
+
 test("voc: decodes a type-1 block", function()
     local voc = require("formats.voc")
     local hdr = "Creative Voice File\x1a" .. string.char(26, 0, 0x0a, 0x01, 0x29, 0x11)
@@ -404,13 +420,13 @@ test("save: serialize and parse round trip", function()
     check(save.parse("{ x = os }") == nil or save.parse("{ x = os }").x == nil, "no globals in a save file")
 end)
 
-test("save: hall of fame keeps the top 8", function()
+test("save: hall of fame keeps the top 7", function()
     local save = require("game.save")
     local st = { hall = {} }
     for i = 1, 8 do save.add_score(st, { name = "R" .. i, score = i * 100 }) end
     local rank = save.add_score(st, { name = "NEW", score = 450 })
     check(rank == 5, "450 ranks 5th")
-    check(#st.hall == 8 and st.hall[8].score == 200, "lowest dropped")
+    check(#st.hall == 7 and st.hall[7].score == 300, "lowest dropped")
     check(save.add_score(st, { name = "LOW", score = 1 }) == nil, "too low: not entered")
 end)
 
@@ -535,13 +551,31 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("[data] subtitles: every language, cues match lines", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local subs = require("formats.subtitles")
+    for _, l in ipairs(subs.LANGUAGES) do
+        local g = subs.load(l.code)
+        check(g and g[0] and #g[0] > 100, "MEGA" .. l.code .. ".SUB: the intro's lines")
+    end
+    check(subs.font(), "DFCHAR.BIN")
+    local g = subs.load("AMER")
+    for _, v in ipairs({ "B01.HNM", "B64.HNM", "BA5.HNM" }) do
+        local h, n = hnm.open(v), 0
+        for i = 0, h:frames() - 1 do if h:decode(i).subtitle == "next" then n = n + 1 end end
+        check(n == #subs.for_video(g, v), v .. ": one cue per line")
+    end
+end)
+
 test("[data] game data from RACEPRG.EXE", function()
     if not data then skipped = skipped + 1; return "skip" end
     local gd = require("game.data")
     local names = gd.track_names()
     check(names[1] == "NEW SAN-1" and names[16] == "HOLDER", "track display names")
     local hall = gd.default_hall()
-    check(#hall == 8 and hall[1].name == "LANCE BOYLE" and hall[1].score == 12000, "default Hall of Fame")
+    check(#hall == 7 and hall[1].name == "LANCE BOYLE" and hall[1].score == 12000, "default Hall of Fame: 7 places")
+    local last = gd.default_last_run()
+    check(last and last.name == "ENFORCER SCORE", "the 8th record is your run's line")
     for _, c in ipairs(gd.MENU_CARS) do check(dat.exists(c.video .. ".HNM"), c.video .. ".HNM exists") end
     local p = spr.open("PANEL2")
     check(p and p:count() == 31, "PANEL2 has 31 entries")

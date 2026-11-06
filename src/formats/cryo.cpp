@@ -357,6 +357,7 @@ bool HnmVideo::decode(int i, Frame& f) {
     f.sound.clear();
     f.hasVideo = false;
     f.paletteChanged = false;
+    f.subtitleCue = 0;
     while (p + 4 <= end) {
         char tag[3] = {char(d_[p]), char(d_[p + 1]), 0};
         bool typed = !std::strcmp(tag, "pl") || !std::strcmp(tag, "sd") ||
@@ -386,6 +387,7 @@ bool HnmVideo::decode(int i, Frame& f) {
     if (p + 4 > end) return true;
     uint32_t hdr = d_[p] | d_[p + 1] << 8 | d_[p + 2] << 16 | uint32_t(d_[p + 3]) << 24;
     f.w = int(hdr & 0x1FF);
+    f.subtitleCue = (hdr & 0x4000) ? 0x40 : ((hdr & 0x2000) ? 0x20 : 0);
     f.h = int((hdr >> 16) & 0xFF);
     f.overlay = (hdr >> 24) == 0xFF;
     p += 4;
