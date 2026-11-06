@@ -544,7 +544,7 @@ centred at x + 9 + 10 × lane, rows at y + 20, + 10 and + 0. The icon is
 font. Not drawn on the last track. `[0x68C7]` starts at DS:0x846[round]
 (4, 5, 5, 5, 6, 6, then 7): the number of rivals to beat. The original
 races them one at a time and you win when it reaches 0 (0x3FE8,
-`[0x68CB]` = −3); the port still has three on the road at once.
+`[0x68CB]` = −3); see Rivals.
 
 **Status line** (0x150A), in the RAW fonts, over the picture: `LAPS:` at
 (2, 6), the laps left `[0x68C5]` (3; 2 on HOLD) at (50, 6), and the score
@@ -555,6 +555,62 @@ races them one at a time and you win when it reaches 0 (0x3FE8,
 8*k* − 1 (0 for *k* = 0), 10 pixels apart; `FONTE6_6` is 6 × 6 digits at
 column 6*k*, 6 apart. Pixels are colours 79 and 255; over the dashboard the
 glyph box is cleared to black first.
+
+## Rivals
+
+**One at a time.** A race has `[0x68C7]` opponents (DS:0x846[round]: 4, 5,
+5, 5, 6, 6, then 7; HOLD draws 2–8). The first starts 5 sections ahead
+(0x04F5; 28 on HOLD) at speed 0. When one has been destroyed and its
+explosion has played, the next arrives 28 sections ahead at your speed and
+the count drops (0x3F89). At 0 the round is won.
+
+**Distance** `[0xE0B]` = `[0xDF2]` × 8 + `[0xDF6]` (0x4405): eighths of a
+section ahead of your car (the per-track offset `[0x42A]` is 0), clamped to
+−16…200 for the AI. `[0xDF2]` stays within ±30 sections.
+
+**Movement** (0x42C6), every tick: with a speed difference dv the rival
+moves `step` eighths every `every` ticks, toward you if it's slower:
+
+| dv | < 10 | 10–19 | 20–29 | 30–39 | 40–59 | 60–179 | 180+ | destroyed |
+|---|---|---|---|---|---|---|---|---|
+| step / every | 0 / 16 | 1 / 10 | 1 / 6 | 1 / 4 | 1 / 2 | 2 / 1 | 8 / 1 | 2 / 1 |
+
+Its speed is limited to 1…`[0xDB2]` (230). On HOLD it is 0: the rivals are
+parked.
+
+**AI** (0x3467): every 100 ticks (50 when `[0x68CD]` = 2, HARDENED), only
+while you're moving and never on HOLD, the rival's state handler
+(cs:0x36F1) runs. The handler for each new rival comes from cs:0x36F7
+indexed by the opponents left: 1 → C, 2 → B, more → A.
+
+- *Chase* (0x36AD), shared: speed = yours − k, k = 100 when more than 60
+  eighths ahead, 50 above 30, 30 above 8, else 10; k = −50 if you're at
+  100 or less or spinning. Limit 230.
+- **A** (0x34B4): speed 230 until 170 eighths (21 sections) ahead, then
+  chase; once you pass it (< 0), it holds 160 and fires when it's within
+  4 eighths behind and lined up; ahead again → chase.
+- **B** (0x351F): chase until within 40 eighths, then 160, steering left;
+  from 7 eighths ahead it steers off the walls (0x3666); fires from 3–10
+  eighths behind; 40 ahead → chase again.
+- **C** (0x357F): as B, but from 7 eighths it holds the middle of the road
+  (x 140–180, 0x367F).
+- (A fourth type, 0x35DF/0x35F6, blocks your line and speeds up near you; the
+  table only uses it for more opponents than any round has.)
+
+Steering `[0xE03]` (−1/0/1) only acts within 50 eighths (0x4213).
+
+**Left behind:** 6+ sections behind for 400 ticks and it counts as destroyed
+(0x3E4D…0x3E8D); on HOLD, as soon as it's 6 behind.
+
+**End of the race** (0x4F4B…0x5064): `[0x68CB]` −3 every opponent
+destroyed, −1 laps run out (`[0x68C5]`: 3, HOLD 2), −2 wrecked. The race's
+points `[0x690D]` add to the score `[0x6A02]` (none for a wreck on HOLD).
+You go on to the next track after −3, or after −1 with at most one opponent
+left and 1200 points or more. Energy starts at 400 (0x0561).
+
+The port runs the AI exactly as above. Its own choices: the steering rate
+(0.012 road widths a tick), the bump collision, and that rivals within
+one section of you aren't drawn (the camera is one section behind your car).
 
 ## Music
 
@@ -623,8 +679,8 @@ header as described above.
 
 - What the timers and flags of codes 6, 8, 9, 10, 23 and 24 do.
 - `[0x80C]` (likely handling) and the units of the shot range `[0xE0B]`.
-- Rival AI (the state machine around 0x34C5…0x37C7) and collisions (the port's are placeholders).
-- One rival at a time and the opponents count as the way to win (see Dashboard).
+- Collisions with the rival (0x3BA5…0x3C71; the port's are its own) and the rival's steering physics (0x4210).
+- The bonus-track rules (TOKY/HOLD after enough clean rounds, `[0x69B4]`/`[0x69B6]`) and the post-race videos (`[0x69E4]` 0x59–0x62).
 - The original options-menu layout and championship scoring.
 - Wheel-frame offsets for car images 11–16.
 - The scaling tables in `_XXX.HSQ` and the game's own rival-car scale rule.

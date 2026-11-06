@@ -87,18 +87,21 @@ R.SHOT = { muzzle = 11, bolt = 14, bolt_end = 18, impact_end = 23 }
 -- view angle [0xCA4] (|angle| thresholds 2,3,5,7,9; tables at 0x2DD5 and
 -- DS:0xD86). The sign follows the angle: the shot heads toward the centre.
 R.SHOT_AIM = {
-    { below = 2,   muzzle = 0,  dx = 0,  dy = -17 },
-    { below = 3,   muzzle = 4,  dx = 8,  dy = -14 },
-    { below = 5,   muzzle = 12, dx = 18, dy = -10 },
-    { below = 7,   muzzle = 20, dx = 30, dy = -8 },
-    { below = 9,   muzzle = 40, dx = 40, dy = -7 },
-    { below = 1e9, muzzle = 48, dx = 55, dy = -6 },
+    { below = 2,   muzzle = 0,  dx = 0,  dy = -17, range = 40 },
+    { below = 3,   muzzle = 4,  dx = 8,  dy = -14, range = 38 },
+    { below = 5,   muzzle = 12, dx = 18, dy = -10, range = 35 },
+    { below = 7,   muzzle = 20, dx = 30, dy = -8,  range = 34 },
+    { below = 9,   muzzle = 40, dx = 40, dy = -7,  range = 33 },
+    { below = 1e9, muzzle = 48, dx = 55, dy = -6,  range = 32 },
 }
+-- `range` is how far ahead the shot reaches, in eighths of a section: the
+-- hit test wants the rival 0..range ahead (0x2FB2: [0xE0B] against the
+-- table's third value).
 function R.shot_aim(angle)
     local a = math.abs(angle)
     local sign = angle < 0 and -1 or 1
     for _, e in ipairs(R.SHOT_AIM) do
-        if a < e.below then return sign * e.muzzle, sign * e.dx, e.dy end
+        if a < e.below then return sign * e.muzzle, sign * e.dx, e.dy, e.range end
     end
 end
 
@@ -165,12 +168,12 @@ end
 -- A bump into a rival (RACEPRG 0x3BFF): THRILL rises by 10.
 function R.bump(s) s.thrill_pending = 10 end
 
--- The rival's shot at you (RACEPRG 0x4711, 0x4779, 0x491A). It fires from
--- 3..10 sections behind when it is lined up with your car and no shot of
--- its is in flight. Same frames as yours; a hit lands when it is 5..9
--- sections behind and still lined up, and the impact's end costs 20 armour.
-R.RIVAL_FIRE_BEHIND = { 3, 10 }
-R.RIVAL_HIT_BEHIND  = { 5, 9 }
+-- The rival's shot at you (RACEPRG 0x4711, 0x4779, 0x491A). The rival's AI
+-- (race/rival.lua) decides when it fires: from just behind you, lined up
+-- with your car, with no shot of its in flight. Same frames as yours; a hit
+-- lands when it is 5..9 eighths of a section behind and still lined up,
+-- and the impact's end costs 20 armour.
+R.RIVAL_HIT_BEHIND  = { 5, 9 }      -- eighths of a section
 R.RIVAL_SHOT_DAMAGE = 20
 
 function R.rival_fire(s)
@@ -219,7 +222,7 @@ function R.new(car)
     local s = {
         car = stats,
         speed = 0,              -- [0xC9E]
-        energy = 200,           -- [0x6911]
+        energy = 400,           -- [0x6911], 400 at the start (0x0561)
         points = 0,             -- [0x690D] (raised by code 18, lowered by code 2)
         armour = stats.armour,  -- [0xD2E]
         weapon = 1,             -- [0xD5A]: every car starts with weapon 1 (DS:0xD66)
@@ -336,12 +339,5 @@ function R.apply_tile(s, code, turn)
     return R.TILE_SOUND[code]
 end
 
--- How fast a rival moves relative to you, in sections per second. The track
--- video advances at a fixed rate whenever you're moving (RACEPRG 0x0739:
--- the next frame is fetched whenever speed > 0), so speed doesn't change
--- the scenery: it changes who gains on whom. Positive = rival pulls away.
-function R.rival_relative(video_fps, player_speed, rival_speed)
-    return video_fps * (rival_speed - player_speed) / R.MAX_SPEED
-end
 
 return R

@@ -63,8 +63,9 @@ The dashboard is each car's own: speed, energy and armour (SP/EN/DM)
 gauges, the THRILL meter, the weapon, the radar with the nearest rival and
 the tile scanner, all placed as RACEPRG.EXE places them. Rivals behind you
 shoot back; run out of armour and you're destroyed. Drive over the lane tiles for their effects (energy, points, weapons,
-super speed, skids, spins), overtake or shoot down the three rivals, and
-finish three laps. Each car has its own guns, armour and firepower, read from
+super speed, skids, spins). The opponents come one at a time, each with the
+original's AI: destroy them all to win the round, or finish the laps with at
+most one left and 1200 points to qualify. Each car has its own guns, armour and firepower, read from
 the game's car table.
 
 The track viewer drives along a track video with the game's own cars: your
@@ -113,12 +114,13 @@ GitHub Actions (same layout as the Aleph One fork):
 | Track data: camera and road per section, occlusion masks, lane tiles | Done (exact transform from RACEPRG.EXE) |
 | Car sprites, dashboards, palettes, rival cars | Done (wheel offsets for side views still to do) |
 | FM music: the six HERAD songs on an emulated OPL2, song per track | Done (register output identical to AdPlug's HERAD player on all six) |
-| Racing: speed, lanes, lane tiles and their sounds, laps, position | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
+| Racing: speed, lanes, lane tiles and their sounds, laps | Done (rules from RACEPRG.EXE; a few tile effects still placeholders) |
 | Main menu, car showcase, championship rounds, Hall of Fame, options, save file | Done (layouts matched to the original art; scoring and options layout are the port's own) |
 | Weapons: firing, energy cost, per-car guns, hits, damage, explosions | Done (from RACEPRG.EXE) |
 | Dashboard: gauges, THRILL, lamps, radar, scanner, opponents, status line | Done (per-car layout tables from RACEPRG.EXE) |
 | Rivals shooting back, armour, being destroyed | Done (from RACEPRG.EXE) |
-| Rival AI, one-rival-at-a-time races, subtitles | To do |
+| Rivals one at a time with the original AI, opponents per round, laps, qualifying, scoring | Done (from RACEPRG.EXE) |
+| Post-race videos, bonus tracks, subtitles | To do |
 
 Format notes: [docs/formats.md](docs/formats.md).
 
