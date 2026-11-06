@@ -37,6 +37,7 @@ function M.defaults()
         car = 1,                   -- main-menu monitor 1..8
         round = 1,                 -- next track, 1..16
         total = 0,                 -- championship score so far
+        music = true,              -- FM music on (M in the main menu)
         hall = nil,                -- filled from the EXE's defaults on first run
     }
 end

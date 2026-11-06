@@ -114,13 +114,17 @@ static int gfx_screenshot(lua_State* L) {
 
 // ------------------------------------------------------------- audio ------
 
-// audio.music(track [, loop=true]) plays trackNN.wav from the music folder.
+// audio.music(name [, loop=true]) plays <name>.wav from the --music folder
+// (a recording to use instead of an FM song, e.g. "NEWSAN"); a number plays
+// trackNN.wav. Returns false if the file isn't there.
 static int audio_music(lua_State* L) {
     auto& e = E(L);
-    int track = ci(L, 1);
     bool loop = lua_isnoneornil(L, 2) ? true : lua_toboolean(L, 2);
-    char name[32];
-    std::snprintf(name, sizeof name, "track%02d.wav", track);
+    char name[64];
+    if (lua_type(L, 1) == LUA_TNUMBER)
+        std::snprintf(name, sizeof name, "track%02d.wav", ci(L, 1));
+    else
+        std::snprintf(name, sizeof name, "%s.wav", luaL_checkstring(L, 1));
     auto p = e.music.resolve(name);
     lua_pushboolean(L, p && e.audio.playMusicWav(p->string(), loop));
     return 1;
@@ -142,6 +146,20 @@ static int audio_pcm(lua_State* L) {
     lua_pushinteger(L, id);
     return 1;
 }
+
+// audio.song(data [, loop=true]): plays an unpacked HERAD song (dat.read
+// of NEWSAN.HSQ etc.) on the emulated FM chip. Returns false if it won't parse.
+static int audio_song(lua_State* L) {
+    size_t len = 0;
+    const char* d = luaL_checklstring(L, 1, &len);
+    bool loop = lua_isnoneornil(L, 2) ? true : lua_toboolean(L, 2) != 0;
+    lua_pushboolean(L, E(L).audio.playSong(reinterpret_cast<const uint8_t*>(d), len, loop));
+    return 1;
+}
+static int audio_stop_song(lua_State* L) { E(L).audio.stopSong(); return 0; }
+static int audio_fade_song(lua_State* L) { E(L).audio.fadeSong(luaL_optnumber(L, 1, 1.5)); return 0; }
+static int audio_song_playing(lua_State* L) { lua_pushboolean(L, E(L).audio.songPlaying()); return 1; }
+static int audio_song_volume(lua_State* L) { E(L).audio.setSongVolume(static_cast<float>(luaL_checknumber(L, 1))); return 0; }
 
 static int audio_stop(lua_State* L) { E(L).audio.stopVoice(ci(L, 1)); return 0; }
 static int audio_stop_all(lua_State* L) { E(L).audio.stopAll(); return 0; }
@@ -489,6 +507,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"stream_reset", audio_stream_reset}, {"stream_push", audio_stream_push},
         {"stream_queued", audio_stream_queued}, {"stream_played", audio_stream_played},
         {"available", audio_available},
+        {"song", audio_song}, {"stop_song", audio_stop_song}, {"fade_song", audio_fade_song},
+        {"song_playing", audio_song_playing}, {"song_volume", audio_song_volume},
         {nullptr, nullptr}};
     static const luaL_Reg dat[] = {
         {"open", dat_open}, {"list", dat_list}, {"exists", dat_exists}, {"size", dat_size},

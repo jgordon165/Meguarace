@@ -6,6 +6,7 @@
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
+local music  = require("game.music")
 local S = {}
 
 local SILENT_FPS = 12.5
@@ -45,6 +46,7 @@ function S:decodeAhead()
             -- With an audio device, the sound is the clock. Without one
             -- (no sound card, or it failed to open), fall back to the timer
             -- instead of waiting for audio that will never play.
+            if not self.sound then music.stop() end   -- the video brings its own sound
             self.sound = true
             local rate = self.v:sound_rate()
             audio.stream_push(self.v:sound(), rate > 0 and rate or 11111)

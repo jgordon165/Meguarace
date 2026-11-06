@@ -4,7 +4,9 @@
 // Tests that need the real game run separately when MEGARACE_DATA points at
 // a MegaRace CD (see tests/lua/main.lua).
 
+#include "fm.h"
 #include "formats/cryo.h"
+#include "formats/herad.h"
 #include "resampler.h"
 
 #include <algorithm>
@@ -296,8 +298,103 @@ static void testResamplerChunks() {
     CHECK(silent && !sil.empty());
 }
 
+// ---------------------------------------------------------------------------
+// HERAD: a hand-built version-1 song with one track and one instrument.
+//   program 0, note on C4 (60) at velocity 64, 10 ticks later note off.
+static Bytes tinySong(uint16_t speed) {
+    Bytes track = {0x00, 0xC0, 0x00,  0x00, 0x90, 60, 0x40,  0x00, 0xE0, 0x60,
+                   0x0A, 0x80, 60, 0x00,  0x00, 0xFF};
+    Bytes d(0x34, 0);
+    auto put16 = [&](size_t at, uint16_t v) { d[at] = uint8_t(v); d[at + 1] = uint8_t(v >> 8); };
+    put16(2, 0x32);                                   // track 0 at 0x32 + 2 = 0x34
+    put16(0x32, speed);
+    d.insert(d.end(), track.begin(), track.end());
+    put16(0, uint16_t(d.size()));                     // instruments follow the track
+    Bytes inst(40, 0);
+    inst[3] = 1; inst[16] = 1;                        // multipliers
+    inst[5] = 15; inst[18] = 15;                      // attack
+    inst[10] = 10; inst[23] = 0;                      // output levels
+    inst[4] = 3;                                      // feedback
+    d.insert(d.end(), inst.begin(), inst.end());
+    return d;
+}
+
+static bool hasWrite(const std::vector<herad::Write>& w, uint8_t reg, uint8_t val) {
+    for (auto& x : w) if (x.reg == reg && x.val == val) return true;
+    return false;
+}
+
+static void testHerad() {
+    Bytes d = tinySong(256);
+    herad::Song s;
+    CHECK(s.parse(d));
+    CHECK(!s.v2 && !s.agd);
+    CHECK(s.tracks.size() == 1 && s.instruments.size() == 1);
+    CHECK(s.length_ticks() == 10);
+
+    herad::Player p(s, false);
+    std::vector<herad::Write> w;
+    p.rewind(w);
+    CHECK(hasWrite(w, 0x01, 0x20) && hasWrite(w, 0xBD, 0x00) && hasWrite(w, 0x08, 0x40));
+
+    // First tick: program change, note on (C4 -> octave 3, F-number 343),
+    // then a bend of +1 semitone (0x60) -> F-number 364, still keyed on.
+    w.clear();
+    CHECK(p.timer(w));
+    CHECK(hasWrite(w, 0x20, 0x01) && hasWrite(w, 0x60, 0xF0) && hasWrite(w, 0x40, 0x0A));
+    CHECK(hasWrite(w, 0xC0, 0x07));                   // feedback 3; connection byte 0 = additive
+    CHECK(hasWrite(w, 0xA0, 343 & 0xFF) && hasWrite(w, 0xB0, 0x20 | (3 << 2) | (343 >> 8)));
+    CHECK(hasWrite(w, 0xA0, 364 & 0xFF));
+    // Note off exactly 10 ticks later (speed 256: one tick per timer call).
+    int off_at = -1;
+    for (int i = 1; i <= 20 && off_at < 0; ++i) {
+        w.clear();
+        p.timer(w);
+        if (hasWrite(w, 0xB0, (3 << 2) | (364 >> 8))) off_at = i;
+    }
+    CHECK(off_at == 10);
+    w.clear();
+    for (int i = 0; i < 5; ++i) p.timer(w);
+    CHECK(!p.timer(w));                               // ended (no loop)
+
+    // Speed 512: one tick every second timer call.
+    herad::Song s2;
+    CHECK(s2.parse(tinySong(512)));
+    herad::Player p2(s2, false);
+    p2.rewind(w);
+    int calls = 0;
+    while (p2.timer(w) && calls < 1000) ++calls;
+    CHECK(calls >= 20 && calls <= 26);
+
+    // Looping (header: from measure 1 to 2, forever): never ends, counts passes.
+    Bytes ld = tinySong(256);
+    ld[0x2C] = 1; ld[0x2E] = 2;
+    herad::Song ls;
+    CHECK(ls.parse(ld));
+    herad::Player p3(ls, true);
+    p3.rewind(w);
+    for (int i = 0; i < 100; ++i) CHECK(p3.timer(w));
+    CHECK(p3.loops() >= 1);
+
+    // Rejects junk.
+    herad::Song bad;
+    CHECK(!bad.parse(Bytes(10, 0)));
+    Bytes wrong = tinySong(256); wrong[2] = 0x40;    // first track must be at 0x32/0x52
+    CHECK(!bad.parse(wrong));
+
+    // On the emulated chip: silence before the note, sound once it plays.
+    FmMusic m;
+    CHECK(m.load(d.data(), d.size(), false));
+    std::vector<int32_t> out(2 * 2205, 0);
+    m.render(out.data(), 2205, 44100, 1.0f);          // 50 ms
+    int32_t peak = 0;
+    for (auto v : out) peak = std::max(peak, std::abs(v));
+    CHECK(peak > 100);
+    CHECK(std::abs(FmMusic::chip_rate() - 49715.9) < 1.0);
+}
+
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testHerad}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }

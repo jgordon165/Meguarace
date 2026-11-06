@@ -58,6 +58,32 @@ bool Audio::playMusicWav(const std::string& hostPath, bool loop) {
     return true;
 }
 
+bool Audio::playSong(const uint8_t* data, size_t len, bool loop) {
+    if (!dev_) return false;
+    auto m = std::make_unique<FmMusic>();
+    if (!m->load(data, len, loop)) return false;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        song_.swap(m);
+        songFade_ = songFadeTotal_ = 0;
+    }
+    return true;                       // the old song is freed here, outside the lock
+}
+
+void Audio::stopSong() {
+    std::unique_ptr<FmMusic> old;
+    std::lock_guard<std::mutex> lk(mtx_);
+    old = std::move(song_);
+}
+void Audio::fadeSong(double seconds) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    if (!song_) return;
+    songFadeTotal_ = std::max(1, int(seconds * spec_.freq));
+    songFade_ = songFadeTotal_;
+}
+bool Audio::songPlaying() { std::lock_guard<std::mutex> lk(mtx_); return song_ && song_->playing(); }
+void Audio::setSongVolume(float v) { std::lock_guard<std::mutex> lk(mtx_); songVol_ = v; }
+
 void Audio::stopMusic() { std::lock_guard<std::mutex> lk(mtx_); music_.active = false; }
 bool Audio::musicPlaying() { std::lock_guard<std::mutex> lk(mtx_); return music_.active; }
 void Audio::setMusicVolume(float v) { std::lock_guard<std::mutex> lk(mtx_); music_.vol = v; }
@@ -143,6 +169,15 @@ void Audio::mix(int16_t* out, int frames) {
             acc[i] += static_cast<int32_t>(s.samples[s.pos++] * s.vol);
         }
     };
+    if (song_) {
+        float g = songVol_;
+        if (songFadeTotal_) {
+            g *= float(songFade_) / float(songFadeTotal_);
+            songFade_ = std::max(0, songFade_ - frames);
+        }
+        song_->render(acc.data(), frames, spec_.freq, g);
+        if (songFadeTotal_ && songFade_ == 0) { song_.reset(); songFadeTotal_ = 0; }
+    }
     add(music_);
     for (auto& v : voices_) add(v);
     // The stream never loops or deactivates on underrun; it just waits.

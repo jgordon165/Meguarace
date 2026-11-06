@@ -313,6 +313,31 @@ test("[data] weapon sprites and sounds", function()
     end
 end)
 
+test("music: song per round and per track video", function()
+    local music = require("game.music")
+    check(#music.SONGS == 6 and #music.ROUND_SONG == 16, "6 songs, 16 rounds")
+    check(music.song_for_video("NS11") == 1 and music.song_for_video("NS12") == 1, "NS1 laps: NEWSAN")
+    check(music.song_for_video("FC21") == 3, "FC2: DETRITUS (Factory Land)")
+    check(music.song_for_video("HOLD") == 6 and music.song_for_video("TOKY") == 6, "last two: PAGA")
+    check(music.song_for_video("NOPE") == nil, "unknown video: no song")
+end)
+
+test("[data] the six FM songs", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    local music = require("game.music")
+    for _, s in ipairs(music.SONGS) do
+        local bytes = dat.read(s.file .. ".HSQ")
+        check(bytes and #bytes > 30000, s.file .. ".HSQ unpacks")
+        if audio.available() then
+            check(audio.song(bytes), s.file .. " plays")
+            check(audio.song_playing(), s.file .. " is playing")
+        end
+    end
+    audio.stop_song()
+    check(not audio.song_playing(), "stop_song stops it")
+    check(not audio.song("not a song"), "junk is refused")
+end)
+
 test("[data] game data from RACEPRG.EXE", function()
     if not data then skipped = skipped + 1; return "skip" end
     local gd = require("game.data")

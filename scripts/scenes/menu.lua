@@ -1,5 +1,5 @@
 -- Main menu: PANEL1.HNM backdrop with PANEL2.HSQ overlays.
---   ARROWS move   ENTER choose   ESC options   F12 asset explorer
+--   ARROWS move   ENTER choose   ESC options   M music on/off   F12 asset explorer
 --
 -- Monitors (two columns of four) are the eight cars: ENTER picks the car and
 -- plays its showcase video. Buttons: green = race the next round, yellow =
@@ -12,6 +12,7 @@
 local scenes = require("core.scenes")
 local data   = require("game.data")
 local save   = require("game.save")
+local music  = require("game.music")
 local S = {}
 
 local THUMB = { { 47, 3 }, { 222, 3 }, { 26, 33 }, { 237, 33 }, { 20, 65 }, { 242, 65 }, { 27, 99 }, { 230, 99 } }
@@ -49,6 +50,7 @@ end
 
 -- Redraws backdrop palette + overlays (after returning from another scene).
 function S:restore()
+    self.want_music = true             -- started on the next update, once the menu is on top
     self.bg:decode(0)
     self.bg:apply_palette()
     self.panel:apply_palette()
@@ -106,9 +108,22 @@ end
 
 function S:update(dt)
     self.t = self.t + dt
+    if self.want_music then
+        self.want_music = false
+        music.set_enabled(self.state.music ~= false)
+        music.play(music.AFTER_RACE)   -- song 6, as after the post-race videos (0x5198)
+    end
     if self.note_t then self.note_t = self.note_t - dt; if self.note_t <= 0 then self.note = nil end end
     if input.pressed("F12") then scenes.push(require("scenes.explorer"), self.report); return end
     if input.pressed("Escape") then scenes.push(require("scenes.options"), self.state); return end
+    if input.pressed("M") then
+        self.state.music = self.state.music == false
+        save.store(self.state)
+        music.set_enabled(self.state.music)
+        if self.state.music then music.play(music.AFTER_RACE) end
+        self.note, self.note_t = self.state.music and "MUSIC ON" or "MUSIC OFF", 2
+        return
+    end
     local f = self.focus
     if input.pressed("Left") then f = move(f, -1, 0) end
     if input.pressed("Right") then f = move(f, 1, 0) end
