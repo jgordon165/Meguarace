@@ -8,6 +8,11 @@
 #include "formats/cryo.h"
 #include "formats/herad.h"
 #include "resampler.h"
+#include "voice_filter.h"
+
+#include <cmath>
+#include <complex>
+#include <random>
 
 #include <algorithm>
 #include <cmath>
@@ -324,6 +329,95 @@ static bool hasWrite(const std::vector<herad::Write>& w, uint8_t reg, uint8_t va
     return false;
 }
 
+// ---- hiss filter (src/voice_filter.h) -------------------------------------
+static std::vector<float> runFilter(VoiceFilter& f, const std::vector<float>& x, size_t chunk) {
+    std::vector<float> all, part;
+    for (size_t i = 0; i < x.size(); i += chunk) {
+        f.process(x.data() + i, std::min(chunk, x.size() - i), part);
+        all.insert(all.end(), part.begin(), part.end());
+    }
+    f.flush(part);
+    all.insert(all.end(), part.begin(), part.end());
+    return all;
+}
+
+static double rmsDb(const std::vector<float>& x, size_t a, size_t b) {
+    double e = 0;
+    for (size_t i = a; i < b; ++i) e += double(x[i]) * x[i];
+    return 10 * std::log10(e / double(b - a) + 1e-20);
+}
+
+static void testVoiceFilter() {
+    // FFT there and back.
+    std::vector<std::complex<float>> a(16), b;
+    for (int i = 0; i < 16; ++i) a[size_t(i)] = {float(i % 5) - 2.0f, float(i % 3)};
+    b = a;
+    VoiceFilter::fft(b.data(), 16, false);
+    VoiceFilter::fft(b.data(), 16, true);
+    float err = 0;
+    for (int i = 0; i < 16; ++i) err = std::max(err, std::abs(a[size_t(i)] - b[size_t(i)]));
+    CHECK(err < 1e-5f);
+
+    // The high-pass takes the offset away.
+    VoiceFilter::HighPass hp;
+    hp.design(80, 11111);
+    float y = 0;
+    for (int i = 0; i < 11111; ++i) y = hp.run(0.25f);
+    CHECK(std::fabs(y) < 1e-3f);
+
+    // A "voice" (a 440 Hz tone in bursts) in white hiss at -35 dB.
+    const int rate = 11111;
+    std::vector<float> x(size_t(rate) * 6);
+    std::mt19937 rng(7);
+    std::normal_distribution<float> noise(0.0f, 0.0178f);
+    for (size_t i = 0; i < x.size(); ++i) {
+        bool voice = (i / size_t(rate)) % 2 == 0;   // on, off, on, ...
+        x[i] = noise(rng) + (voice ? 0.3f * std::sin(2 * 3.14159265f * 440 * float(i) / rate) : 0.0f);
+    }
+    std::vector<uint8_t> pcm(x.size());
+    for (size_t i = 0; i < x.size(); ++i)
+        pcm[i] = uint8_t(std::clamp(std::lround(x[i] * 128 + 128), 0L, 255L));
+    auto prof = VoiceFilter::profile(pcm.data(), pcm.size(), rate);
+    CHECK(prof.size() == size_t(VoiceFilter::kBins));
+
+    VoiceFilter f;
+    f.start(prof, rate);
+    auto out = runFilter(f, x, 889);   // a video frame's worth at a time
+    CHECK(out.size() == x.size());     // as long as the input, after flush
+    // Between bursts (second 1..2): hiss well down. In a burst (second 2..3): the voice kept.
+    double hissIn = rmsDb(x, size_t(rate) * 1 + 2000, size_t(rate) * 2 - 2000);
+    double hissOut = rmsDb(out, size_t(rate) * 1 + 2000, size_t(rate) * 2 - 2000);
+    double voiceIn = rmsDb(x, size_t(rate) * 2 + 2000, size_t(rate) * 3 - 2000);
+    double voiceOut = rmsDb(out, size_t(rate) * 2 + 2000, size_t(rate) * 3 - 2000);
+    CHECK(hissIn - hissOut > 8.0);
+    CHECK(std::fabs(voiceIn - voiceOut) < 1.0);
+
+    // Chunking doesn't change the result.
+    VoiceFilter g;
+    g.start(prof, rate);
+    auto whole = runFilter(g, x, x.size());
+    float diff = 0;
+    for (size_t i = 0; i < whole.size(); ++i) diff = std::max(diff, std::fabs(whole[i] - out[i]));
+    CHECK(whole.size() == out.size() && diff < 1e-4f);
+
+    // Lined up with the input: the burst starts at sample 2*rate, not later.
+    CHECK(rmsDb(out, size_t(rate) * 2 - 300, size_t(rate) * 2 - 100) < voiceOut - 15);
+    CHECK(rmsDb(out, size_t(rate) * 2 + 100, size_t(rate) * 2 + 300) > voiceOut - 3);
+
+    // Bypassed: exactly the input, same length and timing.
+    VoiceFilter h;
+    h.start(prof, rate);
+    h.setBypass(true);
+    auto dry = runFilter(h, x, 500);
+    CHECK(dry == x);
+
+    // Off (no profile): passes through.
+    VoiceFilter o;
+    o.start({}, rate);
+    CHECK(!o.active());
+    CHECK(VoiceFilter::profile(pcm.data(), 100, rate).empty());   // too short
+}
+
 static void testHerad() {
     Bytes d = tinySong(256);
     herad::Song s;
@@ -394,7 +488,7 @@ static void testHerad() {
 }
 
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testHerad}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }

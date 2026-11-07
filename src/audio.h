@@ -7,6 +7,7 @@
 #include <SDL.h>
 #include "fm.h"
 #include "resampler.h"
+#include "voice_filter.h"
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -41,6 +42,11 @@ public:
     // Streamed PCM (video soundtracks): push per-frame audio as it decodes.
     void streamReset();
     void streamPush(const uint8_t* data, size_t len, int rate, int bits, int channels);
+    // Hiss reduction for the stream (the announcer's clips): on until the
+    // next streamReset(). `noise` from VoiceFilter::profile(). 8-bit mono only.
+    void streamVoiceFilter(std::vector<float> noise, int rate);
+    void streamVoiceBypass(bool bypass);   // original sound, same timing
+    void streamEnd();                      // no more pushes: let the filter's last samples out
     double streamQueuedSeconds();
     uint64_t streamPlayedFrames();   // sample frames played since reset (A/V clock)
     int deviceRate() const { return spec_.freq; }
@@ -70,6 +76,10 @@ private:
     int songFade_ = 0, songFadeTotal_ = 0;   // frames left / length of a fade-out
     Source stream_;
     Resampler streamResampler_;     // persists across pushes (exact A/V timing)
+    VoiceFilter streamFilter_;
+    int streamRate_ = 11111;
+    void pushFiltered(const std::vector<float>& out);
+    void queueStream(const std::vector<int16_t>& pcm);
     uint64_t streamPlayed_ = 0;
     std::vector<Source> voices_ = std::vector<Source>(16);
     int nextId_ = 1;

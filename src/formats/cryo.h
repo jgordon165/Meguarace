@@ -83,6 +83,9 @@ public:
     // Reads only the game-data chunks ("pt", "kl") of frame i, without
     // decoding the picture or sound. Cheap; used to index whole tracks.
     bool dataChunks(int i, std::map<std::string, std::vector<uint8_t>>& out) const;
+    // The whole soundtrack (8-bit unsigned PCM, as decode() gives it frame
+    // by frame), without decoding any picture, and its rate (0 if none). Cheap.
+    std::vector<uint8_t> soundTrack(int* rate = nullptr) const;
 
 private:
     std::vector<uint8_t> d_;
@@ -92,4 +95,6 @@ private:
     bool vocHeaderSeen_ = false;
     size_t parsePalette(const uint8_t* p, size_t n);
     void addSound(const uint8_t* p, size_t n, std::vector<uint8_t>& out);
+    static void appendVoc(const uint8_t* p, size_t n, bool& headerSeen, int* rate,
+                          std::vector<uint8_t>& out);
 };

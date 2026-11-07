@@ -302,21 +302,49 @@ bool HnmVideo::load(std::vector<uint8_t> file) {
     return !offsets_.empty();
 }
 
-void HnmVideo::addSound(const uint8_t* p, size_t n, std::vector<uint8_t>& out) {
+void HnmVideo::appendVoc(const uint8_t* p, size_t n, bool& headerSeen, int* rate,
+                         std::vector<uint8_t>& out) {
     // The 'sd' chunks together form one VOC file. Skip its header and the
     // first block header (type 1: 8-bit PCM) once, reading the sample rate.
-    if (!vocHeaderSeen_ && n >= 26 && std::memcmp(p, "Creative Voice File", 19) == 0) {
-        vocHeaderSeen_ = true;
+    if (!headerSeen && n >= 26 && std::memcmp(p, "Creative Voice File", 19) == 0) {
+        headerSeen = true;
         size_t hdr = p[20] | p[21] << 8;
         if (hdr + 6 <= n && p[hdr] == 1) {
             uint8_t sr = p[hdr + 4];
-            soundRate_ = 1000000 / (256 - sr);
+            if (rate) *rate = 1000000 / (256 - sr);
             p += hdr + 6; n -= hdr + 6;
         } else {
             p += std::min(hdr, n); n -= std::min(hdr, n);
         }
     }
     out.insert(out.end(), p, p + n);
+}
+
+void HnmVideo::addSound(const uint8_t* p, size_t n, std::vector<uint8_t>& out) {
+    appendVoc(p, n, vocHeaderSeen_, &soundRate_, out);
+}
+
+std::vector<uint8_t> HnmVideo::soundTrack(int* rate) const {
+    std::vector<uint8_t> out;
+    bool seen = false;
+    if (rate) *rate = 0;
+    for (int i = 0; i < frameCount(); ++i) {
+        size_t p = offsets_[size_t(i)];
+        size_t end = p + (d_[p] | d_[p + 1] << 8);
+        p += 2;
+        // Chunks come before the picture; stop at the first that isn't one
+        // (the damaged-tag case in decode() has no sound, so it ends it too).
+        while (p + 4 <= end) {
+            char t0 = char(d_[p]), t1 = char(d_[p + 1]);
+            size_t sz = d_[p + 2] | d_[p + 3] << 8;
+            bool known = (t0 == 'p' && t1 == 'l') || (t0 == 's' && t1 == 'd') ||
+                         (t0 == 'p' && t1 == 't') || (t0 == 'k' && t1 == 'l');
+            if (!known || sz < 4 || p + sz > end) break;
+            if (t0 == 's' && t1 == 'd') appendVoc(d_.data() + p + 4, sz - 4, seen, rate, out);
+            p += sz;
+        }
+    }
+    return out;
 }
 
 bool HnmVideo::dataChunks(int i, std::map<std::string, std::vector<uint8_t>>& out) const {
