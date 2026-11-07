@@ -23,6 +23,12 @@ cd/
 *.ISO
 *.iso
 
+# HD video packs are made from the game's videos: still the game's content,
+# so they are never committed (or built in CI, or shipped).
+*.hdv
+*.hdv.part
+/hd/
+
 # Reverse-engineering output may contain decompiled original code; keep local.
 re/output/
 re/ghidra_project/

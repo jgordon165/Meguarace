@@ -4,7 +4,8 @@
 // is compiled in or shipped.
 //
 // Usage: megarace --data <game folder> [--music <ripped tracks folder>]
-//                 [--scale N] [--scripts <dir>]
+//                 [--scale N] [--scripts <dir>] [--no-hd]
+//                 [--display native|800x600|1024x768|1920x1080]
 //                 [--frames N --screenshot out.bmp]   (headless testing)
 
 #include "engine.h"
@@ -25,6 +26,7 @@ extern "C" {
 
 namespace fs = std::filesystem;
 
+
 static bool callLua(lua_State* L, const char* fn, double arg, bool withArg) {
     lua_getglobal(L, "game");
     if (!lua_istable(L, -1)) { lua_pop(L, 1); return true; }
@@ -44,8 +46,9 @@ int main(int argc, char** argv) {
     Engine eng;
     std::string scripts;
     std::string shot;
-    int scale = 3;
+    int scale = 3;      // native mode's window size
     long maxFrames = -1;
+    bool noHd = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -56,9 +59,16 @@ int main(int argc, char** argv) {
         else if (a == "--scale")      scale = std::max(1, std::atoi(next().c_str()));
         else if (a == "--frames")     maxFrames = std::atol(next().c_str());
         else if (a == "--screenshot") shot = next();
+        else if (a == "--no-hd")      noHd = true;
+        else if (a == "--display")    eng.displayArg = next();
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
-                        "[--music <folder with track02.wav...>] [--scale N]\n");
+                        "[--music <folder with track02.wav...>] [--scale N]"
+#ifdef MEGARACE_HD
+                        " [--no-hd]"
+                        " [--display native|800x600|1024x768|1920x1080]"
+#endif
+                        "\n");
             return 0;
         }
     }
@@ -82,7 +92,27 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+    eng.hdOff = noHd;
     if (!eng.video.init(320, 200, scale, headless)) return 1;
+    // SDL starts with text input on; the game only wants it while a text
+    // line is being edited (input.text_start).
+    SDL_StopTextInput();
+    // HD packs from the folder set in Options > HD FOLDER (hd.cfg).
+    if (loadHd(eng))
+        std::printf("HD videos (%dx%d) from %s (F10 turns them off and on)\n", eng.video.hdPictureW(),
+                    eng.video.hdPictureH(), eng.hdDir.c_str());
+    // Display mode: --display, else the largest that fits the desktop. The
+    // game's saved setting, if any, is applied by the Lua side at start
+    // (unless --display was given). Without HD packs: native.
+    {
+        std::string want = eng.displayArg.empty() ? eng.video.bestMode() : eng.displayArg;
+        if (!eng.video.setMode(want)) {
+            if (!eng.displayArg.empty())
+                std::fprintf(stderr, "--display %s: %s\n", want.c_str(),
+                             eng.video.hdAvailable() ? "unknown mode" : "needs HD packs (megarace-hd)");
+            eng.video.setMode("native");
+        }
+    }
     eng.audio.init();   // non-fatal: the game runs silent without a device
 
     lua_State* L = luaL_newstate();
@@ -118,6 +148,11 @@ int main(int argc, char** argv) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) eng.quit = true;
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat &&
+                eng.video.hdAvailable() && eng.video.mode().hd) {
+                eng.video.setHdOn(!eng.video.hdOn());
+                std::printf("HD %s\n", eng.video.hdOn() ? "on" : "off");
+            }
             eng.input.handle(ev);
         }
         Uint64 now = SDL_GetPerformanceCounter();
@@ -132,7 +167,7 @@ int main(int argc, char** argv) {
         if (headless && ++frame >= maxFrames) break;
     }
 
-    if (!shot.empty() && !eng.video.saveBmp(shot))
+    if (!shot.empty() && !eng.video.saveBmp(shot, true))
         std::fprintf(stderr, "screenshot failed: %s\n", SDL_GetError());
 
     callLua(L, "shutdown", 0, false);

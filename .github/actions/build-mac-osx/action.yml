@@ -10,6 +10,11 @@ inputs:
     required: false
     default: Release
 
+  configure_options:
+    description: extra arguments passed to cmake at configure time
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -25,7 +30,7 @@ runs:
       uses: actions/cache@v5
       with:
         path: .deps
-        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.osx_arch || 'universal'}}-deps-${{hashFiles('CMakeLists.txt')}}
+        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.osx_arch || 'universal'}}-deps-${{hashFiles('CMakeLists.txt')}}-${{inputs.configure_options}}
 
     - name: Switch to Xcode 16.4
       run: sudo xcode-select --switch /Applications/Xcode_16.4.app
@@ -39,7 +44,8 @@ runs:
           -DCMAKE_BUILD_TYPE=${{inputs.build_type}} \
           -DCMAKE_OSX_ARCHITECTURES="$archs" \
           -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-          -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+          -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps" \
+          ${{inputs.configure_options}}
       shell: bash
 
     - name: Build

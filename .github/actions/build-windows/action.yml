@@ -9,6 +9,11 @@ inputs:
     description: "comma separated list of CMake configurations we want to build"
     required: true
 
+  configure_options:
+    description: extra arguments passed to cmake at configure time
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -20,12 +25,12 @@ runs:
       uses: actions/cache@v5
       with:
         path: .deps
-        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.platform}}-deps-${{hashFiles('CMakeLists.txt')}}
+        key: ${{runner.os}}-${{env.runner_image_version}}-${{inputs.platform}}-deps-${{hashFiles('CMakeLists.txt')}}-${{inputs.configure_options}}
 
     - name: Configure
       run: |
         $arch = if ("${{inputs.platform}}" -eq "x86") { "Win32" } else { "x64" }
-        cmake -S . -B build -G "Visual Studio 17 2022" -A $arch -DFETCHCONTENT_BASE_DIR="$Env:GITHUB_WORKSPACE/.deps"
+        cmake -S . -B build -G "Visual Studio 17 2022" -A $arch -DFETCHCONTENT_BASE_DIR="$Env:GITHUB_WORKSPACE/.deps" ${{inputs.configure_options}}
       shell: pwsh
 
     - name: Build

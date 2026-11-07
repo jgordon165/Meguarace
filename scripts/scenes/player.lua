@@ -103,7 +103,8 @@ function S:present(target)
                 if self.lines then gfx.setcolor(255, 255, 255, 255) end
             end
             if info.video then
-                gfx.blit(info.x, info.y, info.w, info.h, info.pixels, info.overlay and 0 or -1)
+                -- v:blit is gfx.blit that knows the frame, so it can show the HD picture.
+                self.v:blit(i, info.x, info.y, info.w, info.h, info.pixels, info.overlay and 0 or -1)
             end
             if self.lines and info.subtitle then      -- the frame's cue (RACEPRG 0xD24F)
                 if info.subtitle == "next" then

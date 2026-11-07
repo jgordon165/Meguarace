@@ -1,8 +1,12 @@
 #include "input.h"
 
-void Input::beginFrame() { prev_ = cur_; }
+void Input::beginFrame() {
+    prev_ = cur_;
+    text_.clear();
+}
 
 void Input::handle(const SDL_Event& e) {
+    if (e.type == SDL_TEXTINPUT) text_ += e.text.text;
     if ((e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) && !e.key.repeat) {
         auto sc = e.key.keysym.scancode;
         if (sc >= 0 && sc < SDL_NUM_SCANCODES) cur_[sc] = (e.type == SDL_KEYDOWN);

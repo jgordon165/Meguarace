@@ -1,0 +1,48 @@
+name: release-hd-linux
+
+# Meguarace HD for Linux: the engine with HD mode, megarace-hd and
+# Real-ESRGAN. The HD videos themselves are never built or shipped: players
+# make them from their own CD with megarace-hd (docs/hd.md).
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Configure
+      uses: ./.github/actions/configure-linux
+      with:
+        configure_options: -DMEGARACE_HD=ON
+
+    - name: Build
+      run: cmake --build build --parallel
+
+    - name: Run Tests
+      uses: ./.github/actions/run-tests
+
+    - name: Stage
+      run: cmake --install build --component game --prefix stage/Meguarace
+
+    - name: Bundle Real-ESRGAN
+      uses: ./.github/actions/bundle-realesrgan
+      with:
+        platform: ubuntu
+
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: meguarace-hd-linux-x64
+        format: tar.gz
+        staged: true
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-hd-linux-release
+        if-no-files-found: error
+        path: dist/*.tar.gz

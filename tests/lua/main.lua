@@ -875,6 +875,31 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("display modes without HD packs", function()
+    -- ctest runs with --no-hd, so there is no HD whatever packs the user has.
+    check(sys.hd == false and sys.hd_width == 0, "no HD content")
+    check(type(sys.hd_path) == "string" and type(sys.display_arg) == "string", "path fields")
+    -- (the HD FOLDER setting itself isn't changed here: it's the user's)
+    check(type(sys.hd_folder) == "function" and type(sys.set_hd_folder) == "function", "HD folder setting")
+    check(type(input.text) == "function" and input.text() == "" and type(input.paste) == "function", "text entry")
+    local d = gfx.displays()
+    check(#d == 1 and d[1] == "native", "only native without packs")
+    local name, w, h, hd = gfx.display()
+    check(name == "native" and w == 320 and h == 240 and hd == false, "native mode")
+    check(gfx.set_display("1920x1080") == false, "HD modes need packs")
+    check(gfx.set_display("nonsense") == false, "unknown mode refused")
+    check(gfx.width() == 320 and gfx.height() == 200, "game coordinates stay 320x200")
+    local x, y = gfx.to_display(160, 100)
+    check(x == 160 and y == 120, "native: 4:3 picture")
+
+    local display = require("game.display")
+    check(display.label("native") == "320X200", "native label")
+    check(display.label("1920x1080", 1440, 1080, true) == "1920X1080 HD", "HD label")
+    check(display.cycle(1) == "native", "only native to cycle through")
+    display.apply_saved({ display = "1024x768" })          -- not available: stays native
+    check((gfx.display()) == "native", "unavailable saved mode ignored")
+end)
+
 test("[data] subtitles: every language, cues match lines", function()
     if not data then skipped = skipped + 1; return "skip" end
     local subs = require("formats.subtitles")

@@ -14,15 +14,27 @@
 -- one every 16 rows (9 for the tracks) from y = 100 - 4 x count; every image
 -- is centred on its point (0x5991, 0x59CC).
 --
--- JOYSTICK and MOUSE answer with a KONTROL6 message at (160, 130) until a
--- key (0x5EBF). This port only has the keyboard, so they get the
--- original's "not available" messages, and KEYBOARD (the control already)
--- opens the key setup (scenes/keysetup.lua). LOAD and SAVE are the
--- original's named saves (scenes/slots.lua).
+-- KEYBOARD, JOYSTICK and MOUSE answer with a KONTROL6 message at (160, 130)
+-- until a key (0x5EBF). This port only has the keyboard, so JOYSTICK and
+-- MOUSE get the original's "not available" messages. The original's key
+-- redefinition (KEYBOARD when the keyboard is already active) and its save
+-- slots aren't ported: LOAD and SAVE use the port's one save.
+--
+-- The port's own additions, on the OPTIONS panel only: two lines under the
+-- panel, in the game's FONTOPT font (the original has no such settings, so
+-- no panel art for them). Down past QUIT selects them.
+--   DISPLAY    ENTER or RIGHT: the next display mode, LEFT: the previous
+--              (game/display.lua)
+--   HD FOLDER  where the HD videos are (made by megarace-hd, which writes to
+--              the same setting's folder). ENTER edits it: type or paste
+--              (CTRL+V) a folder, ENTER keeps it, ESC leaves it as it was;
+--              an empty line means the default, your Meguarace user folder.
 
 local scenes = require("core.scenes")
 local save   = require("game.save")
 local career = require("game.career")
+local font   = require("ui.font")
+local display = require("game.display")
 local S = { overlay = true }
 
 local KINDS = {
@@ -32,6 +44,12 @@ local KINDS = {
     tracks  = { res = "CONTROL2", panel = 0, x = 160, y = 105, first = 1, count = 16, step = 9 },
 }
 S.KINDS = KINDS
+
+-- The port's lines (options panel only), under the panel; notes go below.
+local EXTRA = { "display", "hd_folder" }
+local EXTRA_Y = { display = 170, hd_folder = 181 }
+local NOTE_Y = 191
+local LINE_CHARS = 38                  -- 8-pixel characters that fit the line
 
 -- KONTROL6 messages.
 local MSG_NO_JOYSTICK, MSG_NO_MOUSE = 1, 4       -- (0 is "keyboard now active")
@@ -56,6 +74,10 @@ function S:enter(kind, state, on_pick)
     self.set:apply_palette()
     self.msgs = spr.open("KONTROL6")
     self.at = S.layout(kind)
+    -- Options panel: its items, then the DISPLAY line.
+    self.n = self.k.count + (kind == "options" and #EXTRA or 0)
+    self.editing = nil
+    self.font = kind == "options" and font.open("FONTOPT", 8) or nil
     self.msg, self.note = nil, nil
     if kind == "level" then
         self.sel = state.level == "HARDENED" and 2 or 1   -- [0x68CD] - 1
@@ -97,6 +119,13 @@ function S:act(a)
         scenes.push(require("scenes.keysetup"), st)
     elseif a == "joystick" then self.msg = MSG_NO_JOYSTICK
     elseif a == "mouse" then self.msg = MSG_NO_MOUSE
+    elseif a == "hd_folder" then
+        self.editing = (sys.hd_folder())
+        input.text_start()
+    elseif a == "display" or a == "display_back" then
+        if not sys.hd then self.note = "HD VIDEOS: RUN MEGARACE-HD"; return end
+        st.display = display.cycle(a == "display" and 1 or -1)
+        save.store(st)
     elseif a == "quit" then
         scenes.pop()
         require("scenes.menu"):farewell()                  -- Lance's farewell and the credits (0x5113)
@@ -115,16 +144,58 @@ function S:select()
         if cb then cb(sel) end
         return
     end
+    if self.sel > self.k.count then return self:act(EXTRA[self.sel - self.k.count]) end
     self:act(self.k.acts[self.sel])
 end
 
+-- Takes off the last character (UTF-8: its continuation bytes too).
+local function rubout(s)
+    local n = #s
+    while n > 0 and (s:byte(n) & 0xC0) == 0x80 do n = n - 1 end
+    return s:sub(1, math.max(n - 1, 0))
+end
+
+function S:finish_edit(keep)
+    input.text_stop()
+    local folder = self.editing:match("^%s*(.-)%s*$")
+    self.editing = nil
+    if not keep then return end
+    local found, saved = sys.set_hd_folder(folder)
+    if not saved then self.note = "COULD NOT SAVE THE SETTING"
+    elseif found then
+        self.note = "HD VIDEOS FOUND"
+        display.apply_saved(self.state)
+    else self.note = "NO HD VIDEOS THERE: RUN MEGARACE-HD" end
+end
+
+function S:update_edit()
+    if input.pressed("Escape") then return self:finish_edit(false) end
+    if input.pressed("Return") then return self:finish_edit(true) end
+    if input.pressed("Backspace") then self.editing = rubout(self.editing); return end
+    local typed = input.text()
+    if (input.down("Left Ctrl") or input.down("Right Ctrl")) and input.pressed("V") then
+        typed = input.paste():gsub("[\r\n].*", "")
+    end
+    typed = typed:gsub("%c", "")
+    if #self.editing + #typed <= 255 then self.editing = self.editing .. typed end
+end
+
+function S:leave()
+    if self.editing then input.text_stop() end
+end
+
 function S:update()
+    if self.editing then return self:update_edit() end
     if self.msg then                                       -- a message waits for a key
         if input.any() then self.msg = nil end
         return
     end
     if input.pressed("Escape") then scenes.pop(); return end
-    local n = self.k.count
+    local n = self.n
+    if EXTRA[self.sel - self.k.count] == "display" then
+        if input.pressed("Right") then self:act("display") end
+        if input.pressed("Left") then self:act("display_back") end
+    end
     if input.pressed("Down") then self.sel = self.sel % n + 1; self.note = nil end
     if input.pressed("Up") then self.sel = (self.sel - 2) % n + 1; self.note = nil end
     if input.pressed("Return") or input.pressed("Space") then self:select() end
@@ -136,11 +207,33 @@ function S:draw()
     for i, p in ipairs(self.at) do
         centred(set, k.first + 2 * (i - 1) + (i == self.sel and 1 or 0), p[1], p[2])
     end
+    for i, what in ipairs(self.n > k.count and EXTRA or {}) do
+        local y = EXTRA_Y[what]
+        local label
+        if what == "display" then
+            label = "DISPLAY " .. display.label(gfx.display())
+        else
+            local value = self.editing and (self.editing .. "_") or (sys.hd_folder())
+            if value == "" then value = "DEFAULT" end
+            local room = LINE_CHARS - 10
+            if #value > room then value = ".." .. value:sub(-(room - 2)) end   -- the end of a long path
+            label = "HD FOLDER " .. value
+        end
+        local w = #label * 8
+        local x = 160 - w // 2
+        gfx.fill(x - 8, y - 2, w + 12, 11, 0)
+        if self.sel == k.count + i then
+            gfx.setcolor(121, 255, 210, 60)
+            gfx.fill(x - 6, y + 3, 3, 3, 121)                  -- cursor: the line is selected
+        end
+        if self.font then self.font:draw(x, y, label)
+        else gfx.text(x, y + 2, label, 121) end
+    end
     if self.msg and self.msgs then centred(self.msgs, self.msg, MSG_X, MSG_Y) end
     if self.note then
         gfx.setcolor(120, 255, 210, 60)
-        gfx.fill(160 - #self.note * 2 - 3, 176, #self.note * 4 + 6, 9, 0)
-        gfx.text(160 - #self.note * 2, 178, self.note, 120)
+        gfx.fill(160 - #self.note * 2 - 3, NOTE_Y, #self.note * 4 + 6, 9, 0)
+        gfx.text(160 - #self.note * 2, NOTE_Y + 2, self.note, 120)
     end
 end
 

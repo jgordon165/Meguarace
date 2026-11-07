@@ -1,6 +1,7 @@
 #include "video.h"
 #include "icon_data.h"
 
+
 #include <cctype>
 #include <cstdlib>
 #include <algorithm>
@@ -41,13 +42,18 @@ static const char* glyphFor(char c) {
 bool Video::init(int width, int height, int scale, bool hidden) {
     w_ = width; h_ = height;
     fb_.assign(static_cast<size_t>(w_) * h_, 0);
+    src_.assign(fb_.size(), 0);
     rgba_.assign(fb_.size(), 0);
     for (int i = 0; i < 256; ++i) setColor(i, i, i, i);   // grey ramp until a palette loads
 
+    nativeScale_ = scale;
+    hidden_ = hidden;
+    layer_.assign(fb_.size(), 0);
     Uint32 flags = SDL_WINDOW_RESIZABLE | (hidden ? SDL_WINDOW_HIDDEN : SDL_WINDOW_SHOWN);
     window_ = SDL_CreateWindow("MegaRace (port)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                w_ * scale, h_ * scale, flags);
     if (!window_) { std::fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError()); return false; }
+
     // The port's own icon (res/meguarace.ico, tools/make_icon.py) for the
     // title bar, taskbar and dock.
     if (SDL_Surface* icon = SDL_CreateRGBSurfaceWithFormatFrom(
@@ -56,8 +62,12 @@ bool Video::init(int width, int height, int scale, bool hidden) {
         SDL_SetWindowIcon(window_, icon);
         SDL_FreeSurface(icon);
     }
-    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+
+    // Render targets let display modes scale the game layer sharply
+    // (whole-number nearest, then linear); without them it is nearest only.
+    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_TARGETTEXTURE);
+    if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC);
+  
     if (!renderer_) { std::fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError()); return false; }
     // The original runs at 320x200 on a 4:3 monitor (non-square pixels).
     SDL_RenderSetLogicalSize(renderer_, w_, w_ * 3 / 4);
@@ -67,16 +77,26 @@ bool Video::init(int width, int height, int scale, bool hidden) {
 }
 
 void Video::shutdown() {
+    destroyModeTextures();
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = nullptr;
     if (texture_)  SDL_DestroyTexture(texture_);
     if (renderer_) SDL_DestroyRenderer(renderer_);
     if (window_)   SDL_DestroyWindow(window_);
     texture_ = nullptr; renderer_ = nullptr; window_ = nullptr;
 }
 
-void Video::clear(uint8_t idx) { std::memset(fb_.data(), idx, fb_.size()); }
+void Video::clear(uint8_t idx) {
+    std::memset(fb_.data(), idx, fb_.size());
+    std::memset(src_.data(), 0, src_.size());
+}
 
 void Video::pset(int x, int y, uint8_t idx) {
-    if (x >= 0 && y >= 0 && x < w_ && y < h_) fb_[static_cast<size_t>(y) * w_ + x] = idx;
+    if (x >= 0 && y >= 0 && x < w_ && y < h_) {
+        size_t i = static_cast<size_t>(y) * w_ + x;
+        fb_[i] = idx;
+        src_[i] = 0;
+    }
 }
 
 uint8_t Video::pget(int x, int y) const {
@@ -190,28 +210,230 @@ void Video::sprite(const uint8_t* px, int w, int h, int x, int y, double scale, 
             int sx = dx * w / dw;
             if (flip) sx = w - 1 - sx;
             uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
-            if (c && visible(X, Y)) fb_[size_t(Y) * w_ + X] = c;
+            if (c && visible(X, Y)) {
+                fb_[size_t(Y) * w_ + X] = c;
+                src_[size_t(Y) * w_ + X] = 0;
+            }
         }
     }
+}
+
+// ---- display modes ---------------------------------------------------------
+
+const std::vector<Video::Mode>& Video::modes() {
+    // Window size, then the 4:3 picture inside it. 1080p is 16:9, so its
+    // picture (1440x1080, the size HD packs are made at) is pillarboxed.
+    static const std::vector<Mode> m = {
+        {"native", 0, 0, 320, 240, false},
+        {"800x600", 800, 600, 800, 600, true},
+        {"1024x768", 1024, 768, 1024, 768, true},
+        {"1920x1080", 1920, 1080, 1440, 1080, true},
+    };
+    return m;
+}
+
+bool Video::enableHd(int picW, int picH) {
+    if (picW < 1 || picH < 1 || !renderer_) return false;
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, picW, picH);
+    if (!hdTexture_) { std::fprintf(stderr, "HD texture: %s\n", SDL_GetError()); picW_ = picH_ = 0; return false; }
+    // Smaller modes show the picture smaller than it is: filter it.
+    SDL_SetTextureScaleMode(hdTexture_, SDL_ScaleModeLinear);
+    picW_ = picW;
+    picH_ = picH;
+    hd_.assign(size_t(picW) * size_t(picH), 0xFF000000u);
+    hdDirty_ = true;
+    return true;
+}
+
+void Video::disableHd() {
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = nullptr;
+    picW_ = picH_ = 0;
+    hd_.clear();
+    std::fill(src_.begin(), src_.end(), uint8_t(0));
+    if (mode().hd) setMode("native");
+}
+
+std::string Video::bestMode() const {
+    SDL_DisplayMode dm{};
+    int display = window_ ? SDL_GetWindowDisplayIndex(window_) : 0;
+    bool known = SDL_GetDesktopDisplayMode(display < 0 ? 0 : display, &dm) == 0;
+    std::string best = "native";
+    for (const auto& m : modes())
+        if (m.hd && modeAvailable(m) && (!known || (m.winW <= dm.w && m.winH <= dm.h))) best = m.name;
+    return best;
+}
+
+void Video::destroyModeTextures() {
+    if (gameTexture_) SDL_DestroyTexture(gameTexture_);
+    if (sharpTexture_) SDL_DestroyTexture(sharpTexture_);
+    gameTexture_ = sharpTexture_ = nullptr;
+}
+
+bool Video::setMode(const std::string& name) {
+    const auto& all = modes();
+    int i = 0;
+    while (i < int(all.size()) && name != all[size_t(i)].name) ++i;
+    if (i == int(all.size()) || !modeAvailable(all[size_t(i)]) || !renderer_) return false;
+    const Mode& m = all[size_t(i)];
+    destroyModeTextures();
+    if (m.hd) {
+        gameTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        if (!gameTexture_) { std::fprintf(stderr, "game layer: %s\n", SDL_GetError()); return false; }
+        SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_BLEND);
+        // Sharp scaling: nearest to whole multiples of 320x200 at least the
+        // picture size, then linear down to it, so every original pixel
+        // comes out the same size instead of alternating 4 and 5 wide.
+        if (SDL_RenderTargetSupported(renderer_)) {
+            int kx = (m.picW + w_ - 1) / w_, ky = (m.picH + h_ - 1) / h_;
+            sharpTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
+                                              w_ * kx, h_ * ky);
+            if (sharpTexture_) {
+                SDL_SetTextureScaleMode(sharpTexture_, SDL_ScaleModeLinear);
+                SDL_SetTextureBlendMode(sharpTexture_, SDL_BLENDMODE_BLEND);
+            }
+        }
+    }
+    mode_ = i;
+    // Window: the mode's size, or the whole screen when it doesn't fit in a
+    // window (1080p on a 1080p monitor). Native keeps the --scale size.
+    if (!hidden_) {
+        SDL_DisplayMode dm{};
+        int display = SDL_GetWindowDisplayIndex(window_);
+        bool fill = m.hd && SDL_GetDesktopDisplayMode(display < 0 ? 0 : display, &dm) == 0 &&
+                    (m.winW >= dm.w || m.winH >= dm.h);
+        SDL_SetWindowFullscreen(window_, fill ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        if (!fill) {
+            SDL_SetWindowSize(window_, m.hd ? m.winW : w_ * nativeScale_, m.hd ? m.winH : h_ * nativeScale_);
+            SDL_SetWindowPosition(window_, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        }
+    } else {
+        SDL_SetWindowSize(window_, m.hd ? m.winW : w_ * nativeScale_, m.hd ? m.winH : h_ * nativeScale_);
+    }
+    SDL_RenderSetLogicalSize(renderer_, m.picW, m.picH);
+    hdDirty_ = true;
+    return true;
+}
+
+void Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
+                   int transparent, const uint32_t* pic, int picW, int picH) {
+    // Game layer: exactly blit(), marking the pixels drawn as showing HD.
+    for (int yy = 0; yy < h; ++yy) {
+        for (int xx = 0; xx < w; ++xx) {
+            size_t i = static_cast<size_t>(yy) * w + xx;
+            if (i >= len) break;
+            if (src[i] == transparent) continue;
+            int X = ox + fx + xx, Y = oy + fy + yy;
+            if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
+            size_t p = size_t(Y) * w_ + X;
+            fb_[p] = src[i];
+            src_[p] = 1;
+        }
+    }
+    if (picW != picW_ || picH != picH_) return;   // the engine refuses such packs; be safe
+    // HD layer: the frame's rectangle of the picture, at its place on screen.
+    // Picture and screen map the same way: x * picW / 320, y * picH / 200.
+    auto mx = [&](int x) { return int(int64_t(x) * picW / w_); };
+    auto my = [&](int y) { return int(int64_t(y) * picH / h_); };
+    int x0 = std::max(fx, 0), x1 = std::min(fx + w, w_), y0 = std::max(fy, 0), y1 = std::min(fy + h, h_);
+    if (x0 >= x1 || y0 >= y1) return;
+    int sx0 = mx(x0), sx1 = mx(x1), sy0 = my(y0), sy1 = my(y1);
+    int dx0 = mx(ox + x0), dy0 = my(oy + y0);
+    for (int r = sy0; r < sy1; ++r) {
+        int dy = dy0 + (r - sy0);
+        if (dy < 0 || dy >= picH_) continue;
+        int a = sx0, b = sx1, d = dx0;
+        if (d < 0) { a -= d; d = 0; }
+        if (d + (b - a) > picW_) b = a + (picW_ - d);
+        if (a >= b) continue;
+        std::memcpy(&hd_[size_t(dy) * size_t(picW_) + size_t(d)], &pic[size_t(r) * size_t(picW) + size_t(a)],
+                    size_t(b - a) * 4);
+    }
+    hdDirty_ = true;
+}
+
+bool Video::paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const {
+    bool used[256] = {};
+    for (size_t i = 0; i < n; ++i) used[px[i]] = true;
+    for (int c = 0; c < 256; ++c) {
+        if (!used[c] || c == transparent) continue;
+        uint32_t want = 0xFF000000u | uint32_t(rgb[c * 3]) << 16 | uint32_t(rgb[c * 3 + 1]) << 8 | rgb[c * 3 + 2];
+        if (pal_[size_t(c)] != want) return false;
+    }
+    return true;
 }
 
 void Video::convert() {
     for (size_t i = 0; i < fb_.size(); ++i) rgba_[i] = pal_[fb_[i]];
 }
 
-void Video::present() {
-    convert();
-    SDL_UpdateTexture(texture_, nullptr, rgba_.data(), w_ * 4);
+bool Video::hdShown() const {
+    return hdOn() && std::find(src_.begin(), src_.end(), uint8_t(1)) != src_.end();
+}
+
+// Draws the frame into the renderer (without presenting it).
+void Video::render(bool showHd) {
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
-    SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+    if (!mode().hd) {
+        convert();
+        SDL_UpdateTexture(texture_, nullptr, rgba_.data(), w_ * 4);
+        SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+        return;
+    }
+    if (showHd) {
+        if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), picW_ * 4);
+        hdDirty_ = false;
+        SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
+    }
+    // Game layer: palette colours, transparent where the HD layer shows.
+    // Transparent pixels keep the original colour (alpha 0): the linear
+    // filter then blends sprite edges toward the video, not toward black.
+    for (size_t i = 0; i < fb_.size(); ++i)
+        layer_[i] = (showHd && src_[i]) ? (pal_[fb_[i]] & 0x00FFFFFFu) : pal_[fb_[i]];
+    SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), w_ * 4);
+    if (sharpTexture_ && SDL_SetRenderTarget(renderer_, sharpTexture_) == 0) {
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_NONE);   // copy alpha as it is
+        SDL_RenderCopy(renderer_, gameTexture_, nullptr, nullptr);
+        SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_RenderCopy(renderer_, sharpTexture_, nullptr, nullptr);
+    } else {
+        SDL_RenderCopy(renderer_, gameTexture_, nullptr, nullptr);
+    }
+}
+
+void Video::present() {
+    render(hdShown());
     SDL_RenderPresent(renderer_);
 }
 
-bool Video::saveBmp(const std::string& path) {
-    convert();
-    SDL_Surface* s = SDL_CreateRGBSurfaceWithFormatFrom(rgba_.data(), w_, h_, 32, w_ * 4,
-                                                        SDL_PIXELFORMAT_ARGB8888);
+bool Video::saveBmp(const std::string& path, bool asShown) {
+    SDL_Surface* s = nullptr;
+    std::vector<uint32_t> px;
+    if (asShown && mode().hd) {
+        // The window as shown, read back from the renderer.
+        render(hdShown());
+        int ow = 0, oh = 0;
+        SDL_GetRendererOutputSize(renderer_, &ow, &oh);
+        px.resize(size_t(ow) * size_t(oh));
+        // With a logical size set, reads cover only the picture's viewport;
+        // drop it for the read to get the whole window, borders included.
+        SDL_RenderSetLogicalSize(renderer_, 0, 0);
+        SDL_RenderSetScale(renderer_, 1.0f, 1.0f);
+        SDL_RenderSetViewport(renderer_, nullptr);
+        SDL_Rect all{0, 0, ow, oh};
+        int rc = SDL_RenderReadPixels(renderer_, &all, SDL_PIXELFORMAT_ARGB8888, px.data(), ow * 4);
+        SDL_RenderSetLogicalSize(renderer_, mode().picW, mode().picH);
+        if (rc != 0) return false;
+        s = SDL_CreateRGBSurfaceWithFormatFrom(px.data(), ow, oh, 32, ow * 4, SDL_PIXELFORMAT_ARGB8888);
+    } else {
+        convert();
+        s = SDL_CreateRGBSurfaceWithFormatFrom(rgba_.data(), w_, h_, 32, w_ * 4, SDL_PIXELFORMAT_ARGB8888);
+    }
     if (!s) return false;
     bool ok = SDL_SaveBMP(s, path.c_str()) == 0;
     SDL_FreeSurface(s);

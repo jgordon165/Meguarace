@@ -30,6 +30,10 @@ function game.init()
     -- developer logos, the show's intro, the channel ident and Lance on the
     -- round ahead. ENTER skips one, ESC skips the rest.
     -- MEGARACE_SKIP_INTRO=1 skips them all.
+    -- Display mode saved in the options (the engine has already picked the
+    -- largest that fits, or the one given with --display).
+    require("game.display").apply_saved(require("game.save").load())
+
     local menu = require("scenes.menu")
     menu.report = report
     scenes.switch(menu)

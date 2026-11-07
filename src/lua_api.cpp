@@ -1,5 +1,9 @@
 #include "lua_api.h"
 #include "engine.h"
+#ifdef MEGARACE_HD
+#include "hd/hdconfig.h"
+#include "hd/hdpack.h"
+#endif
 
 extern "C" {
 #include "lauxlib.h"
@@ -7,7 +11,11 @@ extern "C" {
 #include "lualib.h"
 }
 
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -107,6 +115,41 @@ static int gfx_setcolor(lua_State* L) {
     return 0;
 }
 
+// ---- display modes ----
+// The game draws in 320x200 (gfx.width(), gfx.height()) in every mode; the
+// mode only changes how that is shown. See Video::Mode.
+//   gfx.displays() -> { "native", "800x600", ... } the modes available now
+//   gfx.display()  -> name, picture width, height, hd (HD pictures showing)
+//   gfx.set_display(name) -> true, or false if not available
+//   gfx.to_display(x, y) -> the point's position in the display picture, in
+//                           its pixels (for anything drawn at display resolution)
+static int gfx_displays(lua_State* L) {
+    lua_newtable(L);
+    int n = 0;
+    for (const auto& m : Video::modes())
+        if (E(L).video.modeAvailable(m)) { lua_pushstring(L, m.name); lua_rawseti(L, -2, ++n); }
+    return 1;
+}
+static int gfx_display(lua_State* L) {
+    const auto& m = E(L).video.mode();
+    lua_pushstring(L, m.name);
+    lua_pushinteger(L, m.picW);
+    lua_pushinteger(L, m.picH);
+    lua_pushboolean(L, E(L).video.hdOn());
+    return 4;
+}
+static int gfx_set_display(lua_State* L) {
+    lua_pushboolean(L, E(L).video.setMode(luaL_checkstring(L, 1)));
+    return 1;
+}
+static int gfx_to_display(lua_State* L) {
+    const auto& m = E(L).video.mode();
+    double x = luaL_checknumber(L, 1), y = luaL_checknumber(L, 2);
+    lua_pushnumber(L, x * m.picW / E(L).video.width());
+    lua_pushnumber(L, y * m.picH / E(L).video.height());
+    return 2;
+}
+
 static int gfx_screenshot(lua_State* L) {
     lua_pushboolean(L, E(L).video.saveBmp(luaL_checkstring(L, 1)));
     return 1;
@@ -170,6 +213,17 @@ static int input_down(lua_State* L)     { lua_pushboolean(L, E(L).input.down(lua
 static int input_pressed(lua_State* L)  { lua_pushboolean(L, E(L).input.pressed(luaL_checkstring(L, 1)));  return 1; }
 static int input_released(lua_State* L) { lua_pushboolean(L, E(L).input.released(luaL_checkstring(L, 1))); return 1; }
 static int input_any(lua_State* L)      { lua_pushboolean(L, E(L).input.anyPressed()); return 1; }
+// Text entry: input.text_start() / text_stop(), input.text() -> what was
+// typed this frame, input.paste() -> the clipboard's text ("" if none).
+static int input_text_start(lua_State* L) { E(L).input.textStart(); return 0; }
+static int input_text_stop(lua_State* L)  { E(L).input.textStop(); return 0; }
+static int input_text(lua_State* L)       { lua_pushstring(L, E(L).input.text().c_str()); return 1; }
+static int input_paste(lua_State* L) {
+    char* t = SDL_HasClipboardText() ? SDL_GetClipboardText() : nullptr;
+    lua_pushstring(L, t ? t : "");
+    SDL_free(t);
+    return 1;
+}
 static int input_key(lua_State* L) {
     auto k = E(L).input.firstPressed();
     if (k.empty()) lua_pushnil(L); else lua_pushstring(L, k.c_str());
@@ -177,6 +231,85 @@ static int input_key(lua_State* L) {
 }
 
 // --------------------------------------------------------------- sys ------
+
+// ---- HD folder (Options > HD FOLDER) ----
+static std::string userDir() {
+    char* base = SDL_GetPrefPath("Meguarace", "Meguarace");
+    std::string r = base ? base : "";
+    SDL_free(base);
+    return r;
+}
+
+bool loadHd(Engine& e) {
+#ifdef MEGARACE_HD
+    e.hdDir.clear();
+    std::string user = userDir();
+    if (e.hdOff || user.empty()) { e.video.disableHd(); return false; }
+    std::string dir = hd::packFolder(user);
+    std::error_code ec;
+    bool old = false;
+    if (std::filesystem::is_directory(dir, ec)) {
+        for (const auto& f : std::filesystem::directory_iterator(dir, ec)) {
+            if (f.path().extension() != ".hdv") continue;
+            hd::PackHeader h;
+            if (hd::Pack::peek(f.path().string(), h)) {
+                if (!e.video.enableHd(h.pictureW, h.pictureH)) break;
+                e.hdDir = dir;
+                return true;
+            }
+            old = true;
+        }
+    }
+    if (old) std::fprintf(stderr, "HD packs in %s are from an older megarace-hd: run it again\n", dir.c_str());
+    e.video.disableHd();
+    return false;
+#else
+    (void)e;
+    return false;
+#endif
+}
+
+// sys.hd, sys.hd_path, sys.hd_width, sys.hd_height: what loadHd found.
+static void setHdFields(lua_State* L, Engine& e) {
+    lua_pushboolean(L, e.video.hdAvailable()); lua_setfield(L, -2, "hd");
+    lua_pushstring(L, e.hdDir.c_str());        lua_setfield(L, -2, "hd_path");
+    lua_pushinteger(L, e.video.hdPictureW());  lua_setfield(L, -2, "hd_width");
+    lua_pushinteger(L, e.video.hdPictureH());  lua_setfield(L, -2, "hd_height");
+}
+
+// sys.hd_folder() -> the setting ("" = the default), the folder it means.
+// sys.set_hd_folder(folder) -> packs found: saves the setting ("" = back to
+// the default), looks there again and updates sys.hd and the rest. Packs are
+// made by megarace-hd, which writes to the same setting's folder.
+static int sys_hd_folder(lua_State* L) {
+#ifdef MEGARACE_HD
+    std::string user = userDir();
+    lua_pushstring(L, user.empty() ? "" : hd::configuredFolder(user).c_str());
+    lua_pushstring(L, user.empty() ? "" : hd::packFolder(user).c_str());
+#else
+    lua_pushstring(L, "");
+    lua_pushstring(L, "");
+#endif
+    return 2;
+}
+static int sys_set_hd_folder(lua_State* L) {
+    std::string folder = luaL_checkstring(L, 1);
+    Engine& e = E(L);
+    bool saved = false;
+#ifdef MEGARACE_HD
+    std::string user = userDir();
+    saved = !user.empty() && hd::setConfiguredFolder(user, folder);
+#else
+    (void)folder;
+#endif
+    bool found = saved && loadHd(e);
+    lua_getglobal(L, "sys");
+    setHdFields(L, e);
+    lua_pop(L, 1);
+    lua_pushboolean(L, found);
+    lua_pushboolean(L, saved);
+    return 2;
+}
 
 // sys.save(name, text) / sys.load(name) -> text|nil: small files in the
 // per-user preferences folder (settings, high scores). Names are plain
@@ -304,7 +437,26 @@ static int dat_read_range(lua_State* L) {
 // v:frames() v:sound_rate() v:decode(i) -> info  v:draw([ox, oy]) v:apply_palette()
 // v:pixels() v:sound()
 
-struct HnmUd { HnmVideo video; HnmVideo::Frame frame; Engine* eng; };
+struct HnmUd {
+    HnmVideo video;
+    HnmVideo::Frame frame;
+    Engine* eng;
+    int index = -1;                 // last decoded frame
+#ifdef MEGARACE_HD
+    std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
+    std::string name;
+    // Frames drawn from the pack, and drawn from the original because the
+    // palette differed or the pack had no picture (MEGARACE_HD_STATS=1).
+    long hdDraws = 0, paletteMisses = 0, pictureMisses = 0;
+#endif
+    ~HnmUd() {
+#ifdef MEGARACE_HD
+        if (pack && std::getenv("MEGARACE_HD_STATS"))
+            std::printf("HD %s: %ld frames from the pack, %ld original (palette), %ld original (no picture)\n",
+                        name.c_str(), hdDraws, paletteMisses, pictureMisses);
+#endif
+    }
+};
 static const char* kHnmMeta = "megarace.hnm";
 
 static HnmUd* checkHnm(lua_State* L) { return static_cast<HnmUd*>(luaL_checkudata(L, 1, kHnmMeta)); }
@@ -320,6 +472,7 @@ static int hnm_decode(lua_State* L) {
     try { ok = h->video.decode(i, h->frame); }
     catch (const std::exception& ex) { return luaL_error(L, "hnm frame %d: %s", i, ex.what()); }
     if (!ok) { lua_pushnil(L); return 1; }
+    h->index = i;
     const auto& f = h->frame;
     lua_createtable(L, 0, 10);
     lua_pushboolean(L, f.hasVideo);       lua_setfield(L, -2, "video");
@@ -339,14 +492,64 @@ static int hnm_decode(lua_State* L) {
     return 1;
 }
 
+// Draws a decoded frame's pixels: from the HD pack when there is a picture
+// for that frame and the screen shows the video's own colours (not mid-fade,
+// not recoloured by the game), else the original pixels.
+static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w, int ht,
+                      const uint8_t* px, size_t len, int key) {
+    Video& v = h->eng->video;
+#ifdef MEGARACE_HD
+    if (h->pack && v.hdOn()) {
+        if (!v.paletteMatches(h->video.palette().data(), px, len, key)) {
+            ++h->paletteMisses;
+        } else if (const auto* pic = h->pack->frame(index)) {
+            v.blitHd(ox, oy, fx, fy, w, ht, px, len, key, pic->data(), h->pack->hdWidth(),
+                     h->pack->hdHeight());
+            ++h->hdDraws;
+            return;
+        } else {
+            ++h->pictureMisses;
+        }
+    }
+#else
+    (void)index;
+#endif
+    v.blit(ox + fx, oy + fy, w, ht, px, len, key);
+}
+
 static int hnm_draw(lua_State* L) {
     HnmUd* h = checkHnm(L);
     const auto& f = h->frame;
     if (!f.hasVideo) return 0;
     int ox = int(luaL_optinteger(L, 2, 0)), oy = int(luaL_optinteger(L, 3, 0));
-    h->eng->video.blit(ox + f.x, oy + f.y, f.w, f.h, f.pixels.data(), f.pixels.size(),
-                       f.overlay ? 0 : -1);
+    drawFrame(h, h->index, ox, oy, f.x, f.y, f.w, f.h, f.pixels.data(), f.pixels.size(),
+              f.overlay ? 0 : -1);
     return 0;
+}
+
+// v:blit(i, x, y, w, h, pixels [, key]): gfx.blit for frame i of this video,
+// decoded earlier (the player decodes ahead and draws later). x, y are the
+// frame's own position (decode's info.x, info.y). Uses the HD pack like :draw.
+static int hnm_blit(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    int i = int(luaL_checkinteger(L, 2));
+    int x = int(luaL_checkinteger(L, 3)), y = int(luaL_checkinteger(L, 4));
+    int w = int(luaL_checkinteger(L, 5)), ht = int(luaL_checkinteger(L, 6));
+    size_t len = 0;
+    const char* px = luaL_checklstring(L, 7, &len);
+    int key = int(luaL_optinteger(L, 8, -1));
+    drawFrame(h, i, 0, 0, x, y, w, ht, reinterpret_cast<const uint8_t*>(px), len, key);
+    return 0;
+}
+
+// v:hd() -> true when this video plays from an HD pack
+static int hnm_hd(lua_State* L) {
+#ifdef MEGARACE_HD
+    lua_pushboolean(L, checkHnm(L)->pack != nullptr);
+#else
+    lua_pushboolean(L, false);
+#endif
+    return 1;
 }
 
 static int hnm_apply_palette(lua_State* L) {
@@ -380,7 +583,36 @@ static int hnm_open(lua_State* L) {
     new (h) HnmUd();
     h->eng = &e;
     luaL_setmetatable(L, kHnmMeta);
+#ifdef MEGARACE_HD
+    const uint32_t crc = hd::crc32(d->data(), d->size());
+#endif
     if (!h->video.load(std::move(*d))) { lua_pushnil(L); lua_pushstring(L, "bad HNM"); return 2; }
+#ifdef MEGARACE_HD
+    // <hd folder>/<NAME>.hdv, made from exactly these bytes, at the session's
+    // size. Only plain archive names (B01.HNM) map to a pack.
+    const std::string stem = hd::safeVideoStem(std::filesystem::path(name).filename().string());
+    if (!e.hdDir.empty() && e.video.hdAvailable() && !stem.empty()) {
+        std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hdv");
+        std::error_code ec;
+        if (std::filesystem::exists(p, ec)) {
+            auto pack = std::make_unique<hd::Pack>();
+            const auto& ph = pack->header();
+            if (!pack->open(p.string(), crc))
+                std::fprintf(stderr, "HD pack %s ignored: %s\n", p.string().c_str(), pack->error().c_str());
+            else if (ph.pictureW != e.video.hdPictureW() || ph.pictureH != e.video.hdPictureH() ||
+                     ph.width != e.video.width() || ph.height != e.video.height())
+                std::fprintf(stderr, "HD pack %s ignored: made at %dx%d, the others are %dx%d\n",
+                             p.string().c_str(), ph.pictureW, ph.pictureH, e.video.hdPictureW(),
+                             e.video.hdPictureH());
+            else if (int(ph.frames) != h->video.frameCount())
+                std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.string().c_str());
+            else {
+                h->pack = std::move(pack);
+                h->name = stem;
+            }
+        }
+    }
+#endif
     return 1;
 }
 
@@ -530,6 +762,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"pget", gfx_pget}, {"fill", gfx_fill}, {"line", gfx_line},
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
+        {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
+        {"to_display", gfx_to_display},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},
@@ -554,14 +788,17 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
-        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {nullptr, nullptr}};
+        {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {"blit", hnm_blit}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},
         {"any", input_any}, {"key", input_key},
+        {"text_start", input_text_start}, {"text_stop", input_text_stop}, {"text", input_text},
+        {"paste", input_paste},
         {nullptr, nullptr}};
     static const luaL_Reg sys[] = {
         {"ticks", sys_ticks}, {"quit", sys_quit}, {"log", sys_log},
-        {"save", sys_save}, {"load", sys_load}, {nullptr, nullptr}};
+        {"save", sys_save}, {"load", sys_load},
+        {"hd_folder", sys_hd_folder}, {"set_hd_folder", sys_set_hd_folder}, {nullptr, nullptr}};
 
     addLib(L, e, "fs", fs);
     addLib(L, e, "gfx", gfx);
@@ -594,5 +831,9 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, e.dataArg.c_str());  lua_setfield(L, -2, "data_path");
     lua_pushstring(L, e.musicArg.c_str()); lua_setfield(L, -2, "music_path");
     lua_pushboolean(L, e.music.mounted()); lua_setfield(L, -2, "music_mounted");
+    // HD content: whether packs were found, their folder and picture size,
+    // and the --display given on the command line ("" if none).
+    setHdFields(L, e);
+    lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
     lua_pop(L, 1);
 }
