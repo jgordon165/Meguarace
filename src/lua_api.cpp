@@ -1,9 +1,7 @@
 #include "lua_api.h"
 #include "engine.h"
-#ifdef MEGARACE_HD
 #include "hd/hdconfig.h"
 #include "hd/hdpack.h"
-#endif
 
 extern "C" {
 #include "lauxlib.h"
@@ -241,7 +239,6 @@ static std::string userDir() {
 }
 
 bool loadHd(Engine& e) {
-#ifdef MEGARACE_HD
     e.hdDir.clear();
     std::string user = userDir();
     if (e.hdOff || user.empty()) { e.video.disableHd(); return false; }
@@ -260,13 +257,9 @@ bool loadHd(Engine& e) {
             old = true;
         }
     }
-    if (old) std::fprintf(stderr, "HD packs in %s are from an older megarace-hd: run it again\n", dir.c_str());
+    if (old) std::fprintf(stderr, "HD packs in %s are from an older hd-conversion-utility: run it again\n", dir.c_str());
     e.video.disableHd();
     return false;
-#else
-    (void)e;
-    return false;
-#endif
 }
 
 // sys.hd, sys.hd_path, sys.hd_width, sys.hd_height: what loadHd found.
@@ -280,28 +273,19 @@ static void setHdFields(lua_State* L, Engine& e) {
 // sys.hd_folder() -> the setting ("" = the default), the folder it means.
 // sys.set_hd_folder(folder) -> packs found: saves the setting ("" = back to
 // the default), looks there again and updates sys.hd and the rest. Packs are
-// made by megarace-hd, which writes to the same setting's folder.
+// made by hd-conversion-utility, which writes to the same setting's folder.
 static int sys_hd_folder(lua_State* L) {
-#ifdef MEGARACE_HD
     std::string user = userDir();
     lua_pushstring(L, user.empty() ? "" : hd::configuredFolder(user).c_str());
     lua_pushstring(L, user.empty() ? "" : hd::packFolder(user).c_str());
-#else
-    lua_pushstring(L, "");
-    lua_pushstring(L, "");
-#endif
     return 2;
 }
 static int sys_set_hd_folder(lua_State* L) {
     std::string folder = luaL_checkstring(L, 1);
     Engine& e = E(L);
     bool saved = false;
-#ifdef MEGARACE_HD
     std::string user = userDir();
     saved = !user.empty() && hd::setConfiguredFolder(user, folder);
-#else
-    (void)folder;
-#endif
     bool found = saved && loadHd(e);
     lua_getglobal(L, "sys");
     setHdFields(L, e);
@@ -442,19 +426,15 @@ struct HnmUd {
     HnmVideo::Frame frame;
     Engine* eng;
     int index = -1;                 // last decoded frame
-#ifdef MEGARACE_HD
     std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
     std::string name;
     // Frames drawn from the pack, and drawn from the original because the
     // palette differed or the pack had no picture (MEGARACE_HD_STATS=1).
     long hdDraws = 0, paletteMisses = 0, pictureMisses = 0;
-#endif
     ~HnmUd() {
-#ifdef MEGARACE_HD
         if (pack && std::getenv("MEGARACE_HD_STATS"))
             std::printf("HD %s: %ld frames from the pack, %ld original (palette), %ld original (no picture)\n",
                         name.c_str(), hdDraws, paletteMisses, pictureMisses);
-#endif
     }
 };
 static const char* kHnmMeta = "megarace.hnm";
@@ -498,7 +478,6 @@ static int hnm_decode(lua_State* L) {
 static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w, int ht,
                       const uint8_t* px, size_t len, int key) {
     Video& v = h->eng->video;
-#ifdef MEGARACE_HD
     if (h->pack && v.hdOn()) {
         if (!v.paletteMatches(h->video.palette().data(), px, len, key)) {
             ++h->paletteMisses;
@@ -511,9 +490,6 @@ static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w
             ++h->pictureMisses;
         }
     }
-#else
-    (void)index;
-#endif
     v.blit(ox + fx, oy + fy, w, ht, px, len, key);
 }
 
@@ -544,11 +520,7 @@ static int hnm_blit(lua_State* L) {
 
 // v:hd() -> true when this video plays from an HD pack
 static int hnm_hd(lua_State* L) {
-#ifdef MEGARACE_HD
     lua_pushboolean(L, checkHnm(L)->pack != nullptr);
-#else
-    lua_pushboolean(L, false);
-#endif
     return 1;
 }
 
@@ -583,11 +555,8 @@ static int hnm_open(lua_State* L) {
     new (h) HnmUd();
     h->eng = &e;
     luaL_setmetatable(L, kHnmMeta);
-#ifdef MEGARACE_HD
     const uint32_t crc = hd::crc32(d->data(), d->size());
-#endif
     if (!h->video.load(std::move(*d))) { lua_pushnil(L); lua_pushstring(L, "bad HNM"); return 2; }
-#ifdef MEGARACE_HD
     // <hd folder>/<NAME>.hdv, made from exactly these bytes, at the session's
     // size. Only plain archive names (B01.HNM) map to a pack.
     const std::string stem = hd::safeVideoStem(std::filesystem::path(name).filename().string());
@@ -612,7 +581,6 @@ static int hnm_open(lua_State* L) {
             }
         }
     }
-#endif
     return 1;
 }
 

@@ -110,13 +110,15 @@ the videos' sound are in the video files, and the in-game music is FM songs
 
 Headless test run: `--frames 60 --screenshot out.bmp`.
 
-## HD mode (`release/hd` branch)
+## HD videos and display modes
 
-Upscaled videos, made on your machine from your own CD by the bundled
-`megarace-hd` tool, at 1440×1080 (the 4:3 picture of 1080p). No HD video is
+The game plays upscaled videos at 1440×1080 (the 4:3 picture of 1080p). You
+make them on your own machine, from your own CD, with
+`hd-conversion-utility`, a separate utility with its own package and
+workflow. No HD video is
 ever committed or shipped, because an upscaled video is still the game's
 content. Optionally pick where they go in Options > HD FOLDER (the default
-is your user folder), run `megarace-hd --data V:\` once, then pick a display
+is your user folder), run `hd-conversion-utility --data V:\` once, then pick a display
 mode in Options > DISPLAY: 800×600, 1024×768 or 1920×1080, or 320×200 for the
 original. You can also give one with `--display`. F10 switches the HD videos
 on and off. The game always works in 320×200 coordinates, so gameplay is the
@@ -144,7 +146,8 @@ GitHub Actions (same layout as the Aleph One fork):
 | `code-analysis` | push/PR to `master`, or manually | CodeQL security-and-quality on our C++ |
 | `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx` |
 | `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
-| `release-hd-*`, `release-hd-all` | manual | the HD builds, `meguarace-hd-<platform>-<version>`: the same plus `megarace-hd` and Real-ESRGAN; never HD videos ([docs/hd.md](docs/hd.md)) |
+| `hd-converter` | pushes touching the converter, or manually | `hd-conversion-utility` (the HD video converter): Linux, macOS arm64, Windows x64; build and test |
+| `release-hd-converter` | manual | the converter's own packages, `hd-conversion-utility-<platform>-<version>`, with Real-ESRGAN; never HD videos ([docs/hd.md](docs/hd.md)) |
 
 ## Status
 
@@ -177,7 +180,7 @@ Format notes: [docs/formats.md](docs/formats.md).
 ```
 src/            C++ host: window, framebuffer, audio mixer, FM music (fm.cpp), input, Lua API
 src/formats/    C++ decoders: MEGARACE.DAT, HSQ, HNM video, HERAD music
-src/hd/         HD mode: .hdv packs, compositing, the megarace-hd converter
+src/hd/         HD mode: .hdv packs, compositing, the hd-conversion-utility converter
 scripts/        Lua game code
   main.lua        entry point (game.init/update/draw)
   core/           scene stack, binary reader, UI helpers, asset manifest

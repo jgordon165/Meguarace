@@ -1,7 +1,7 @@
 name: bundle-realesrgan
 description: >
   Put Real-ESRGAN ncnn-vulkan (MIT program, BSD-3 project models) into the
-  staged HD build as realesrgan/, for megarace-hd to find. Tools only: no
+  staged HD build as realesrgan/, for hd-conversion-utility to find. Tools only: no
   game content goes into any build.
 
 inputs:

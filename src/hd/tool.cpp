@@ -1,6 +1,6 @@
-// megarace-hd: makes HD video packs from the player's own MegaRace CD.
+// hd-conversion-utility: makes HD video packs from the player's own MegaRace CD.
 //
-//   megarace-hd --data <your MegaRace CD or folder> [options]
+//   hd-conversion-utility --data <your MegaRace CD or folder> [options]
 //
 // The packs go to the HD folder set in the game (Options > HD FOLDER; by
 // default <your Meguarace user folder>/hd), where the game reads them. They
@@ -33,7 +33,7 @@
 namespace fs = std::filesystem;
 
 static const char* kUsage =
-    "megarace-hd --data <MegaRace CD or folder> [options]\n"
+    "hd-conversion-utility --data <MegaRace CD or folder> [options]\n"
     "\n"
     "Makes upscaled copies of the game's videos for the HD mode, from your own copy\n"
     "of the game. Run it once; the game picks the packs up by itself.\n"
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
     opt.tempDir = (fs::path(out) / ".work").string();
     {
         std::ofstream note(fs::path(out) / "README.txt");
-        note << "MegaRace HD video packs, made by megarace-hd from your own copy of the game.\n"
+        note << "MegaRace HD video packs, made by hd-conversion-utility from your own copy of the game.\n"
                 "They are derived from the game's videos and remain the game's content:\n"
                 "keep them for your own use and do not share or upload them.\n";
     }

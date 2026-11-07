@@ -158,7 +158,7 @@ bool Pack::open(const std::string& path, uint32_t sourceCrc) {
         return false;
     }
     if (get(hdr + 4, 2) != kPackVersion) {
-        err_ = "made by an older megarace-hd; run megarace-hd again";
+        err_ = "made by an older hd-conversion-utility; run hd-conversion-utility again";
         return false;
     }
     if (!parseHeader(hdr, h_)) { err_ = "damaged pack header"; return false; }
