@@ -1,0 +1,75 @@
+name: hd-converter
+
+# hd-conversion-utility, the separate HD video converter: built and tested
+# on its own, apart from the game (CI-build). It makes HD packs from the
+# player's own MEGARACE.DAT; the game only reads them.
+
+on:
+  push:
+    paths:
+      - "src/hd/**"
+      - "src/formats/**"
+      - "src/vfs.*"
+      - "tests/test_hdconvert.cpp"
+      - "tests/test_hdpack.cpp"
+      - "CMakeLists.txt"
+      - ".github/workflows/hd-converter.yml"
+      - ".github/actions/**"
+  pull_request:
+    paths:
+      - "src/hd/**"
+      - "src/formats/**"
+      - "src/vfs.*"
+      - "tests/test_hdconvert.cpp"
+      - "tests/test_hdpack.cpp"
+      - "CMakeLists.txt"
+      - ".github/workflows/hd-converter.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+# Same rule as CI-build: pull requests only when they come from another
+# repository (a same-repo PR is already built by its push).
+jobs:
+  linux:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Configure
+        uses: ./.github/actions/configure-linux
+        with:
+          configure_options: -DMEGARACE_HD_CONVERTER=ON
+      - name: Build
+        run: cmake --build build --parallel --target hd-conversion-utility megarace_hdconvert_tests megarace_hdpack_tests
+      - name: Run Tests
+        run: ctest --test-dir build --output-on-failure -R "^hd"
+
+  mac-osx-arm:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-mac-osx
+        with:
+          osx_arch: arm64
+          configure_options: -DMEGARACE_HD_CONVERTER=ON
+      - name: Run Tests
+        run: ctest --test-dir build --output-on-failure -R "^hd"
+
+  windows-x64:
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build
+        uses: ./.github/actions/build-windows
+        with:
+          platform: x64
+          configurations: Release
+          configure_options: -DMEGARACE_HD_CONVERTER=ON
+      - name: Run Tests
+        run: ctest --test-dir build -C Release --output-on-failure -R "^hd"

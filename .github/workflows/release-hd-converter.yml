@@ -1,0 +1,137 @@
+name: release-hd-converter
+
+# hd-conversion-utility packages, apart from the game's (release-*):
+# hd-conversion-utility(.exe), Real-ESRGAN (pinned upstream release) and
+# docs/hd.md, in a Meguarace/ folder that unpacks next to the game. Never
+# any HD pack: players make those from their own CD (docs/hd.md).
+
+on: workflow_dispatch
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Configure
+      uses: ./.github/actions/configure-linux
+      with:
+        configure_options: -DMEGARACE_HD_CONVERTER=ON
+    - name: Build
+      run: cmake --build build --parallel --target hd-conversion-utility megarace_hdconvert_tests megarace_hdpack_tests
+    - name: Run Tests
+      run: ctest --test-dir build --output-on-failure -R "^hd"
+    - name: Stage
+      run: cmake --install build --component converter --prefix stage/Meguarace
+    - name: Bundle Real-ESRGAN
+      uses: ./.github/actions/bundle-realesrgan
+      with:
+        platform: ubuntu
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: hd-conversion-utility-linux-x64
+        format: tar.gz
+        staged: true
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: hd-conversion-utility-linux
+        if-no-files-found: error
+        path: dist/*.tar.gz
+
+  windows-x64:
+    # x64 only: the Real-ESRGAN program is 64-bit.
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Build
+      uses: ./.github/actions/build-windows
+      with:
+        platform: x64
+        configurations: Release
+        configure_options: -DMEGARACE_HD_CONVERTER=ON
+    - name: Run Tests
+      run: ctest --test-dir build -C Release --output-on-failure -R "^hd"
+    - name: Stage
+      run: cmake --install build --config Release --component converter --prefix stage/Meguarace
+      shell: bash
+    - name: Bundle Real-ESRGAN
+      uses: ./.github/actions/bundle-realesrgan
+      with:
+        platform: windows
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: hd-conversion-utility-windows-x64
+        staged: true
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: hd-conversion-utility-windows-x64
+        if-no-files-found: error
+        path: dist/*.zip
+
+  mac-osx:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+    - name: Build
+      uses: ./.github/actions/build-mac-osx   # universal: arm64 + x86_64
+      with:
+        configure_options: -DMEGARACE_HD_CONVERTER=ON
+    - name: Run Tests
+      run: ctest --test-dir build --output-on-failure -R "^hd"
+    - name: Stage
+      run: cmake --install build --component converter --prefix stage/Meguarace
+    - name: Bundle Real-ESRGAN
+      uses: ./.github/actions/bundle-realesrgan
+      with:
+        platform: macos
+    # Signing and notarization run only when the signing secrets are set
+    # (the same ones release-mac-osx uses); otherwise the package is unsigned.
+    - name: Codesign
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+        MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        MACOS_CI_KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+      if: env.MACOS_CERTIFICATE != ''
+      run: |
+        echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+        security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        for f in stage/Meguarace/hd-conversion-utility stage/Meguarace/realesrgan/realesrgan-ncnn-vulkan \
+                 $(find stage/Meguarace/realesrgan -name '*.dylib'); do
+          /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime "$f" -v
+        done
+    - name: Notarize
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        PROD_MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
+        PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+        PROD_MACOS_NOTARIZATION_PWD: ${{ secrets.PROD_MACOS_NOTARIZATION_PWD }}
+      if: env.MACOS_CERTIFICATE != '' && env.PROD_MACOS_NOTARIZATION_APPLE_ID != ''
+      run: |
+        xcrun notarytool store-credentials "notarytool-profile" --apple-id "$PROD_MACOS_NOTARIZATION_APPLE_ID" --team-id "$PROD_MACOS_NOTARIZATION_TEAM_ID" --password "$PROD_MACOS_NOTARIZATION_PWD"
+        ditto -c -k --keepParent stage/Meguarace converter-notarize.zip
+        xcrun notarytool submit converter-notarize.zip --keychain-profile "notarytool-profile" --wait
+    - name: Build archive
+      uses: ./.github/actions/package
+      with:
+        name: hd-conversion-utility-macos-universal
+        staged: true
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: hd-conversion-utility-macos
+        if-no-files-found: error
+        path: dist/*.zip

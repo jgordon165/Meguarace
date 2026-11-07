@@ -26,10 +26,18 @@ mode, so gameplay is identical at every resolution. A mode only decides how
 that screen is shown. Anything that does need display pixels asks the
 engine: `gfx.display()` returns the mode and its picture size, and
 `gfx.to_display(x, y)` maps a game point to display pixels. In `native`
-(and in builds without HD) those are the original 320×200 shown at 4:3.
+those are the original 320×200 shown at 4:3.
 
-This work lives on the `release/hd` branch for now. It is planned to merge
-into `master` as an option (`-DMEGARACE_HD`, off by default there).
+## Two programs
+
+- **The game** (`megarace`) always has the display modes, the HD FOLDER
+  setting and HD video playback. Every game build and package has them; it
+  just shows the original videos until there are packs.
+- **`hd-conversion-utility`** makes the packs. It's a separate utility with
+  its own build option (`-DMEGARACE_HD_CONVERTER=ON`), its own CI
+  (`hd-converter`) and its own packages (`release-hd-converter`). Its package
+  unpacks into the same `Meguarace/` folder as the game, but the game
+  doesn't need it to run.
 
 ## Where the HD videos come from
 
@@ -42,14 +50,14 @@ like the rest of the game data:
 - CI never makes them,
 - no build ships them; release packages fail if one is staged.
 
-What the HD builds ship is the **converter**, `megarace-hd`, plus the
-Real-ESRGAN upscaler it uses. The engine, the converter and Real-ESRGAN are
-all freely redistributable.
+What gets shipped is the **converter**, `hd-conversion-utility`, in its own
+package with the Real-ESRGAN upscaler it uses. The game, the converter and
+Real-ESRGAN are all freely redistributable.
 
 ## Making the HD videos
 
 ```
-megarace-hd --data V:\
+hd-conversion-utility --data V:\
 ```
 
 This writes one `.hdv` pack per video to the **HD folder**, and the game
@@ -58,7 +66,7 @@ FOLDER** (press Down past QUIT). Press Enter, type or paste (Ctrl+V) a
 folder, then Enter to keep it or Esc to leave it as it was. An empty line
 means the default: `hd/` in your Meguarace user folder, next to
 `meguarace.sav`. Set the folder first, for example on a drive with room for
-the 3.5–4 GB, then run `megarace-hd`. It writes to the same place, because
+the 3.5–4 GB, then run `hd-conversion-utility`. It writes to the same place, because
 it reads the same setting (`hd.cfg` in the user folder).
 
 Run it once; running it again only redoes videos that changed, or packs made
@@ -68,7 +76,7 @@ Neither program takes a file or program path on its command line. Pack
 file names are only ever the archive's own video names (`B01.HNM` gives
 `B01.hdv`), checked so that nothing in an archive can point outside the
 folder. Real-ESRGAN only runs from the `realesrgan/` folder next to
-`megarace-hd`, started directly rather than through a shell, and only with
+`hd-conversion-utility`, started directly rather than through a shell, and only with
 a model from a fixed list.
 
 Videos are converted **once, at the largest mode**: 1440×1080, the 4:3
@@ -77,7 +85,7 @@ playing, so there's only one set of packs.
 
 | Option | |
 |---|---|
-| `--upscaler realesrgan\|builtin` | Real-ESRGAN (GPU, Vulkan) when `realesrgan/realesrgan-ncnn-vulkan` is next to `megarace-hd` (HD builds bundle it): it upscales 4× to 1280×800, which is then resized to 1440×1080. Otherwise a built-in Catmull-Rom resize straight to 1440×1080, which runs anywhere. |
+| `--upscaler realesrgan\|builtin` | Real-ESRGAN (GPU, Vulkan) when `realesrgan/realesrgan-ncnn-vulkan` is next to `hd-conversion-utility` (its package bundles it): it upscales 4× to 1280×800, which is then resized to 1440×1080. Otherwise a built-in Catmull-Rom resize straight to 1440×1080, which runs anywhere. |
 | `--model NAME` | Real-ESRGAN model: `realesr-animevideov3` (default), `realesrgan-x4plus` or `realesrgan-x4plus-anime`; its files go in `realesrgan/models`. |
 | `--quality Q\|lossless` | WebP quality (default 90). |
 | `--only PATTERN` | Only some videos, e.g. `--only 'N*.HNM'`. |
@@ -140,20 +148,23 @@ compare them with the original videos.
 
 ## Builds
 
-| Workflow | Package |
+| Workflow | What |
 |---|---|
-| `release-hd-linux` | `meguarace-hd-linux-x64-<version>.tar.gz` |
-| `release-hd-windows` | `meguarace-hd-windows-x64-<version>.zip` |
-| `release-hd-mac-osx` | `meguarace-hd-macos-universal-<version>.zip` (signed and notarized if the secrets are set) |
-| `release-hd-all` | all three |
+| `CI-build`, `release-*` | the game, HD playback included |
+| `hd-converter` | the converter's CI: builds `hd-conversion-utility` and runs its tests on Linux, macOS (arm64) and Windows x64, on pushes that touch it |
+| `release-hd-converter` | the converter's packages, run by hand: `hd-conversion-utility-linux-x64-<version>.tar.gz`, `-windows-x64-<version>.zip` and `-macos-universal-<version>.zip` (signed and notarized if the secrets are set) |
 
-Each one is the standard package plus `megarace-hd` and `realesrgan/`:
-Real-ESRGAN ncnn-vulkan from the pinned upstream v0.2.5.0 release, with only
-the `realesr-animevideov3` models, and its licence note. The standard
-`release-*` workflows build with `-DMEGARACE_HD=OFF`, so they are unchanged.
+A converter package holds `hd-conversion-utility(.exe)`, `docs/hd.md`, and
+`realesrgan/`: Real-ESRGAN ncnn-vulkan from the pinned upstream v0.2.5.0
+release, with only the `realesr-animevideov3` models, and its licence note.
+It never holds an HD pack; packaging fails if one gets staged.
 
-Licences: libwebp (BSD-3) and stb_image / stb_image_write (public domain
-or MIT) are compiled in. Real-ESRGAN ncnn-vulkan is MIT; Real-ESRGAN and its
+Build the converter yourself with
+`cmake -S . -B build -DMEGARACE_HD_CONVERTER=ON` and
+`cmake --build build --target hd-conversion-utility`.
+
+Licences: libwebp (BSD-3) is compiled into both programs, and
+stb_image / stb_image_write (public domain or MIT) into the converter. Real-ESRGAN ncnn-vulkan is MIT; Real-ESRGAN and its
 models are BSD-3. The upstream project has no separate licence statement for
 the model weights, so check its terms before a public release.
 

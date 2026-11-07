@@ -64,10 +64,8 @@ int main(int argc, char** argv) {
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
                         "[--music <folder with track02.wav...>] [--scale N]"
-#ifdef MEGARACE_HD
                         " [--no-hd]"
                         " [--display native|800x600|1024x768|1920x1080]"
-#endif
                         "\n");
             return 0;
         }
@@ -109,7 +107,7 @@ int main(int argc, char** argv) {
         if (!eng.video.setMode(want)) {
             if (!eng.displayArg.empty())
                 std::fprintf(stderr, "--display %s: %s\n", want.c_str(),
-                             eng.video.hdAvailable() ? "unknown mode" : "needs HD packs (megarace-hd)");
+                             eng.video.hdAvailable() ? "unknown mode" : "needs HD packs (hd-conversion-utility)");
             eng.video.setMode("native");
         }
     }

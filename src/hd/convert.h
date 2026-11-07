@@ -1,5 +1,5 @@
 #pragma once
-// HNM -> HD pack conversion (used by the megarace-hd tool). Everything here
+// HNM -> HD pack conversion (used by the hd-conversion-utility tool). Everything here
 // runs on the player's machine, over the player's own game files.
 
 #include <cstdint>
@@ -27,7 +27,7 @@ struct ConvertOptions {
     std::function<void(int done, int total)> progress;
 };
 
-// Real-ESRGAN models megarace-hd runs (all 4x). Any other name is refused,
+// Real-ESRGAN models hd-conversion-utility runs (all 4x). Any other name is refused,
 // so nothing but a known name reaches the program's command line.
 extern const char* const kModels[];
 const char* knownModel(const std::string& name);   // the table's own string, or nullptr

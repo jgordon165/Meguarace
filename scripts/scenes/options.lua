@@ -25,7 +25,7 @@
 -- no panel art for them). Down past QUIT selects them.
 --   DISPLAY    ENTER or RIGHT: the next display mode, LEFT: the previous
 --              (game/display.lua)
---   HD FOLDER  where the HD videos are (made by megarace-hd, which writes to
+--   HD FOLDER  where the HD videos are (made by hd-conversion-utility, which writes to
 --              the same setting's folder). ENTER edits it: type or paste
 --              (CTRL+V) a folder, ENTER keeps it, ESC leaves it as it was;
 --              an empty line means the default, your Meguarace user folder.
@@ -123,7 +123,7 @@ function S:act(a)
         self.editing = (sys.hd_folder())
         input.text_start()
     elseif a == "display" or a == "display_back" then
-        if not sys.hd then self.note = "HD VIDEOS: RUN MEGARACE-HD"; return end
+        if not sys.hd then self.note = "HD VIDEOS: RUN HD-CONVERSION-UTILITY"; return end
         st.display = display.cycle(a == "display" and 1 or -1)
         save.store(st)
     elseif a == "quit" then
@@ -165,7 +165,7 @@ function S:finish_edit(keep)
     elseif found then
         self.note = "HD VIDEOS FOUND"
         display.apply_saved(self.state)
-    else self.note = "NO HD VIDEOS THERE: RUN MEGARACE-HD" end
+    else self.note = "NO HD VIDEOS THERE: RUN HD-CONVERSION-UTILITY" end
 end
 
 function S:update_edit()

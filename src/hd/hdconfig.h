@@ -1,6 +1,6 @@
 #pragma once
 // Where HD packs live: a setting of the game (Options > HD FOLDER), kept in
-// hd.cfg in the Meguarace user folder so both the game and megarace-hd read
+// hd.cfg in the Meguarace user folder so both the game and hd-conversion-utility read
 // the same place. hd.cfg holds one line, the folder; no file or an empty
 // line means the default, <user folder>/hd.
 //

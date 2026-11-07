@@ -252,7 +252,7 @@ static constexpr int kEsrganScale = 4;
 // Runs Real-ESRGAN over `pics` (in place). Each comes back 4x larger.
 static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const ConvertOptions& opt,
                               std::string& err) {
-    fs::path base = opt.tempDir.empty() ? fs::temp_directory_path() / "megarace-hd" : fs::path(opt.tempDir);
+    fs::path base = opt.tempDir.empty() ? fs::temp_directory_path() / "hd-conversion-utility" : fs::path(opt.tempDir);
     fs::path in = base / "in", out = base / "out";
     std::error_code ec;
     fs::remove_all(base, ec);

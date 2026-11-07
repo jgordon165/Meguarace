@@ -12,8 +12,12 @@ inputs:
     description: zip or tar.gz
     required: false
     default: zip
+  component:
+    description: "install component: game (the game package) or converter (hd-conversion-utility)"
+    required: false
+    default: game
   staged:
-    description: "true if stage/Meguarace is already installed (HD builds add tools to it first)"
+    description: "true if stage/Meguarace is already installed (the converter package adds Real-ESRGAN to it first)"
     required: false
     default: "false"
 
@@ -27,14 +31,14 @@ runs:
   steps:
     - name: Install to staging folder
       if: inputs.staged != 'true'
-      run: cmake --install build --config ${{inputs.configuration}} --component game --prefix "stage/Meguarace"
+      run: cmake --install build --config ${{inputs.configuration}} --component ${{inputs.component}} --prefix "stage/Meguarace"
       shell: bash
 
     # Packages hold tools and engine code only. Fail if anything that looks
     # like game data or an HD pack (derived game content) got staged.
     - name: Check for game content
       run: |
-        bad=$(find stage -type f \( -iname '*.hdv' -o -iname '*.hnm' -o -iname '*.dat' -o -iname '*.hsq' -o -iname '*.exe' -a ! -iname 'megarace*.exe' -a ! -iname 'realesrgan-ncnn-vulkan.exe' \) )
+        bad=$(find stage -type f \( -iname '*.hdv' -o -iname '*.hnm' -o -iname '*.dat' -o -iname '*.hsq' -o -iname '*.exe' -a ! -iname 'megarace.exe' -a ! -iname 'hd-conversion-utility.exe' -a ! -iname 'realesrgan-ncnn-vulkan.exe' \) )
         if [ -n "$bad" ]; then echo "game content in the package:"; echo "$bad"; exit 1; fi
       shell: bash
 
