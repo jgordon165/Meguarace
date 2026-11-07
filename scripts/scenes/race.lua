@@ -77,6 +77,12 @@ function S:enter(name, opts)
     self.finished = false
     self.spin, self.spin_t = 0, 0
     self.frame = -1
+    -- Everything else a race leaves behind starts clear, so a race after a
+    -- lost one (the scene is reused) begins as a new one.
+    self.result, self.wreck_frame, self.radar_quiet_until = nil, nil, nil
+    self.at_wall, self.scrape_sound, self.smoke_frame, self.sway = nil, false, nil, 0
+    self.was_skid, self.was_slide = false, false
+    self.road_w, self.carbox, self.cartop, self.cary = nil, nil, nil, nil
     music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
