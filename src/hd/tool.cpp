@@ -2,15 +2,21 @@
 //
 //   megarace-hd --data <your MegaRace CD or folder> [options]
 //
-// The packs are written to your user folder (the engine looks there by
-// default) or to --out. They are made from the game's videos, so they are
-// still the game's content: keep them for yourself, don't share them.
+// The packs go to the HD folder set in the game (Options > HD FOLDER; by
+// default <your Meguarace user folder>/hd), where the game reads them. They
+// are made from the game's videos, so they are still the game's content:
+// keep them for yourself, don't share them.
+//
+// No option names a file or a program: the folder comes from the game's
+// setting, pack names only from the archive's (checked) video names, and
+// Real-ESRGAN only from the realesrgan/ folder next to this program.
 
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
 #include "formats/cryo.h"
 #include "hd/convert.h"
+#include "hd/hdconfig.h"
 #include "hd/hdpack.h"
 #include "vfs.h"
 
@@ -32,14 +38,15 @@ static const char* kUsage =
     "Makes upscaled copies of the game's videos for the HD mode, from your own copy\n"
     "of the game. Run it once; the game picks the packs up by itself.\n"
     "\n"
-    "  --out <folder>        where packs go (default: your Meguarace user folder /hd)\n"
+    "  The packs go to the HD folder set in the game (Options > HD FOLDER),\n"
+    "  by default your Meguarace user folder /hd.\n"
     "  (pictures are 1440x1080, the 4:3 picture of 1080p; smaller display modes\n"
     "   are scaled down from them by the game)\n"
     "  --quality Q           WebP quality 1..100, or 'lossless' (default 90)\n"
     "  --upscaler U          'realesrgan' or 'builtin' (default: realesrgan if it is\n"
-    "                        next to this program, else builtin)\n"
-    "  --realesrgan <path>   realesrgan-ncnn-vulkan program to use\n"
-    "  --model NAME          Real-ESRGAN model (default realesr-animevideov3)\n"
+    "                        in the realesrgan folder next to this program, else builtin)\n"
+    "  --model NAME          Real-ESRGAN model: realesr-animevideov3 (default),\n"
+    "                        realesrgan-x4plus or realesrgan-x4plus-anime\n"
     "  --only PATTERN        only videos matching, e.g. 'N*.HNM' (case-insensitive)\n"
     "  --jobs N              worker threads (default: all cores)\n"
     "  --force               remake packs that are already up to date\n"
@@ -76,15 +83,15 @@ static std::string exeDir() {
     return r;
 }
 
-static std::string defaultOut() {
+static std::string userDir() {
     char* p = SDL_GetPrefPath("Meguarace", "Meguarace");
-    std::string r = p ? (fs::path(p) / "hd").string() : "hd";
+    std::string r = p ? p : "";
     SDL_free(p);
     return r;
 }
 
 int main(int argc, char** argv) {
-    std::string data, out, only, upscaler, realesrgan;
+    std::string data, only, upscaler, realesrgan;
     hd::ConvertOptions opt;
     bool force = false, list = false;
 
@@ -92,11 +99,13 @@ int main(int argc, char** argv) {
         std::string a = argv[i];
         auto next = [&]() -> std::string { return i + 1 < argc ? argv[++i] : ""; };
         if      (a == "--data")       data = next();
-        else if (a == "--out")        out = next();
         else if (a == "--quality")    { std::string q = next(); opt.quality = q == "lossless" ? 101 : std::atoi(q.c_str()); }
         else if (a == "--upscaler")   upscaler = next();
-        else if (a == "--realesrgan") realesrgan = next();
-        else if (a == "--model")      opt.model = next();
+        else if (a == "--model") {
+            const char* m = hd::knownModel(next());
+            if (!m) { std::fprintf(stderr, "--model: unknown model\n%s", kUsage); return 2; }
+            opt.model = m;
+        }
         else if (a == "--only")       only = next();
         else if (a == "--jobs")       opt.jobs = std::atoi(next().c_str());
         else if (a == "--force")      force = true;
@@ -116,14 +125,21 @@ int main(int argc, char** argv) {
 
     // Videos inside the archive, then any loose ones on the disc (the engine
     // looks in the same two places, in the same order).
-    struct Video { std::string name; bool inDat; };
+    // Only names as the archive has them (B01.HNM) are taken: a pack's file
+    // name is the video's, so anything else could point outside the folder.
+    struct Video { std::string name; std::string stem; bool inDat; };
     std::vector<Video> videos;
-    for (const auto& e : dat.entries())
-        if (endsWithHnm(e.name)) videos.push_back({upper(e.name), true});
-    for (const auto& e : vfs.list(""))
-        if (!e.isDir && endsWithHnm(e.name) &&
-            std::none_of(videos.begin(), videos.end(), [&](const Video& v) { return v.name == upper(e.name); }))
-            videos.push_back({upper(e.name), false});
+    for (const auto& e : dat.entries()) {
+        std::string stem = hd::safeVideoStem(e.name);
+        if (!stem.empty()) videos.push_back({upper(e.name), stem, true});
+        else if (endsWithHnm(e.name)) std::fprintf(stderr, "skipping a video with an odd name in the archive\n");
+    }
+    for (const auto& e : vfs.list("")) {
+        std::string stem = hd::safeVideoStem(e.name);
+        if (!e.isDir && !stem.empty() &&
+            std::none_of(videos.begin(), videos.end(), [&](const Video& v) { return v.stem == stem; }))
+            videos.push_back({upper(e.name), stem, false});
+    }
     if (!only.empty())
         videos.erase(std::remove_if(videos.begin(), videos.end(),
                                     [&](const Video& v) { return !globMatch(only.c_str(), v.name.c_str()); }),
@@ -146,13 +162,17 @@ int main(int argc, char** argv) {
 #else
     const char* esrganName = "realesrgan-ncnn-vulkan";
 #endif
-    if (realesrgan.empty()) {
+    {
         fs::path bundled = fs::path(exeDir()) / "realesrgan" / esrganName;
         if (fs::exists(bundled)) realesrgan = bundled.string();
     }
     if (upscaler.empty()) upscaler = realesrgan.empty() ? "builtin" : "realesrgan";
     if (upscaler == "realesrgan") {
-        if (realesrgan.empty()) { std::fprintf(stderr, "Real-ESRGAN not found; pass --realesrgan <path>\n"); return 2; }
+        if (realesrgan.empty()) {
+            std::fprintf(stderr, "Real-ESRGAN not found: put realesrgan-ncnn-vulkan and its models folder in\n"
+                                 "%s\n", (fs::path(exeDir()) / "realesrgan").string().c_str());
+            return 2;
+        }
         opt.upscaler = hd::ConvertOptions::Upscaler::RealEsrgan;
         opt.realesrgan = realesrgan;
         opt.batch = 64;   // its 1280x800 output is 4 MB a frame; keep batches small
@@ -161,7 +181,9 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    if (out.empty()) out = defaultOut();
+    const std::string user = userDir();
+    if (user.empty()) { std::fprintf(stderr, "no user folder: %s\n", SDL_GetError()); return 1; }
+    const std::string out = hd::packFolder(user);
     std::error_code ec;
     fs::create_directories(out, ec);
     if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", out.c_str(), ec.message().c_str()); return 1; }
@@ -180,7 +202,7 @@ int main(int argc, char** argv) {
         ++n;
         auto d = v.inDat ? dat.read(v.name) : vfs.read(v.name);
         if (!d) { std::fprintf(stderr, "%s: unreadable\n", v.name.c_str()); ++failed; continue; }
-        fs::path packPath = fs::path(out) / (v.name.substr(0, v.name.size() - 4) + ".hdv");
+        fs::path packPath = fs::path(out) / (v.stem + ".hdv");
         if (!force) {
             hd::Pack existing;
             if (existing.open(packPath.string(), hd::crc32(d->data(), d->size())) &&

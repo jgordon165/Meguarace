@@ -19,13 +19,18 @@ struct ConvertOptions {
     // Vulkan) at 4x over each batch of frames (1280x800), then resizes that
     // to the picture size.
     enum class Upscaler { Builtin, RealEsrgan } upscaler = Upscaler::Builtin;
-    std::string realesrgan;     // path to realesrgan-ncnn-vulkan(.exe)
-    std::string model = "realesr-animevideov3";
+    std::string realesrgan;     // the bundled realesrgan-ncnn-vulkan(.exe) (see tool.cpp)
+    std::string model = "realesr-animevideov3";   // one of kModels
     std::string tempDir;        // scratch folder for Real-ESRGAN batches
     int jobs = 0;               // worker threads for resize/encode; 0 = all cores
     int batch = 240;            // frames per upscaling batch (bounds memory and scratch space)
     std::function<void(int done, int total)> progress;
 };
+
+// Real-ESRGAN models megarace-hd runs (all 4x). Any other name is refused,
+// so nothing but a known name reaches the program's command line.
+extern const char* const kModels[];
+const char* knownModel(const std::string& name);   // the table's own string, or nullptr
 
 // Composited screens of a video, as the original shows them: one 320x200
 // ARGB picture per HNM frame that changes the picture, and `repeat` marking

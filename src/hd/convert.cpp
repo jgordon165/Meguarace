@@ -11,10 +11,20 @@
 #include <cmath>
 #include <atomic>
 #include <cstdio>
-#include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
 #include <thread>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char** environ;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -161,7 +171,80 @@ static void parallelFor(int n, int jobs, F&& fn) {
     for (auto& t : pool) t.join();
 }
 
-static std::string quote(const std::string& s) { return "\"" + s + "\""; }
+const char* const kModels[] = {"realesr-animevideov3", "realesrgan-x4plus", "realesrgan-x4plus-anime", nullptr};
+
+const char* knownModel(const std::string& name) {
+    for (int i = 0; kModels[i]; ++i)
+        if (name == kModels[i]) return kModels[i];
+    return nullptr;
+}
+
+// Runs a program with these arguments, directly: no shell, so nothing in
+// them is interpreted. Its output is discarded. Returns its exit code, or -1
+// if it couldn't be started.
+static int runProgram(const fs::path& exe, const std::vector<std::string>& args) {
+#ifdef _WIN32
+    // Build the command line the way CommandLineToArgvW splits it.
+    auto quoteArg = [](const std::wstring& a) {
+        std::wstring q = L"\"";
+        size_t slashes = 0;
+        for (wchar_t c : a) {
+            if (c == L'\\') { ++slashes; continue; }
+            if (c == L'"') q.append(slashes * 2 + 1, L'\\');
+            else q.append(slashes, L'\\');
+            slashes = 0;
+            q += c;
+        }
+        q.append(slashes * 2, L'\\');
+        return q + L"\"";
+    };
+    auto wide = [](const std::string& s) {
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
+        std::wstring w(size_t(n > 0 ? n - 1 : 0), L'\0');
+        if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
+        return w;
+    };
+    std::wstring app = exe.wstring();
+    std::wstring line = quoteArg(app);
+    for (const auto& a : args) line += L" " + quoteArg(wide(a));
+    SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
+    HANDLE nul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
+    STARTUPINFOW si{};
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = si.hStdError = nul;
+    PROCESS_INFORMATION pi{};
+    BOOL ok = CreateProcessW(app.c_str(), line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+                             nullptr, &si, &pi);
+    if (nul != INVALID_HANDLE_VALUE) CloseHandle(nul);
+    if (!ok) return -1;
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return int(code);
+#else
+    std::string path = exe.string();
+    std::vector<char*> argv;
+    argv.push_back(path.data());
+    std::vector<std::string> copy = args;
+    for (auto& a : copy) argv.push_back(a.data());
+    argv.push_back(nullptr);
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
+    pid_t pid = 0;
+    int rc = posix_spawn(&pid, path.c_str(), &fa, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&fa);
+    if (rc != 0) return -1;
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return -1;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+#endif
+}
 
 // Real-ESRGAN's video model, run at 4x: 320x200 -> 1280x800.
 static constexpr int kEsrganScale = 4;
@@ -186,18 +269,20 @@ static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const Co
             return false;
         }
     }
-    std::string cmd = quote(opt.realesrgan) + " -i " + quote(in.string()) + " -o " + quote(out.string()) +
-                      " -n " + opt.model + " -s " + std::to_string(kEsrganScale) + " -f png";
+    const char* model = knownModel(opt.model);
+    if (!model) { err = "unknown Real-ESRGAN model " + opt.model; return false; }
+    std::vector<std::string> args = {"-i", in.string(), "-o", out.string(), "-n", model,
+                                     "-s", std::to_string(kEsrganScale), "-f", "png"};
     // Its models ship in a "models" folder beside it; it otherwise looks in
     // the current folder.
     fs::path models = fs::path(opt.realesrgan).parent_path() / "models";
-    if (fs::is_directory(models, ec)) cmd += " -m " + quote(models.string());
-#ifdef _WIN32
-    cmd = "\"" + cmd + "\"";   // cmd.exe strips one pair of outer quotes
-#else
-    cmd += " >/dev/null 2>&1";
-#endif
-    if (std::system(cmd.c_str()) != 0) { err = "Real-ESRGAN failed: " + cmd; return false; }
+    if (fs::is_directory(models, ec)) { args.push_back("-m"); args.push_back(models.string()); }
+    int rc = runProgram(opt.realesrgan, args);
+    if (rc != 0) {
+        err = rc < 0 ? "Real-ESRGAN could not be started (" + opt.realesrgan + ")"
+                     : "Real-ESRGAN failed (exit code " + std::to_string(rc) + ")";
+        return false;
+    }
 
     const int W = kW * kEsrganScale, H = kH * kEsrganScale;
     for (size_t i = 0; i < pics.size(); ++i) {

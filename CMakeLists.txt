@@ -104,7 +104,7 @@ megarace_warnings(megarace_formats)
 
 # ---- HD packs (engine side) and the converter -----------------------------------
 if(MEGARACE_HD)
-    add_library(megarace_hdpack STATIC src/hd/hdpack.cpp)
+    add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp)
     target_include_directories(megarace_hdpack PUBLIC src)
     target_link_libraries(megarace_hdpack PUBLIC webp)
     megarace_warnings(megarace_hdpack)

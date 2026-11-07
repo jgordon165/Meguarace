@@ -22,7 +22,9 @@ struct Engine {
     std::string dataArg;
     std::string musicArg;
     // HD mode (MEGARACE_HD builds): folder of .hdv packs made by megarace-hd
-    // from the player's own videos; empty when HD is off or there are none.
+    // from the player's own videos (the Options > HD FOLDER setting, hd.cfg);
+    // empty when HD is off or there are none.
     std::string hdDir;
+    bool hdOff = false;       // --no-hd
     std::string displayArg;   // --display: overrides the saved display mode
 };

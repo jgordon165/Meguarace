@@ -62,6 +62,7 @@ public:
     static const std::vector<Mode>& modes();
     // HD packs found: their picture size. HD modes are offered only then.
     bool enableHd(int picW, int picH);
+    void disableHd();          // no packs any more: back to native if in an HD mode
     bool hdAvailable() const { return picW_ > 0; }
     int  hdPictureW() const { return picW_; }
     int  hdPictureH() const { return picH_; }

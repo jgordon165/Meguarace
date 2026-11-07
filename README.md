@@ -103,8 +103,9 @@ Headless test run: `--frames 60 --screenshot out.bmp`.
 Upscaled videos, made on your machine from your own CD by the bundled
 `megarace-hd` tool, at 1440×1080 (the 4:3 picture of 1080p). No HD video is
 ever committed or shipped, because an upscaled video is still the game's
-content. Run `megarace-hd --data V:\` once, then pick a display mode in
-Options > DISPLAY: 800×600, 1024×768 or 1920×1080, or 320×200 for the
+content. Optionally pick where they go in Options > HD FOLDER (the default
+is your user folder), run `megarace-hd --data V:\` once, then pick a display
+mode in Options > DISPLAY: 800×600, 1024×768 or 1920×1080, or 320×200 for the
 original. You can also give one with `--display`. F10 switches the HD videos
 on and off. The game always works in 320×200 coordinates, so gameplay is the
 same in every mode. Details: [docs/hd.md](docs/hd.md).
@@ -190,6 +191,6 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound() :hd() :blit(i,x,y,w,h,pixels[,key])`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
-| `input` | `down(key) pressed(key) released(key) any()`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`) |
-| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted hd hd_width hd_height hd_path display_arg` |
+| `input` | `down(key) pressed(key) released(key) any()`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`); text entry `text_start() text_stop() text() paste()` |
+| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted hd hd_width hd_height hd_path display_arg`, HD folder setting `hd_folder() set_hd_folder(folder)` |
 

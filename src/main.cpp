@@ -4,15 +4,12 @@
 // is compiled in or shipped.
 //
 // Usage: megarace --data <game folder> [--music <ripped tracks folder>]
-//                 [--scale N] [--scripts <dir>] [--hd <packs folder> | --no-hd]
+//                 [--scale N] [--scripts <dir>] [--no-hd]
 //                 [--display native|800x600|1024x768|1920x1080]
 //                 [--frames N --screenshot out.bmp]   (headless testing)
 
 #include "engine.h"
 #include "lua_api.h"
-#ifdef MEGARACE_HD
-#include "hd/hdpack.h"
-#endif
 
 extern "C" {
 #include "lauxlib.h"
@@ -29,36 +26,6 @@ extern "C" {
 
 namespace fs = std::filesystem;
 
-#ifdef MEGARACE_HD
-// The HD packs folder and their picture size: --hd, else the packs
-// megarace-hd made in the user folder. All packs share one size (the first
-// pack found decides; packs of another size are skipped when opened).
-static bool findHd(std::string& dir, int& picW, int& picH) {
-    const bool asked = !dir.empty();
-    if (dir.empty()) {
-        char* p = SDL_GetPrefPath("Meguarace", "Meguarace");
-        if (p) dir = (fs::path(p) / "hd").string();
-        SDL_free(p);
-    }
-    std::error_code ec;
-    if (dir.empty() || !fs::is_directory(dir, ec)) {
-        if (asked) std::fprintf(stderr, "--hd: no such folder %s\n", dir.c_str());
-        dir.clear();
-        return false;
-    }
-    bool old = false;
-    for (const auto& f : fs::directory_iterator(dir, ec)) {
-        if (f.path().extension() != ".hdv") continue;
-        hd::PackHeader h;
-        if (hd::Pack::peek(f.path().string(), h)) { picW = h.pictureW; picH = h.pictureH; return true; }
-        old = true;
-    }
-    if (old) std::fprintf(stderr, "HD packs in %s are from an older megarace-hd: run it again\n", dir.c_str());
-    else if (asked) std::fprintf(stderr, "--hd: no HD packs in %s (make them with megarace-hd)\n", dir.c_str());
-    dir.clear();
-    return false;
-}
-#endif
 
 static bool callLua(lua_State* L, const char* fn, double arg, bool withArg) {
     lua_getglobal(L, "game");
@@ -92,14 +59,13 @@ int main(int argc, char** argv) {
         else if (a == "--scale")      scale = std::max(1, std::atoi(next().c_str()));
         else if (a == "--frames")     maxFrames = std::atol(next().c_str());
         else if (a == "--screenshot") shot = next();
-        else if (a == "--hd")         eng.hdDir = next();
         else if (a == "--no-hd")      noHd = true;
         else if (a == "--display")    eng.displayArg = next();
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
                         "[--music <folder with track02.wav...>] [--scale N]"
 #ifdef MEGARACE_HD
-                        " [--hd <HD packs folder> | --no-hd]"
+                        " [--no-hd]"
                         " [--display native|800x600|1024x768|1920x1080]"
 #endif
                         "\n");
@@ -126,19 +92,15 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
-    int picW = 0, picH = 0;
-#ifdef MEGARACE_HD
-    if (noHd || !findHd(eng.hdDir, picW, picH)) eng.hdDir.clear();
-#else
-    (void)noHd;
-#endif
+    eng.hdOff = noHd;
     if (!eng.video.init(320, 200, scale, headless)) return 1;
-    if (!eng.hdDir.empty()) {
-        if (eng.video.enableHd(picW, picH))
-            std::printf("HD videos (%dx%d) from %s (F10 turns them off and on)\n", picW, picH, eng.hdDir.c_str());
-        else
-            eng.hdDir.clear();
-    }
+    // SDL starts with text input on; the game only wants it while a text
+    // line is being edited (input.text_start).
+    SDL_StopTextInput();
+    // HD packs from the folder set in Options > HD FOLDER (hd.cfg).
+    if (loadHd(eng))
+        std::printf("HD videos (%dx%d) from %s (F10 turns them off and on)\n", eng.video.hdPictureW(),
+                    eng.video.hdPictureH(), eng.hdDir.c_str());
     // Display mode: --display, else the largest that fits the desktop. The
     // game's saved setting, if any, is applied by the Lua side at start
     // (unless --display was given). Without HD packs: native.

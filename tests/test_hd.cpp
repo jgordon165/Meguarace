@@ -3,6 +3,7 @@
 
 #include "formats/cryo.h"
 #include "hd/convert.h"
+#include "hd/hdconfig.h"
 #include "hd/hdpack.h"
 
 #include <cstdio>
@@ -28,6 +29,28 @@ static fs::path scratch(const char* name) {
     fs::path p = fs::temp_directory_path() / "megarace_hd_tests";
     fs::create_directories(p);
     return p / name;
+}
+
+static void testConfig() {
+    // Only plain archive names become pack names.
+    CHECK(hd::safeVideoStem("B01.HNM") == "B01" && hd::safeVideoStem("ns11.hnm") == "NS11");
+    CHECK(hd::safeVideoStem("VWBT2.HNM") == "VWBT2" && hd::safeVideoStem("A_B.HNM") == "A_B");
+    for (const char* bad : {"../B01.HNM", "..\\B01.HNM", "C:B01.HNM", "B01.TXT", ".HNM", "B01", "TOOLONGNAME1.HNM",
+                            "B 1.HNM", "/etc/x.HNM"})
+        CHECK(hd::safeVideoStem(bad).empty());
+    // The folder setting: default, set, cleared.
+    fs::path user = scratch("user");
+    fs::create_directories(user);
+    CHECK(hd::configuredFolder(user.string()).empty());
+    CHECK(hd::packFolder(user.string()) == (user / "hd").string());
+    CHECK(hd::setConfiguredFolder(user.string(), "D:\\Games\\MegaRace HD"));
+    CHECK(hd::configuredFolder(user.string()) == "D:\\Games\\MegaRace HD");
+    CHECK(hd::packFolder(user.string()) == "D:\\Games\\MegaRace HD");
+    CHECK(hd::setConfiguredFolder(user.string(), ""));
+    CHECK(hd::configuredFolder(user.string()).empty());
+    // Models: only the known names.
+    CHECK(hd::knownModel("realesr-animevideov3") != nullptr);
+    CHECK(hd::knownModel("x; rm -rf /") == nullptr && hd::knownModel("") == nullptr);
 }
 
 static void testCrc() {
@@ -168,7 +191,7 @@ static void testConvert() {
 }
 
 int main() {
-    for (auto* t : {testCrc, testWebpLossless, testPack, testResample, testComposite, testConvert}) t();
+    for (auto* t : {testConfig, testCrc, testWebpLossless, testPack, testResample, testComposite, testConvert}) t();
     std::error_code ec;
     fs::remove_all(fs::temp_directory_path() / "megarace_hd_tests", ec);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

@@ -246,6 +246,15 @@ bool Video::enableHd(int picW, int picH) {
     return true;
 }
 
+void Video::disableHd() {
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = nullptr;
+    picW_ = picH_ = 0;
+    hd_.clear();
+    std::fill(src_.begin(), src_.end(), uint8_t(0));
+    if (mode().hd) setMode("native");
+}
+
 std::string Video::bestMode() const {
     SDL_DisplayMode dm{};
     int display = window_ ? SDL_GetWindowDisplayIndex(window_) : 0;

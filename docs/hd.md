@@ -52,10 +52,24 @@ all freely redistributable.
 megarace-hd --data V:\
 ```
 
-This writes one `.hdv` pack per video to your Meguarace user folder (the
-same place as `meguarace.sav`, under `hd/`). The game finds them there by
-itself. Run it once; running it again only redoes videos that changed, or
-packs made by an older version.
+This writes one `.hdv` pack per video to the **HD folder**, and the game
+reads them from there. The folder is a setting in the game: **Options > HD
+FOLDER** (press Down past QUIT). Press Enter, type or paste (Ctrl+V) a
+folder, then Enter to keep it or Esc to leave it as it was. An empty line
+means the default: `hd/` in your Meguarace user folder, next to
+`meguarace.sav`. Set the folder first, for example on a drive with room for
+the 3.5–4 GB, then run `megarace-hd`. It writes to the same place, because
+it reads the same setting (`hd.cfg` in the user folder).
+
+Run it once; running it again only redoes videos that changed, or packs made
+by an older version.
+
+Neither program takes a file or program path on its command line. Pack
+file names are only ever the archive's own video names (`B01.HNM` gives
+`B01.hdv`), checked so that nothing in an archive can point outside the
+folder. Real-ESRGAN only runs from the `realesrgan/` folder next to
+`megarace-hd`, started directly rather than through a shell, and only with
+a model from a fixed list.
 
 Videos are converted **once, at the largest mode**: 1440×1080, the 4:3
 picture of 1080p. 1024×768 and 800×600 scale that down on the GPU while
@@ -63,12 +77,10 @@ playing, so there's only one set of packs.
 
 | Option | |
 |---|---|
-| `--upscaler realesrgan\|builtin` | Real-ESRGAN (GPU, Vulkan) when it is bundled or given with `--realesrgan`: it upscales 4× to 1280×800, which is then resized to 1440×1080. Otherwise a built-in Catmull-Rom resize straight to 1440×1080, which runs anywhere. |
-| `--realesrgan <path>` | A `realesrgan-ncnn-vulkan` program to use. |
-| `--model NAME` | Real-ESRGAN model (default `realesr-animevideov3`). It must do 4×. |
+| `--upscaler realesrgan\|builtin` | Real-ESRGAN (GPU, Vulkan) when `realesrgan/realesrgan-ncnn-vulkan` is next to `megarace-hd` (HD builds bundle it): it upscales 4× to 1280×800, which is then resized to 1440×1080. Otherwise a built-in Catmull-Rom resize straight to 1440×1080, which runs anywhere. |
+| `--model NAME` | Real-ESRGAN model: `realesr-animevideov3` (default), `realesrgan-x4plus` or `realesrgan-x4plus-anime`; its files go in `realesrgan/models`. |
 | `--quality Q\|lossless` | WebP quality (default 90). |
 | `--only PATTERN` | Only some videos, e.g. `--only 'N*.HNM'`. |
-| `--out <folder>` | Somewhere else (then run the game with `--hd <folder>`). |
 | `--list` | List the videos and their frame counts. |
 
 The disc holds 109 videos and 65,234 frames. Measured on the US v1.0.1 disc
@@ -81,9 +93,8 @@ depends on the GPU.
 ## Playing
 
 ```
-megarace --data V:\                        # packs in your user folder, saved display mode
+megarace --data V:\                        # packs from the HD folder setting, saved display mode
 megarace --data V:\ --display 1024x768     # this mode, this time
-megarace --data V:\ --hd D:\packs          # packs somewhere else
 megarace --data V:\ --no-hd                # original videos, native mode
 ```
 
@@ -114,7 +125,10 @@ compare them with the original videos.
   frame draws from the original pixels instead, so it always looks the way
   the game means it to.
 - **Lua**: `sys.hd` (packs found), `sys.hd_width` / `sys.hd_height` (their
-  picture size), `sys.hd_path`, `sys.display_arg`; `gfx.displays()`,
+  picture size), `sys.hd_path`, `sys.display_arg`; `sys.hd_folder()` and
+  `sys.set_hd_folder(folder)` (the setting; setting it looks for packs
+  again straight away); `input.text_start()`, `text_stop()`, `text()` and
+  `paste()` for typing it; `gfx.displays()`,
   `gfx.display()`, `gfx.set_display(name)`, `gfx.to_display(x, y)`;
   `v:hd()` on a video (true when it plays from a pack), and
   `v:blit(i, x, y, w, h, pixels, key)`, which is `gfx.blit` for frame i of
