@@ -752,6 +752,23 @@ test("[data] voice filter measures a clip's hiss", function()
     audio.stream_reset()
 end)
 
+test("[data] race: a race after a lost one starts clean", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    check(dat.open("MEGARACE.DAT"), "MEGARACE.DAT opens")
+    local scenes, race = require("core.scenes"), require("scenes.race")
+    local opts = { car = "RA", rival = "LU", level = "NOVICE", total = 0, round = 1 }
+    scenes.switch(race, "NS11", opts)
+    race:wreck()
+    for _ = 1, 200 do race:update(0.04) end
+    check(race.finished and race.result.outcome == "wrecked", "wrecked")
+    scenes.switch(race, "NS11", opts)
+    check(not race.wreck_frame and not race.result and not race.finished, "the wreck is gone")
+    check(not race.radar_quiet_until and race.sway == 0 and race.steering.vel == 0, "and the rest")
+    for _ = 1, 200 do race:update(0.04) end
+    check(not race.finished, "the new race runs")
+    scenes.switch({})
+end)
+
 test("[data] archive and intro videos", function()
     if not data then skipped = skipped + 1; return "skip" end
     check(dat.open("MEGARACE.DAT"), "MEGARACE.DAT opens")
