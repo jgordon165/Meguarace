@@ -731,6 +731,27 @@ end)
 
 local data = os.getenv("MEGARACE_DATA")
 
+test("voice filter: which clips, and the setting", function()
+    local player = require("scenes.player")
+    check(player.is_voice("B01.HNM") and player.is_voice("bb7.hnm") and player.is_voice("BA9.HNM"), "Lance's clips")
+    check(not player.is_voice("CRYO.HNM") and not player.is_voice("VWBT.HNM") and not player.is_voice("INTRO.HNM"),
+          "other videos are not filtered")
+    check(type(audio.stream_voice_filter) == "function" and type(audio.stream_end) == "function", "audio API")
+    check(require("game.save").defaults().voice_filter == true, "on by default")
+end)
+
+test("[data] voice filter measures a clip's hiss", function()
+    if not data then skipped = skipped + 1; return "skip" end
+    check(dat.open("MEGARACE.DAT"), "MEGARACE.DAT opens")
+    local v = assert(hnm.open("B64.HNM"))
+    audio.stream_reset()
+    check(audio.stream_voice_filter(v) == true, "profile from B64's soundtrack")
+    audio.stream_reset()
+    local silent = assert(hnm.open("NS11.HNM"))       -- a track video: no sound
+    check(audio.stream_voice_filter(silent) == false, "no sound, no filter")
+    audio.stream_reset()
+end)
+
 test("[data] archive and intro videos", function()
     if not data then skipped = skipped + 1; return "skip" end
     check(dat.open("MEGARACE.DAT"), "MEGARACE.DAT opens")

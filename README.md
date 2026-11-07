@@ -44,7 +44,9 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
   wrecked) and it's game over and the Hall of Fame. Season 1 is Novice,
   season 2 Hardened; clean rounds earn the bonus tracks HOLD and TOKY;
   finish season 2 for the finale, after which you can pick any track.
-  In a run of clips Enter skips one, Esc skips the rest.
+  In a run of clips Enter skips one, Esc skips the rest. Lance's clips
+  play through a hiss filter (see below); V switches it off and on while
+  one plays, so you can compare, and the choice is saved.
 - The left button picks the **level** (Novice or Hardened), which starts a
   new career. The middle one opens the **options**: load, save, input, quit.
   The right one shows the **Hall of Fame** (seeded with the defaults stored
@@ -63,6 +65,16 @@ each race with the song the original gives that track, and SkyHolder in the
 menus. To use a recording instead (say, from a real Sound Blaster), put
 `NEWSAN.wav`, `MAEVA.wav`, `DETRITUS.wav`, `LENNY.wav`, `ALARME.wav` or
 `PAGA.wav` in a folder and pass it with `--music <folder>`.
+
+**Lance's voice.** His clips' 8-bit soundtracks carry a steady hiss (about
+−35 dB) under the voice, plus a DC offset and low rumble. The port cleans
+them as they play (`src/voice_filter.h`): a high-pass at 80 Hz takes the
+offset and rumble, then a spectral noise reduction (a Wiener filter over
+512-sample windows) turns the hiss down. It measures each clip's own hiss
+over the whole clip before it starts. On the US v1.0.1 disc that leaves the
+hiss between words 12–18 dB lower, with the speech within about 0.6 dB of
+the original. Nothing on disk changes; the other videos' sound (music,
+effects) isn't filtered.
 
 The icon (`res/meguarace.ico`, also the window icon) is the port's own
 design, drawn by `tools/make_icon.py`, not art from the game.
@@ -153,6 +165,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | Rivals one at a time with the original AI, opponents per round, laps, qualifying, scoring | Done (from RACEPRG.EXE) |
 | Career: Lance's clips before and after rounds, game over, two seasons, HOLD/TOKY bonus tracks, finale, free track choice | Done (from RACEPRG.EXE) |
 | Subtitles in six languages, timed by the videos' own cues | Done (from RACEPRG.EXE) |
+| Hiss filter on Lance's clips (V switches it) | Done (the port's own; 12–18 dB less hiss) |
 | Hall of Fame: seven places, your run's line, name entry | Done (from RACEPRG.EXE) |
 | Attract mode: Lance's idle clip, the demo race | Done (from RACEPRG.EXE) |
 | Handling: curves push you outward, capped per car | Done (from RACEPRG.EXE) |
@@ -187,7 +200,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
 | `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; display modes `displays() display() set_display(name) to_display(x,y)` (drawing stays 320×200 in every mode) |
-| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played()`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
+| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound() :hd() :blit(i,x,y,w,h,pixels[,key])`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |

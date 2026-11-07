@@ -1,5 +1,7 @@
 #include "audio.h"
 
+#include <cmath>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -119,6 +121,21 @@ void Audio::streamReset() {
     stream_.active = true;
     streamPlayed_ = 0;
     streamResampler_.reset();
+    streamFilter_.stop();
+    streamFilter_.setBypass(false);
+}
+
+void Audio::streamVoiceFilter(std::vector<float> noise, int rate) {
+    streamFilter_.start(std::move(noise), rate);
+}
+
+void Audio::streamVoiceBypass(bool bypass) { streamFilter_.setBypass(bypass); }
+
+void Audio::streamEnd() {
+    if (!dev_ || !streamFilter_.active()) return;
+    std::vector<float> tail;
+    streamFilter_.flush(tail);
+    pushFiltered(tail);
 }
 
 void Audio::streamPush(const uint8_t* data, size_t len, int rate, int bits, int channels) {
@@ -126,7 +143,33 @@ void Audio::streamPush(const uint8_t* data, size_t len, int rate, int bits, int 
     std::vector<int16_t> pcm;
     // One resampler for the whole stream: per-chunk conversion loses samples
     // at every chunk boundary and makes the sound run ahead of the video.
+    if (streamFilter_.active() && bits == 8 && channels == 1) {
+        std::vector<float> in(len), out;
+        for (size_t i = 0; i < len; ++i) in[i] = (float(data[i]) - 128.0f) / 128.0f;
+        streamFilter_.process(in.data(), in.size(), out);
+        streamRate_ = rate;
+        pushFiltered(out);
+        return;
+    }
     streamResampler_.push(data, len, bits, channels, rate, spec_.freq, pcm);
+    queueStream(pcm);
+}
+
+// Filtered samples (-1..1, mono, at the stream's rate) into the stream.
+void Audio::pushFiltered(const std::vector<float>& out) {
+    if (out.empty()) return;
+    std::vector<uint8_t> le(out.size() * 2);
+    for (size_t i = 0; i < out.size(); ++i) {
+        auto v = int16_t(std::lround(std::clamp(out[i], -1.0f, 32767.0f / 32768.0f) * 32768.0f));
+        le[i * 2] = uint8_t(uint16_t(v) & 0xFF);
+        le[i * 2 + 1] = uint8_t(uint16_t(v) >> 8);
+    }
+    std::vector<int16_t> pcm;
+    streamResampler_.push(le.data(), le.size(), 16, 1, streamRate_, spec_.freq, pcm);
+    queueStream(pcm);
+}
+
+void Audio::queueStream(const std::vector<int16_t>& pcm) {
     std::lock_guard<std::mutex> lk(mtx_);
     // Drop what's already played so the buffer doesn't grow forever.
     if (stream_.pos > 0) {
