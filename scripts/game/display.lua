@@ -2,7 +2,7 @@
 -- position, mask and layout table is in the original's pixels); the mode
 -- decides how that is shown: "native" (the original 320x200 at 4:3) or a
 -- 4:3 picture of 800x600, 1024x768 or 1920x1080 (1440x1080, pillarboxed)
--- with the HD videos. HD modes exist only when megarace-hd has made packs
+-- with the HD videos. HD modes exist only when hd-conversion-utility has made packs
 -- (sys.hd); otherwise only native is offered.
 
 local M = {}

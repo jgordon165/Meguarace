@@ -1,6 +1,6 @@
 #pragma once
 // HD video packs (.hdv): upscaled versions of MegaRace's HNM videos, made by
-// megarace-hd on the player's machine from the player's own MEGARACE.DAT.
+// hd-conversion-utility on the player's machine from the player's own MEGARACE.DAT.
 //
 // A pack is derived from the original game's videos, so it is still the
 // game's content: it is never committed, never built in CI and never shipped.

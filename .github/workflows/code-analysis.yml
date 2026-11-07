@@ -21,11 +21,12 @@ jobs:
       - name: Configure
         uses: ./.github/actions/configure-linux
         with:
-          # Analyse our code, not SDL's and Lua's: build those before CodeQL starts.
-          configure_options: -DMEGARACE_TESTS=ON
+          # Analyse our code (the game and hd-conversion-utility), not the
+          # fetched libraries': build those before CodeQL starts.
+          configure_options: -DMEGARACE_TESTS=ON -DMEGARACE_HD_CONVERTER=ON
 
       - name: Build third-party libraries
-        run: cmake --build build --parallel --target SDL2-static SDL2main lua_static
+        run: cmake --build build --parallel --target SDL2-static SDL2main lua_static webp sharpyuv ymfm_opl
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4

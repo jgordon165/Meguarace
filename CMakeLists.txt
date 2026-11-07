@@ -5,10 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(MEGARACE_TESTS "Build the test suite" ON)
-# HD mode: the engine can show upscaled videos from packs the player makes
-# with megarace-hd from their own CD. ON on the release/hd branch; when the
-# HD work merges into master this becomes an opt-in option there.
-option(MEGARACE_HD "Build the HD mode (engine support and the megarace-hd tool)" ON)
+# The game always plays HD videos when the player has made them (display
+# modes, Options > HD FOLDER). Making them is a separate utility,
+# hd-conversion-utility, with its own workflow (hd-converter.yml, release-hd-converter.yml):
+option(MEGARACE_HD_CONVERTER "Build hd-conversion-utility, the HD video converter" OFF)
 
 # One static MSVC runtime for everything (SDL, Lua and the engine), so
 # releases need no Visual C++ redistributable and nothing mismatches at link.
@@ -61,19 +61,20 @@ add_library(ymfm_opl STATIC
 target_include_directories(ymfm_opl SYSTEM PUBLIC ${ymfm_SOURCE_DIR}/src)
 target_compile_options(ymfm_opl PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)   # third-party code
 
-# ---- HD mode: libwebp (BSD-3) and stb_image / stb_image_write (public domain / MIT) -------------------
-if(MEGARACE_HD)
-    foreach(opt WEBP_BUILD_ANIM_UTILS WEBP_BUILD_CWEBP WEBP_BUILD_DWEBP WEBP_BUILD_GIF2WEBP
+# ---- HD videos: libwebp (BSD-3); the converter also uses stb_image and
+# stb_image_write (public domain / MIT) ------------------------------------------
+foreach(opt WEBP_BUILD_ANIM_UTILS WEBP_BUILD_CWEBP WEBP_BUILD_DWEBP WEBP_BUILD_GIF2WEBP
                 WEBP_BUILD_IMG2WEBP WEBP_BUILD_VWEBP WEBP_BUILD_WEBPINFO WEBP_BUILD_WEBPMUX
                 WEBP_BUILD_EXTRAS WEBP_BUILD_LIBWEBPMUX WEBP_BUILD_FUZZTEST)
-        set(${opt} OFF CACHE BOOL "" FORCE)
-    endforeach()
-    FetchContent_Declare(libwebp
-        GIT_REPOSITORY https://github.com/webmproject/libwebp.git
-        GIT_TAG        v1.6.0
-        GIT_SHALLOW    TRUE)
-    FetchContent_MakeAvailable(libwebp)
+    set(${opt} OFF CACHE BOOL "" FORCE)
+endforeach()
+FetchContent_Declare(libwebp
+    GIT_REPOSITORY https://github.com/webmproject/libwebp.git
+    GIT_TAG        v1.6.0
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(libwebp)
 
+if(MEGARACE_HD_CONVERTER)
     # Header-only; pinned to a commit (stb has no release tags).
     FetchContent_Declare(stb
         GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -103,13 +104,14 @@ target_include_directories(megarace_formats PUBLIC src)
 target_link_libraries(megarace_formats PUBLIC ymfm_opl)
 megarace_warnings(megarace_formats)
 
-# ---- HD packs (engine side) and the converter -----------------------------------
-if(MEGARACE_HD)
-    add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp)
-    target_include_directories(megarace_hdpack PUBLIC src)
-    target_link_libraries(megarace_hdpack PUBLIC webp)
-    megarace_warnings(megarace_hdpack)
+# ---- HD packs: read by the game, made by the converter ----------------------------
+add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp)
+target_include_directories(megarace_hdpack PUBLIC src)
+target_link_libraries(megarace_hdpack PUBLIC webp)
+megarace_warnings(megarace_hdpack)
 
+# ---- hd-conversion-utility, the HD converter (a separate utility) -----------------------
+if(MEGARACE_HD_CONVERTER)
     add_library(megarace_hdconvert STATIC src/hd/convert.cpp src/hd/stb_impl.cpp)
     target_include_directories(megarace_hdconvert SYSTEM PUBLIC ${stb_SOURCE_DIR})
     target_link_libraries(megarace_hdconvert PUBLIC megarace_hdpack megarace_formats)
@@ -118,9 +120,9 @@ if(MEGARACE_HD)
     set_source_files_properties(src/hd/stb_impl.cpp PROPERTIES
         COMPILE_OPTIONS $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)
 
-    add_executable(megarace-hd src/hd/tool.cpp)
-    target_link_libraries(megarace-hd PRIVATE megarace_hdconvert SDL2::SDL2-static)
-    megarace_warnings(megarace-hd)
+    add_executable(hd-conversion-utility src/hd/tool.cpp)
+    target_link_libraries(hd-conversion-utility PRIVATE megarace_hdconvert SDL2::SDL2-static)
+    megarace_warnings(hd-conversion-utility)
 endif()
 
 # ---- Engine ----------------------------------------------------------------
@@ -135,12 +137,8 @@ if(WIN32)
     # tools/make_icon.py; no game art).
     target_sources(megarace PRIVATE res/meguarace.rc)
 endif()
-target_link_libraries(megarace PRIVATE megarace_formats SDL2::SDL2-static SDL2::SDL2main lua_static)
+target_link_libraries(megarace PRIVATE megarace_formats megarace_hdpack SDL2::SDL2-static SDL2::SDL2main lua_static)
 megarace_warnings(megarace)
-if(MEGARACE_HD)
-    target_link_libraries(megarace PRIVATE megarace_hdpack)
-    target_compile_definitions(megarace PRIVATE MEGARACE_HD=1)
-endif()
 if(MSVC)
     # Debugging symbols for Release too (uploaded separately by the release workflow).
     target_compile_options(megarace PRIVATE $<$<CONFIG:Release>:/Zi>)
@@ -167,11 +165,17 @@ if(MEGARACE_TESTS)
     megarace_warnings(megarace_tests)
     add_test(NAME formats COMMAND megarace_tests)
 
-    if(MEGARACE_HD)
-        add_executable(megarace_hd_tests tests/test_hd.cpp)
-        target_link_libraries(megarace_hd_tests PRIVATE megarace_hdconvert)
-        megarace_warnings(megarace_hd_tests)
-        add_test(NAME hd COMMAND megarace_hd_tests)
+    # HD packs and the folder setting (the game's side).
+    add_executable(megarace_hdpack_tests tests/test_hdpack.cpp)
+    target_link_libraries(megarace_hdpack_tests PRIVATE megarace_hdpack)
+    megarace_warnings(megarace_hdpack_tests)
+    add_test(NAME hdpack COMMAND megarace_hdpack_tests)
+
+    if(MEGARACE_HD_CONVERTER)
+        add_executable(megarace_hdconvert_tests tests/test_hdconvert.cpp)
+        target_link_libraries(megarace_hdconvert_tests PRIVATE megarace_hdconvert)
+        megarace_warnings(megarace_hdconvert_tests)
+        add_test(NAME hdconvert COMMAND megarace_hdconvert_tests)
     endif()
 
     # --no-hd: HD packs in the user folder must not change test results.
@@ -190,17 +194,17 @@ if(MEGARACE_TESTS)
 endif()
 
 # ---- Install / packaging -----------------------------------------------------
-# Layout: megarace(.exe), scripts/, README.md, docs/. No game data, ever.
-# HD builds add megarace-hd(.exe); never HD packs (they are game content).
-# Everything is in the "game" component: packaging installs only that, so
-# the install rules of fetched libraries (libwebp's headers and .a files)
-# stay out of the archive.
+# Two packages, each its own install component, so the install rules of
+# fetched libraries (libwebp's headers and .a files) stay out of both:
+#   game       megarace(.exe), scripts/, README.md, docs/, the icon
+#   converter  hd-conversion-utility(.exe) and docs/hd.md (its package adds Real-ESRGAN)
+# No game data, ever, and never HD packs (they are derived game content).
 install(TARGETS megarace RUNTIME DESTINATION . COMPONENT game)
-if(MEGARACE_HD)
-    install(TARGETS megarace-hd RUNTIME DESTINATION . COMPONENT game)
-endif()
 install(DIRECTORY scripts DESTINATION . COMPONENT game)
 install(FILES README.md DESTINATION . COMPONENT game)
 install(DIRECTORY docs DESTINATION . COMPONENT game)
-install(FILES res/meguarace.png res/meguarace.ico DESTINATION .)   # the icon, for shortcuts and launchers
-install(DIRECTORY docs DESTINATION .)
+install(FILES res/meguarace.png res/meguarace.ico DESTINATION . COMPONENT game)   # the icon, for shortcuts and launchers
+if(MEGARACE_HD_CONVERTER)
+    install(TARGETS hd-conversion-utility RUNTIME DESTINATION . COMPONENT converter)
+    install(FILES docs/hd.md DESTINATION docs COMPONENT converter)
+endif()

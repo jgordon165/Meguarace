@@ -13,8 +13,6 @@ jobs:
 
     - name: Configure
       uses: ./.github/actions/configure-linux
-      with:
-        configure_options: -DMEGARACE_HD=OFF   # HD builds: release-hd-linux
 
     - name: Build
       run: cmake --build build --parallel
