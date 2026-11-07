@@ -68,7 +68,14 @@ end
 
 local function apply_subtitles(st)
     local code = st.subtitles
-    require("scenes.player").language = (code and code ~= "OFF") and code or nil
+    local player = require("scenes.player")
+    player.language = (code and code ~= "OFF") and code or nil
+    -- The hiss filter on Lance's clips; V while one plays switches it, saved here.
+    player.voice_filter = st.voice_filter ~= false
+    player.on_voice_filter = function(on)
+        st.voice_filter = on
+        save.store(st)
+    end
 end
 
 function S:enter()

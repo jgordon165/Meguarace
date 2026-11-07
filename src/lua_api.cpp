@@ -484,6 +484,29 @@ static int audio_stream_push(lua_State* L) {
                           int(luaL_optinteger(L, 3, 8)), int(luaL_optinteger(L, 4, 1)));
     return 0;
 }
+// audio.stream_voice_filter(v): hiss reduction for the stream until the next
+// stream_reset, with the noise measured over video v's whole soundtrack
+// (the announcer's clips; see voice_filter.h). Returns false if v has no
+// usable sound. audio.stream_voice_bypass(b): the original sound instead
+// (same timing), e.g. to compare.
+static int audio_stream_voice_filter(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    int rate = 0;
+    auto pcm = h->video.soundTrack(&rate);
+    if (rate <= 0) rate = 11111;
+    auto noise = VoiceFilter::profile(pcm.data(), pcm.size(), rate);
+    bool ok = !noise.empty();
+    if (ok) E(L).audio.streamVoiceFilter(std::move(noise), rate);
+    lua_pushboolean(L, ok);
+    return 1;
+}
+// audio.stream_end(): no more pushes for this stream (the hiss filter lets
+// its last samples out, so the sound is as long as the video's).
+static int audio_stream_end(lua_State* L) { E(L).audio.streamEnd(); return 0; }
+static int audio_stream_voice_bypass(lua_State* L) {
+    E(L).audio.streamVoiceBypass(lua_toboolean(L, 1) != 0);
+    return 0;
+}
 static int audio_stream_queued(lua_State* L) { lua_pushnumber(L, E(L).audio.streamQueuedSeconds()); return 1; }
 static int audio_stream_played(lua_State* L) {
     auto& a = E(L).audio;
@@ -514,6 +537,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"pcm", audio_pcm}, {"stop", audio_stop}, {"stop_all", audio_stop_all},
         {"stream_reset", audio_stream_reset}, {"stream_push", audio_stream_push},
         {"stream_queued", audio_stream_queued}, {"stream_played", audio_stream_played},
+        {"stream_voice_filter", audio_stream_voice_filter}, {"stream_voice_bypass", audio_stream_voice_bypass},
+        {"stream_end", audio_stream_end},
         {"available", audio_available},
         {"song", audio_song}, {"stop_song", audio_stop_song}, {"fade_song", audio_fade_song},
         {"song_playing", audio_song_playing}, {"song_volume", audio_song_volume},

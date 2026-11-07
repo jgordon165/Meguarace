@@ -10,6 +10,11 @@
 -- credits roll over the music). opts.hold keeps the last frame up for that
 -- many seconds, or until a key, once the video has played to its end (the
 -- car showcases: 0x5687).
+--
+-- The announcer's clips (Lance, B*.HNM) play through the port's hiss filter
+-- (src/voice_filter.h) unless S.voice_filter is off. V switches it off and
+-- on while a clip plays, to compare; S.on_voice_filter(on) is told (the menu
+-- saves it).
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
@@ -20,6 +25,14 @@ local S = {}
 -- Subtitle language code (formats/subtitles.lua), or nil for none. Set by
 -- the menu from the saved settings.
 S.language = nil
+-- Hiss filter on the announcer's clips (set by the menu from the settings).
+S.voice_filter = true
+S.on_voice_filter = nil
+
+-- The announcer's clips: every B*.HNM (career.VIDEO 0x30..0x6F).
+function S.is_voice(name)
+    return name:upper():match("^B%w+%.HNM$") ~= nil
+end
 
 local SILENT_FPS = 12.5
 local PREBUFFER  = 0.25    -- seconds of audio queued ahead of the picture
@@ -42,6 +55,8 @@ function S:enter(name, opts)
     self.holding = nil
     gfx.clear(0)
     audio.stream_reset()
+    self.voice = S.is_voice(name) and audio.stream_voice_filter(self.v)
+    if self.voice then audio.stream_voice_bypass(not S.voice_filter) end
     self:decodeAhead()
 end
 
@@ -69,6 +84,7 @@ function S:decodeAhead()
             self.queuedBytes = self.queuedBytes + info.sound_bytes
         end
         self.decoded = i
+        if i == self.count - 1 and self.sound then audio.stream_end() end
         if info.video then info.pixels = self.v:pixels() end
         self.queue[i] = info
         if not self.sound then break end
@@ -120,6 +136,12 @@ function S:update(dt)
     if input.pressed("Escape") then return self:finish("all") end
     if input.pressed("Return") or input.pressed("Space") then return self:finish() end
     if input.pressed("P") then self.paused = not self.paused end
+    if input.pressed("V") and self.voice then
+        S.voice_filter = not S.voice_filter
+        audio.stream_voice_bypass(not S.voice_filter)
+        sys.log("voice filter " .. (S.voice_filter and "on" or "off"))
+        if S.on_voice_filter then S.on_voice_filter(S.voice_filter) end
+    end
     if self.paused then return end
 
     local target

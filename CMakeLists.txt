@@ -72,7 +72,8 @@ add_library(megarace_formats STATIC
     src/formats/binreader.cpp
     src/formats/cryo.cpp
     src/formats/herad.cpp
-    src/fm.cpp)
+    src/fm.cpp
+    src/voice_filter.cpp)
 target_include_directories(megarace_formats PUBLIC src)
 target_link_libraries(megarace_formats PUBLIC ymfm_opl)
 megarace_warnings(megarace_formats)
