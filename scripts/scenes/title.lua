@@ -6,13 +6,20 @@
 --
 --   scenes.push(require("scenes.title"), { on_done = function(skip_all) ... end })
 --
--- ENTER/SPACE go on to the boot videos (on_done(false)); ESC skips those
--- too (on_done(true)). Left alone it goes on by itself after a minute.
+-- Two choices under the title, UP/DOWN between them:
+--   LET'S RACE    the game with your settings
+--   CLASSIC RACE  as the original for this session, the same as --classic
+--                 (320x200, 4:3, FM music and sounds, no ADVANCED; nothing
+--                 saved is changed)
+-- ENTER/SPACE take the one picked and go on to the boot videos
+-- (on_done(false)); ESC skips those too (on_done(true)). Left alone it goes
+-- on by itself after a minute, with LET'S RACE.
 -- It fades in from black, and out to black (the music too) before what
 -- comes next.
 
 local scenes = require("core.scenes")
 local music  = require("game.music")
+local font   = require("ui.rawfont")
 
 local S = {}
 
@@ -206,6 +213,7 @@ function S:enter(opts)
     self.t = 0
     self.glitch = 0
     self.fade, self.done = nil, false
+    self.choice = 1                        -- 1 LET'S RACE, 2 CLASSIC RACE
     self.bright = 0
     make_palette(0)
     self.wing = gfx.wing()
@@ -228,11 +236,24 @@ function S:leave_by(skip_all)
     music.stop(true)                       -- the driver's fade, alongside
 end
 
+-- CLASSIC RACE: --classic for the rest of the session (game/display.lua's
+-- CLASSIC settings over the saved ones, which stay as they are).
+local function go_classic()
+    sys.classic = true
+    local display = require("game.display")
+    local st = require("game.save").load()
+    if sys.display_arg == "" then gfx.set_display("native") end
+    display.apply_saved(st)
+    local menu = require("scenes.menu")
+    if menu.apply_settings then menu:apply_settings() end
+end
+
 function S:finish(skip_all)
     if self.done then return end
     self.done = true
     music.stop()
     scenes.pop()
+    if self.choice == 2 then go_classic() end
     if self.opts.on_done then self.opts.on_done(skip_all) end
 end
 
@@ -248,8 +269,13 @@ function S:update(dt)
             make_palette(0)
             return self:finish(self.fade.skip)
         end
+    elseif input.pressed("Up") or input.pressed("Down") then
+        self.choice = 3 - self.choice
+        self.t = math.max(self.t, FADE_IN)   -- (the minute starts over)
+        self.idle_from = self.t
     elseif input.pressed("Escape") then self:leave_by(true)
-    elseif input.pressed("Return") or input.pressed("Space") or self.t > SECONDS then self:leave_by(false) end
+    elseif input.pressed("Return") or input.pressed("Space") then self:leave_by(false)
+    elseif self.t - (self.idle_from or 0) > SECONDS then self.choice = 1; self:leave_by(false) end
     -- Ease the fades (smoothstep), and set the palette when it changes.
     k = k * k * (3 - 2 * k)
     if k ~= self.bright then self.bright = k; make_palette(k) end
@@ -337,10 +363,31 @@ function S:draw()
         if self.glitch > 0 and (r + math.floor(self.t * 60)) % 7 < 2 then shift = math.random(-6, 6) end
         gfx.blit(tx + shift, ty + r - 1, T.w, 1, T.rows[r], 0)
     end
-    if math.floor(self.t * 2) % 2 == 0 then
-        local s = "PRESS ENTER"
-        gfx.fill(160 - #s * 2 - 4, 63, #s * 4 + 7, 9, ROAD)
-        gfx.text(160 - #s * 2, 65, s, WHITE)
+    -- The choices, in the race's 8x12 font: the picked one amber between
+    -- blinking neon markers, the other cyan.
+    local items = { "LET S RACE", "CLASSIC RACE" }
+    -- On a dark panel with a neon rim, so they read over the sun.
+    local pw, py, ph = 172, 56, 40
+    local px = 160 - pw // 2
+    gfx.fill(px, py, pw, ph, ROAD)
+    gfx.fill(px, py, pw, 1, NEON); gfx.fill(px, py + ph - 1, pw, 1, NEON)
+    gfx.fill(px, py, 1, ph, RIM_CYAN); gfx.fill(px + pw - 1, py, 1, ph, RIM_CYAN)
+    for i, s in ipairs(items) do
+        local y = py + 5 + (i - 1) * 17
+        local x = 160 - font.width(s) // 2
+        local ink = i == self.choice and AMBER or CYAN
+        font.draw_outlined(x, y, s, ink, NEAR)
+        if i == 1 then                     -- the apostrophe (not in the font)
+            gfx.fill(x + 30, y - 1, 3, 4, NEAR)
+            gfx.fill(x + 31, y, 1, 2, ink)
+        end
+        if i == self.choice and math.floor(self.t * 3) % 2 == 0 then
+            local w = font.width(s)
+            for k = 0, 3 do
+                gfx.line(x - 10 + k, y + 2 + k, x - 10 + k, y + 9 - k, NEON)          -- >
+                gfx.line(x + w + 9 - k, y + 2 + k, x + w + 9 - k, y + 9 - k, NEON)    -- <
+            end
+        end
     end
 end
 

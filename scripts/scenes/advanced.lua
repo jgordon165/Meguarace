@@ -141,8 +141,8 @@ end
 
 function S:change(what, dir)
     local st = self.state
-    if sys.classic then
-        self.note = "CLASSIC MODE (--CLASSIC): SETTINGS LOCKED"
+    if sys.classic then   -- (not reachable: no ADVANCED line in classic mode)
+        self.note = "CLASSIC MODE: SETTINGS LOCKED"
         return
     end
     if what == "resolution" then
