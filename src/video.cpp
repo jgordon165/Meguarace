@@ -266,9 +266,69 @@ std::string Video::bestMode() const {
 }
 
 void Video::destroyModeTextures() {
-    if (gameTexture_) SDL_DestroyTexture(gameTexture_);
-    if (sharpTexture_) SDL_DestroyTexture(sharpTexture_);
-    gameTexture_ = sharpTexture_ = nullptr;
+    for (SDL_Texture** t : {&gameTexture_, &sharpTexture_, &videoTexture_, &videoScaled_, &hdSmall_})
+        if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
+}
+
+void Video::blitVideo(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent) {
+    blit(x, y, w, h, src, len, transparent);
+    for (int yy = 0; yy < h; ++yy)
+        for (int xx = 0; xx < w; ++xx) {
+            size_t i = static_cast<size_t>(yy) * w + xx;
+            if (i >= len) return;
+            int X = x + xx, Y = y + yy;
+            if (src[i] != transparent && visible(X, Y)) src_[size_t(Y) * w_ + X] = 2;
+        }
+}
+
+void Video::setSmoothing(int level) {
+    level = std::clamp(level, 0, 2);
+    if (level == smoothing_) return;
+    smoothing_ = level;
+    if (mode().hd) createSmoothingTextures();
+}
+
+// The video layer's whole-number scale and the HD layer's smaller copy, for
+// the current mode and smoothing. Off: the same sharp scale as the game
+// layer. Subtle: about 3/5 of it (1080p: 3x4 instead of 5x6), more: one less.
+void Video::createSmoothingTextures() {
+    for (SDL_Texture** t : {&videoScaled_, &hdSmall_})
+        if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
+    if (!renderer_ || !SDL_RenderTargetSupported(renderer_)) return;
+    const Mode& m = mode();
+    auto factor = [&](int pic, int canvas) {
+        int sharp = (pic + canvas - 1) / canvas;
+        int subtle = std::max(1, (sharp * 3 + 2) / 5);
+        return smoothing_ == 0 ? sharp : smoothing_ == 1 ? subtle : std::max(1, subtle - 1);
+    };
+    videoScaled_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
+                                     w_ * factor(m.picW, w_), h_ * factor(m.picH, h_));
+    if (videoScaled_) {
+        SDL_SetTextureScaleMode(videoScaled_, SDL_ScaleModeLinear);
+        SDL_SetTextureBlendMode(videoScaled_, SDL_BLENDMODE_BLEND);
+    }
+    if (smoothing_ > 0 && picW_ > 0) {
+        float f = smoothing_ == 1 ? 0.75f : 0.55f;
+        hdSmall_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
+                                     std::max(1, int(float(m.picW) * f)), std::max(1, int(float(m.picH) * f)));
+        if (hdSmall_) SDL_SetTextureScaleMode(hdSmall_, SDL_ScaleModeLinear);
+    }
+}
+
+void Video::drawThrough(SDL_Texture* tex, SDL_Texture* target) {
+    if (target && SDL_SetRenderTarget(renderer_, target) == 0) {
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        SDL_BlendMode was;
+        SDL_GetTextureBlendMode(tex, &was);
+        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_NONE);   // copy alpha as it is
+        SDL_RenderCopy(renderer_, tex, nullptr, nullptr);
+        SDL_SetTextureBlendMode(tex, was);
+        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_RenderCopy(renderer_, target, nullptr, nullptr);
+    } else {
+        SDL_RenderCopy(renderer_, tex, nullptr, nullptr);
+    }
 }
 
 bool Video::setMode(const std::string& name) {
@@ -296,6 +356,12 @@ bool Video::setMode(const std::string& name) {
         }
     }
     mode_ = i;
+    if (m.hd) {
+        videoTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        if (videoTexture_) SDL_SetTextureBlendMode(videoTexture_, SDL_BLENDMODE_BLEND);
+        videoLayer_.assign(fb_.size(), 0);
+        createSmoothingTextures();
+    }
     // Window: the mode's size, or the whole screen when it doesn't fit in a
     // window (1080p on a 1080p monitor). Native keeps the --scale size.
     if (!hidden_) {
@@ -332,7 +398,7 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
             if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
             size_t p = size_t(Y) * w_ + X;
             fb_[p] = src[i];
-            src_[p] = changed[src[i]] ? 0 : 1;
+            src_[p] = changed[src[i]] ? 2 : 1;   // recoloured: its original pixel, in the video layer
             recoloured += changed[src[i]];
         }
     }
@@ -375,7 +441,7 @@ bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
     for (int Y = y0; Y < y1; ++Y)
         for (int X = x0; X < x1; ++X) {
             size_t p = size_t(Y) * w_ + X;
-            if (src_[p]) continue;
+            if (src_[p] == 1) continue;   // already in the HD layer (video pixels, 2, are not)
             uint32_t c = pal_[fb_[p]] | 0xFF000000u;
             for (int r = my(Y); r < my(Y + 1); ++r)
                 std::fill(&hd_[size_t(r) * PW + size_t(mx(X))], &hd_[size_t(r) * PW + size_t(mx(X + 1))], c);
@@ -456,28 +522,40 @@ void Video::render(bool showHd) {
         SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
         return;
     }
+    // Three layers, bottom up. All the scaling and smoothing is the GPU's.
+    // 1. HD layer: the packs' pictures (smoothed through a smaller copy).
     if (showHd) {
         if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), picW_ * 4);
         hdDirty_ = false;
-        SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
+        if (smoothing_ > 0 && hdSmall_ && SDL_SetRenderTarget(renderer_, hdSmall_) == 0) {
+            SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
+            SDL_SetRenderTarget(renderer_, nullptr);
+            SDL_RenderCopy(renderer_, hdSmall_, nullptr, nullptr);
+        } else {
+            SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
+        }
     }
-    // Game layer: palette colours, transparent where the HD layer shows.
-    // Transparent pixels keep the original colour (alpha 0): the linear
-    // filter then blends sprite edges toward the video, not toward black.
-    for (size_t i = 0; i < fb_.size(); ++i)
-        layer_[i] = (showHd && src_[i]) ? (pal_[fb_[i]] & 0x00FFFFFFu) : pal_[fb_[i]];
+    // Which layer shows each pixel: HD pixels show the video layer when the
+    // HD pictures are off (their original pixels are in fb_ all the same).
+    // Hidden pixels keep their colour with alpha 0, so the linear filter
+    // blends edges toward the neighbouring layer, not toward black.
+    bool anyVideo = false;
+    for (size_t i = 0; i < fb_.size(); ++i) {
+        uint8_t l = src_[i] == 1 && !showHd ? 2 : src_[i];
+        uint32_t c = pal_[fb_[i]];
+        layer_[i] = l == 0 ? c : (c & 0x00FFFFFFu);
+        videoLayer_[i] = l == 2 ? c : (c & 0x00FFFFFFu);
+        anyVideo |= l == 2;
+    }
+    // 2. Video layer: the original video pixels, line doubled (smoothing:
+    //    a smaller whole-number size first, so the seams blend wider).
+    if (anyVideo && videoTexture_) {
+        SDL_UpdateTexture(videoTexture_, nullptr, videoLayer_.data(), w_ * 4);
+        drawThrough(videoTexture_, videoScaled_);
+    }
+    // 3. Game layer: everything else the game draws, always sharp.
     SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), w_ * 4);
-    if (sharpTexture_ && SDL_SetRenderTarget(renderer_, sharpTexture_) == 0) {
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-        SDL_RenderClear(renderer_);
-        SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_NONE);   // copy alpha as it is
-        SDL_RenderCopy(renderer_, gameTexture_, nullptr, nullptr);
-        SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderTarget(renderer_, nullptr);
-        SDL_RenderCopy(renderer_, sharpTexture_, nullptr, nullptr);
-    } else {
-        SDL_RenderCopy(renderer_, gameTexture_, nullptr, nullptr);
-    }
+    drawThrough(gameTexture_, sharpTexture_);
 }
 
 void Video::present() {

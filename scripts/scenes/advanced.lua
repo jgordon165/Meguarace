@@ -10,6 +10,9 @@
 --                   LINE DOUBLED: the original videos and menus, each pixel
 --                   repeated and only the seams interpolated (no packs needed).
 --                 LEFT/RIGHT or ENTER. F10 switches it while playing.
+--   SMOOTHING     OFF, SUBTLE or MORE: softens every video a little in the HD
+--                 resolutions, on the GPU (no cost to the frame rate). The
+--                 cars, dashboard, text and menus stay sharp.
 --   HD FOLDER     where the packs are; ENTER edits it (type, or paste with
 --                 CTRL+V; ENTER keeps it, ESC leaves it as it was; empty = the
 --                 default, your Meguarace user folder).
@@ -24,10 +27,12 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "style", "folder", "voice" }
-local LABELS = { resolution = "RESOLUTION", style = "HD STYLE", folder = "HD FOLDER", voice = "VOICE FILTER" }
-local BOX = { x = 20, y = 48, w = 280, h = 108 }
-local TITLE_Y, FIRST_Y, STEP = 54, 74, 15
+local ITEMS = { "resolution", "style", "smoothing", "folder", "voice" }
+local LABELS = { resolution = "RESOLUTION", style = "HD STYLE", smoothing = "SMOOTHING", folder = "HD FOLDER",
+                 voice = "VOICE FILTER" }
+local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE" }
+local BOX = { x = 20, y = 44, w = 280, h = 120 }
+local TITLE_Y, FIRST_Y, STEP = 50, 68, 14
 local VALUE_X = BOX.x + 14 + 13 * 8         -- after the longest label
 local VALUE_CHARS = (BOX.x + BOX.w - 8 - VALUE_X) // 8
 local NOTE_Y = 191
@@ -58,6 +63,7 @@ end
 function S:value(what)
     if what == "resolution" then return display.label(gfx.display())
     elseif what == "style" then return style_label()
+    elseif what == "smoothing" then return SMOOTHING[gfx.smoothing()]
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -76,6 +82,9 @@ function S:change(what, dir)
         local packs = not gfx.hd_pictures()
         gfx.hd_pictures(packs)
         st.hd_style = packs and "upscaled" or "line_doubled"
+    elseif what == "smoothing" then
+        st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 3)
+        if (gfx.display()) == "native" then self.note = "SMOOTHING SHOWS IN THE HD RESOLUTIONS" end
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter

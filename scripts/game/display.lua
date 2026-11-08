@@ -18,6 +18,7 @@ end
 -- videos and menus line doubled and interpolated instead of the packs.
 function M.apply_saved(state)
     gfx.hd_pictures(state.hd_style ~= "line_doubled")
+    gfx.smoothing(tonumber(state.smoothing) or 0)
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))

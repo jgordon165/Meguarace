@@ -15,6 +15,7 @@ press Enter. Everything there is saved as it changes, and Esc goes back.
 |---|---|
 | RESOLUTION | 320×200 (the original), 800×600, 1024×768 or 1920×1080; see below |
 | HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. LINE DOUBLED needs no packs. F10 switches between them while playing. |
+| SMOOTHING | OFF, SUBTLE or MORE: softens every video a little in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
@@ -159,8 +160,11 @@ game means them. The same check applies to the videos.
   draws two layers:
   - the **HD layer**: the video pictures at 1440×1080, scaled linearly to
     the mode's picture;
+  - the **video layer**: videos shown from their original pixels (no pack,
+    or LINE DOUBLED), scaled the same way as the game layer, or softer with
+    SMOOTHING;
   - the **game layer**: the 320×200 framebuffer, transparent where a pixel
-    shows the HD layer. It is scaled sharp: nearest to a whole multiple of
+    shows the HD or video layer. It is scaled sharp: nearest to a whole multiple of
     320×200 (1600×1200 for 1080p), then linearly to the picture, so every
     original pixel comes out the same size.
 - **Palette guard**: an HD picture has the video's own colours baked in. If

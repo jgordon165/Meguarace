@@ -74,6 +74,17 @@ public:
     // HD pictures are shown: an HD mode, packs found, and not switched off (F10).
     bool hdOn() const { return hdAvailable() && hdOn_ && mode().hd; }
     void setHdOn(bool on) { hdOn_ = on; }
+    // blit() of a video frame shown from its original pixels (no HD picture,
+    // or the LINE DOUBLED style): the same, but those pixels go to the video
+    // layer, which smoothing() applies to.
+    void blitVideo(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent);
+    // Video smoothing in the HD resolutions: 0 off, 1 subtle, 2 more. All on
+    // the GPU (render-target passes), so it costs no frame time. The original
+    // video pixels are repeated to a smaller whole-number size before the
+    // linear step, so the seams blend wider; the HD pictures pass through a
+    // smaller copy. Everything else the game draws stays sharp.
+    void setSmoothing(int level);
+    int smoothing() const { return smoothing_; }
     bool hdPicturesOn() const { return hdOn_; }   // the setting, whatever the mode
     // blit() of a video frame drawn with its top-left at (ox, oy) on screen,
     // its pixels at (fx, fy) in the video, also taking that part of `pic`, the
@@ -123,12 +134,24 @@ private:
     int picW_ = 0, picH_ = 0;        // HD picture size, 0 = no packs
     bool hdOn_ = true;
     bool hdDirty_ = false;
-    std::vector<uint8_t>  src_;      // per original pixel: 1 = shows the HD layer
+    // Per original pixel, which layer shows it: 0 the game layer (sprites,
+    // text, everything drawn sharp), 1 the HD layer, 2 the video layer (a
+    // video's original pixels).
+    std::vector<uint8_t>  src_;
     std::vector<uint32_t> hd_;       // HD layer, picW_ x picH_ (the whole screen)
     std::vector<uint32_t> layer_;    // game layer, 320x200, transparent over HD
     SDL_Texture* hdTexture_ = nullptr;      // HD layer
     SDL_Texture* gameTexture_ = nullptr;    // game layer, 320x200
     SDL_Texture* sharpTexture_ = nullptr;   // game layer at a whole-number scale (render target)
+    int smoothing_ = 0;
+    std::vector<uint32_t> videoLayer_;        // video layer, 320x200, transparent elsewhere
+    SDL_Texture* videoTexture_ = nullptr;     // video layer, 320x200
+    SDL_Texture* videoScaled_ = nullptr;      // video layer at a whole-number scale (render target)
+    SDL_Texture* hdSmall_ = nullptr;          // smaller copy of the HD layer (smoothing)
+    void createSmoothingTextures();
+    // Copies `tex` through `target` (nearest into it, alpha as it is), then
+    // the target onto the screen, linear; straight onto the screen without one.
+    void drawThrough(SDL_Texture* tex, SDL_Texture* target);
     void render(bool hdShown);
     bool hdShown() const;
     void destroyModeTextures();
