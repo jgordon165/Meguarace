@@ -28,4 +28,5 @@ struct Engine {
     bool hdOff = false;       // --no-hd
     std::string hdUpscaler;   // what made the packs: "REAL-ESRGAN", "SHARP", "SMOOTH" or ""
     std::string displayArg;   // --display: overrides the saved display mode
+    bool classic = false;     // --classic: play as the original this session (nothing saved)
 };

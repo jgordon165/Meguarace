@@ -29,6 +29,9 @@ local S = {}
 -- track video scrolls (1.0; FAST 1.25, FASTER 1.33, FASTEST 1.5). Set from
 -- the settings (game/display.lua).
 S.track_speed = 1.0
+-- Options > ADVANCED > TRACK COLOR: the grade on the track video (0 off,
+-- 1 VIVID, 2 INTENSE), on while the race is up.
+S.track_color = 1
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
@@ -44,6 +47,7 @@ local C_TEXT, C_WARN, C_GOOD = 126, 118, 127
 
 function S:enter(name, opts)
     opts = opts or {}
+    gfx.video_grade(S.track_color)
     ui.install()
     self.T = track.open(name)
     self.rules = rules.new(opts.car or "JO")
@@ -91,7 +95,9 @@ function S:enter(name, opts)
     music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
-function S:leave() ui.install(); audio.stop_all(); music.stop(true) end
+function S:leave() gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
+function S:pause() gfx.video_grade(0) end
+function S:resume() gfx.video_grade(S.track_color) end
 
 -- Puts rival r on the road (the only one: they come one at a time).
 function S:spawn(r)

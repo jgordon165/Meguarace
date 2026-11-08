@@ -610,8 +610,10 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
         if (d < 0) { a -= d; d = 0; }
         if (d + (b - a) > hdCW_) b = a + (hdCW_ - d);
         if (a >= b) continue;
-        std::memcpy(&hd_[size_t(dy) * size_t(hdCW_) + size_t(d)], &pic[size_t(r) * size_t(picW) + size_t(a)],
-                    size_t(b - a) * 4);
+        uint32_t* to = &hd_[size_t(dy) * size_t(hdCW_) + size_t(d)];
+        const uint32_t* from = &pic[size_t(r) * size_t(picW) + size_t(a)];
+        if (grade_) for (int k = 0; k < b - a; ++k) to[k] = grade(from[k]);
+        else std::memcpy(to, from, size_t(b - a) * 4);
     }
     hdDirty_ = true;
     return recoloured;
@@ -699,8 +701,37 @@ void Video::changedColours(const uint8_t* baked, bool changed[256]) const {
     }
 }
 
+void Video::setVideoGrade(int level) {
+    grade_ = std::clamp(level, 0, 2);
+    // VIVID / INTENSE: saturation, contrast about a low pivot (the tracks are
+    // dark), and a gamma that lifts the darks so the contrast doesn't crush them.
+    const double sat = grade_ == 2 ? 1.7 : 1.35, con = grade_ == 2 ? 1.25 : 1.12, gamma = grade_ == 2 ? 0.86 : 0.92;
+    gradeSat_ = int(sat * 256);
+    for (int v = 0; v < 256; ++v) {
+        double x = std::pow(v / 255.0, gamma);
+        x = 0.4 + (x - 0.4) * con;
+        gradeLut_[v] = uint8_t(std::clamp(x, 0.0, 1.0) * 255.0 + 0.5);
+    }
+}
+
+uint32_t Video::grade(uint32_t c) const {
+    const int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+    const int l = (77 * r + 150 * g + 29 * b) >> 8;
+    auto ch = [&](int v) { return int(gradeLut_[std::clamp(l + (((v - l) * gradeSat_) >> 8), 0, 255)]); };
+    return (c & 0xFF000000u) | uint32_t(ch(r)) << 16 | uint32_t(ch(g)) << 8 | uint32_t(ch(b));
+}
+
+void Video::gradePalette() {
+    for (int i = 0; i < 256; ++i) palGraded_[size_t(i)] = grade_ ? grade(pal_[size_t(i)]) : pal_[size_t(i)];
+}
+
 void Video::convert() {
-    for (size_t i = 0; i < fb_.size(); ++i) rgba_[i] = pal_[fb_[i]];
+    if (!grade_) {
+        for (size_t i = 0; i < fb_.size(); ++i) rgba_[i] = pal_[fb_[i]];
+        return;
+    }
+    gradePalette();
+    for (size_t i = 0; i < fb_.size(); ++i) rgba_[i] = src_[i] == 2 ? palGraded_[fb_[i]] : pal_[fb_[i]];
 }
 
 bool Video::hdShown() const {
@@ -732,6 +763,7 @@ void Video::render(bool showHd) {
     // HD pictures are off (their original pixels are in fb_ all the same).
     // Hidden pixels keep their colour with alpha 0, so the linear filter
     // blends edges toward the neighbouring layer, not toward black.
+    if (grade_) gradePalette();
     bool anyVideo = false, anyPost = false;
     const bool hud = hudPhase_ != 0 && hudTexture_;
     for (size_t i = 0; i < fb_.size(); ++i) {
@@ -739,7 +771,7 @@ void Video::render(bool showHd) {
         uint32_t c = pal_[fb_[i]];
         if (l == 4 && !hud) l = 0;                           // nothing to be over
         layer_[i] = l == 0 ? c : (c & 0x00FFFFFFu);
-        videoLayer_[i] = l == 2 ? c : (c & 0x00FFFFFFu);
+        videoLayer_[i] = l == 2 ? (grade_ ? palGraded_[fb_[i]] : c) : (c & 0x00FFFFFFu);
         if (hud) postLayer_[i] = l == 4 ? c : (c & 0x00FFFFFFu);
         anyVideo |= l == 2;
         anyPost |= l == 4;

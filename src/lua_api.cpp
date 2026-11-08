@@ -213,6 +213,15 @@ static int gfx_video_repeat(lua_State* L) {
     return 1;
 }
 
+// gfx.video_grade([level]) -> the colour grade on video pixels (0 off,
+// 1 vivid, 2 intense), after setting it if given. The race sets it.
+static int gfx_video_grade(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setVideoGrade(int(luaL_checkinteger(L, 1)));
+    lua_pushinteger(L, v.videoGrade());
+    return 1;
+}
+
 // gfx.hud_begin() / gfx.hud_end(): what's drawn between goes to the HUD
 // layer, stretched across the whole screen in 16:9 (nothing changes in
 // 4:3); what's drawn after it stays on top. gfx.clear() ends it.
@@ -893,7 +902,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
         {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
-        {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end},
+        {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end}, {"video_grade", gfx_video_grade},
         {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient}, {"sides", gfx_sides},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
@@ -967,5 +976,6 @@ void registerLuaApi(lua_State* L, Engine& e) {
     // and the --display given on the command line ("" if none).
     setHdFields(L, e);
     lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
+    lua_pushboolean(L, e.classic);             lua_setfield(L, -2, "classic");
     lua_pop(L, 1);
 }

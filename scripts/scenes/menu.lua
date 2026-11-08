@@ -70,13 +70,15 @@ local function apply_subtitles(st)
     local code = st.subtitles
     local player = require("scenes.player")
     player.language = (code and code ~= "OFF") and code or nil
-    -- The hiss filter on Lance's clips; V while one plays switches it, saved here.
-    player.voice_filter = st.voice_filter ~= false
-    player.lance_smoother = st.lance_smoother ~= false
-    player.on_voice_filter = function(on)
+    -- The hiss filter on Lance's clips; V while one plays switches it, saved
+    -- here (not with --classic: the original's hiss, and nothing saved).
+    local eff = require("game.display").effective(st)
+    player.voice_filter = eff.voice_filter ~= false
+    player.lance_smoother = eff.lance_smoother ~= false
+    player.on_voice_filter = not sys.classic and function(on)
         st.voice_filter = on
         save.store(st)
-    end
+    end or nil
 end
 
 function S:enter()

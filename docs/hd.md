@@ -27,6 +27,7 @@ level more, MAX, on Lance's clips), the default HD folder and the voice filter o
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%) or **FASTEST** (+50%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 18.75), so the race goes by quicker. Menus, videos and effects are unchanged. |
+| TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes
