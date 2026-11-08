@@ -366,14 +366,9 @@ function S:draw()
     -- The choices, in the race's 8x12 font: the picked one amber between
     -- blinking neon markers, the other cyan.
     local items = { "LET S RACE", "CLASSIC RACE" }
-    -- On a dark panel with a neon rim, so they read over the sun.
-    local pw, py, ph = 172, 56, 40
-    local px = 160 - pw // 2
-    gfx.fill(px, py, pw, ph, ROAD)
-    gfx.fill(px, py, pw, 1, NEON); gfx.fill(px, py + ph - 1, pw, 1, NEON)
-    gfx.fill(px, py, 1, ph, RIM_CYAN); gfx.fill(px + pw - 1, py, 1, ph, RIM_CYAN)
+    -- No panel: the sunset shows through; the dark outline keeps them readable.
     for i, s in ipairs(items) do
-        local y = py + 5 + (i - 1) * 17
+        local y = 60 + (i - 1) * 17
         local x = 160 - font.width(s) // 2
         local ink = i == self.choice and AMBER or CYAN
         font.draw_outlined(x, y, s, ink, NEAR)
