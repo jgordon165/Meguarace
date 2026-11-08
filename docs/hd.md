@@ -12,8 +12,8 @@ In the main menu's OPTIONS panel, press Down past QUIT to reach ADVANCED and
 press Enter. Everything there is saved as it changes, and Esc goes back.
 
 The defaults: the largest resolution that fits the desktop (1920×1080 on a
-1080p screen), 16:9 with AMBIENT sides, LINE TRIPLED, SMOOTHING MORE, the
-default HD folder and the voice filter on. Without packs the game starts in
+1080p screen), 16:9 with AMBIENT sides, LINE TRIPLED, SMOOTHING MORE (and one
+level more, MAX, on Lance's clips), the default HD folder and the voice filter on. Without packs the game starts in
 320×200, where only the voice filter applies.
 
 | Setting | |
@@ -23,6 +23,7 @@ default HD folder and the voice filter on. Without packs the game starts in
 | SIDES | 16:9's wings where nothing is drawn: AMBIENT, a blurred and darkened stretch of the picture (its 32×20 average, stretched by the GPU), or BLACK. |
 | HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. **LINE TRIPLED** is the same with each pixel repeated 3×3 at most before the interpolation, so the seams blend wider: softer than LINE DOUBLED, sharper than the smoothing. Neither needs packs. F10 switches between them while playing. |
 | SMOOTHING | OFF, SUBTLE, MORE or MAX: softens every video in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; MAX interpolates the original pixels straight to the screen, the softest. HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
+| LANCE VIDEOS | **1 SMOOTHER** (the default): Lance's clips play one SMOOTHING level softer than the other videos (SUBTLE when SMOOTHING is OFF, MAX at most), or **SAME**. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 

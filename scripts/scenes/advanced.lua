@@ -16,12 +16,14 @@
 --                   LINE DOUBLED: the original videos and menus, each pixel
 --                   repeated and only the seams interpolated (no packs needed).
 --                 LEFT/RIGHT or ENTER. F10 switches it while playing.
---   SMOOTHING     OFF, SUBTLE or MORE: softens every video a little in the HD
+--   SMOOTHING     OFF, SUBTLE, MORE or MAX: softens every video in the HD
 --                 resolutions, on the GPU (no cost to the frame rate). The
 --                 cars, dashboard, text and menus stay sharp.
 --   HD FOLDER     where the packs are; ENTER edits it (type, or paste with
 --                 CTRL+V; ENTER keeps it, ESC leaves it as it was; empty = the
 --                 default, your Meguarace user folder).
+--   LANCE VIDEOS  1 SMOOTHER: Lance's clips one SMOOTHING level softer than
+--                 the other videos (MAX at most); or SAME.
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -33,12 +35,12 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "folder", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
-local TOP, H = 30, 126
+local TOP, H = 30, 139
 local TITLE_Y, FIRST_Y, STEP = 36, 52, 13
 
 -- The box: as wide as the screen allows (16:9 adds the wings).
@@ -80,6 +82,7 @@ function S:value(what)
     elseif what == "smoothing" then return SMOOTHING[gfx.smoothing()]
     elseif what == "aspect" then return gfx.aspect()
     elseif what == "sides" then return gfx.ambient() and "AMBIENT" or "BLACK"
+    elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -110,6 +113,9 @@ function S:change(what, dir)
     elseif what == "smoothing" then
         st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 4)
         if (gfx.display()) == "native" then self.note = "SMOOTHING SHOWS IN THE HD RESOLUTIONS" end
+    elseif what == "lance" then
+        st.lance_smoother = st.lance_smoother == false
+        require("scenes.player").lance_smoother = st.lance_smoother
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter

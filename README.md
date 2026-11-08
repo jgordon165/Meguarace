@@ -131,6 +131,8 @@ TRIPLED and SMOOTHING MORE:
   softer (F10 switches while playing)
 - SMOOTHING: OFF, SUBTLE, MORE or MAX, a soft touch on every video, done on the
   GPU (no cost to the frame rate); everything else stays sharp
+- LANCE VIDEOS: Lance's clips one SMOOTHING level softer than the rest
+  (the default), or SAME
 - HD FOLDER: where the packs go (the default is your user folder)
 - VOICE FILTER: the hiss filter on Lance's clips The game always works in 320×200 coordinates, so gameplay is the
 same in every mode. Details: [docs/hd.md](docs/hd.md).

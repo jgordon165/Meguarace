@@ -14,7 +14,8 @@
 -- The announcer's clips (Lance, B*.HNM) play through the port's hiss filter
 -- (src/voice_filter.h) unless S.voice_filter is off. V switches it off and
 -- on while a clip plays, to compare; S.on_voice_filter(on) is told (the menu
--- saves it).
+-- saves it). With S.lance_smoother on, they also play one SMOOTHING level
+-- softer than the other videos (MAX at most), put back when the clip ends.
 
 local scenes = require("core.scenes")
 local ui     = require("core.ui")
@@ -28,6 +29,8 @@ S.language = nil
 -- Hiss filter on the announcer's clips (set by the menu from the settings).
 S.voice_filter = true
 S.on_voice_filter = nil
+-- Lance's clips one smoothing level softer (set by the menu from the settings).
+S.lance_smoother = true
 
 -- The announcer's clips: every B*.HNM (career.VIDEO 0x30..0x6F).
 function S.is_voice(name)
@@ -57,10 +60,16 @@ function S:enter(name, opts)
     audio.stream_reset()
     self.voice = S.is_voice(name) and audio.stream_voice_filter(self.v)
     if self.voice then audio.stream_voice_bypass(not S.voice_filter) end
+    self.smoothing = nil
+    if S.is_voice(name) and S.lance_smoother then
+        self.smoothing = gfx.smoothing()
+        gfx.smoothing(math.min(self.smoothing + 1, 3))
+    end
     self:decodeAhead()
 end
 
 function S:leave()
+    if self.smoothing then gfx.smoothing(self.smoothing); self.smoothing = nil end
     audio.stream_reset()
     ui.install()
 end

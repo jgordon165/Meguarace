@@ -738,6 +738,7 @@ test("voice filter: which clips, and the setting", function()
           "other videos are not filtered")
     check(type(audio.stream_voice_filter) == "function" and type(audio.stream_end) == "function", "audio API")
     check(require("game.save").defaults().voice_filter == true, "on by default")
+    check(require("game.save").defaults().lance_smoother == true, "Lance one level smoother by default")
 end)
 
 test("[data] voice filter measures a clip's hiss", function()
