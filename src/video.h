@@ -101,6 +101,13 @@ public:
     // linear step, so the seams blend wider; the HD pictures pass through a
     // smaller copy. Everything else the game draws stays sharp.
     void setSmoothing(int level);
+    // The HUD (the race's cockpit, gauges and scanner): what's drawn between
+    // hudBegin() and hudEnd() goes to its own layer, which in 16:9 is
+    // stretched across the whole width (the game's 320 columns over the
+    // canvas's 426). What's drawn after it in the frame stays on top. In 4:3
+    // these do nothing. clear() ends the HUD for the next frame.
+    void hudBegin();
+    void hudEnd();
     int smoothing() const { return smoothing_; }
     // How many times the video layer repeats each original pixel before the
     // interpolation to the screen: 0 as many as fit (LINE DOUBLED), or 3
@@ -175,6 +182,13 @@ private:
     std::vector<uint32_t> ambientPx_;
     void resizeCanvas();                      // after cw_ changed
     void drawAmbient();
+    int hudPhase_ = 0;                        // 0 no HUD this frame, 1 drawing it, 2 drawn
+    std::vector<uint8_t> hudFb_, hudMask_;    // the HUD, w_ x h_ (game columns)
+    std::vector<uint32_t> hudLayer_, postLayer_;   // HUD layer; game pixels drawn after it
+    SDL_Texture* hudTexture_ = nullptr;       // w_ x h_
+    SDL_Texture* hudSharp_ = nullptr;         // at a whole-number scale (render target)
+    SDL_Texture* postTexture_ = nullptr;      // canvas size, over the HUD
+    bool hudActive() const { return ox_ > 0 && mode().hd; }
     std::vector<uint32_t> videoLayer_;        // video layer, 320x200, transparent elsewhere
     SDL_Texture* videoTexture_ = nullptr;     // video layer, 320x200
     SDL_Texture* videoScaled_ = nullptr;      // video layer at a whole-number scale (render target)

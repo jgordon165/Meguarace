@@ -662,9 +662,13 @@ function S:draw()
         end
     end
 
+    -- The cockpit, scanner and gauges: in 16:9 stretched across the whole
+    -- screen (the engine's HUD layer); what's drawn after stays on top.
+    gfx.hud_begin()
     self.car:draw_dashboard()
     self:draw_scanner(base)
     self:draw_gauges()
+    gfx.hud_end()
 
     local lap = T.lap > 0 and math.min(self.laps, f // T.lap + 1) or 1
     self:draw_status(lap)

@@ -5,9 +5,9 @@
 --   RESOLUTION    the display mode: 320x200, or 800x600 / 1024x768 / 1920x1080
 --                 with the HD videos (game/display.lua). LEFT/RIGHT or ENTER.
 --   ASPECT        4:3, or 16:9: the screen gets a wing either side of the
---                 game's 320x200 (the videos and the dashboard stay 4:3 in
---                 the middle; the race's LAPS and score move out to the
---                 edges). HD resolutions only.
+--                 game's 320x200 (the videos stay 4:3 in the middle; the
+--                 race dashboard stretches across the whole width, and LAPS
+--                 and score move out to the edges). HD resolutions only.
 --   SIDES         16:9's wings where nothing is drawn: AMBIENT (a blurred,
 --                 darkened stretch of the picture) or BLACK.
 --   HD STYLE      what the HD modes show:
