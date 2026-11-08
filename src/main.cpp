@@ -61,12 +61,16 @@ int main(int argc, char** argv) {
         else if (a == "--screenshot") shot = next();
         else if (a == "--no-hd")      noHd = true;
         else if (a == "--display")    eng.displayArg = next();
+        else if (a == "--classic")    eng.classic = true;
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
                         "[--music <folder with track02.wav...>] [--scale N]"
                         " [--no-hd]"
                         " [--display native|800x600|1024x768|1920x1080]"
-                        "\n");
+                        " [--classic]"
+                        "\n"
+                        "  --classic  play as the original for this session: 320x200, 4:3,\n"
+                        "             the FM music and sounds, no smoothing (settings untouched)\n");
             return 0;
         }
     }
@@ -77,6 +81,8 @@ int main(int argc, char** argv) {
         SDL_free(base);
     }
     if (eng.dataArg.empty()) eng.dataArg = "data";
+    // --classic: the original's 320x200 (unless --display says otherwise).
+    if (eng.classic && eng.displayArg.empty()) eng.displayArg = "native";
     if (eng.musicArg.empty()) eng.musicArg = (fs::path(eng.dataArg) / "music").string();
     eng.data.mount(eng.dataArg);
     eng.music.mount(eng.musicArg);

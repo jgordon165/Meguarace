@@ -876,6 +876,21 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("classic mode and track color", function()
+    local display, save = require("game.display"), require("game.save")
+    check(save.defaults().track_color == "vivid", "vivid by default")
+    check(gfx.video_grade(2) == 2 and gfx.video_grade(5) == 2 and gfx.video_grade(0) == 0, "grade levels")
+    local st = save.defaults()
+    st.music_style, st.aspect, st.smoothing = "enhanced", "16:9", 2
+    check(display.effective(st) == st, "without --classic: the saved settings")
+    sys.classic = true
+    local eff = display.effective(st)
+    check(eff ~= st and eff.music_style == "original" and eff.aspect == "4:3" and eff.smoothing == 0
+          and eff.track_color == "off" and eff.voice_filter == false and eff.display == "native", "--classic overrides")
+    check(st.music_style == "enhanced" and st.aspect == "16:9" and st.smoothing == 2, "the saved settings untouched")
+    sys.classic = false
+end)
+
 test("track speed", function()
     local save, race = require("game.save"), require("scenes.race")
     check(save.defaults().track_speed == "normal", "normal by default")

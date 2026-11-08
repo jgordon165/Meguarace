@@ -32,6 +32,13 @@ folder holding a copy of it. Only `MEGARACE.DAT` is required:
 build\Release\megarace.exe --data V:\
 ```
 
+**Classic mode.** `--classic` plays this session as the original: 320×200 at
+4:3, the FM music and the game's own sound effects, Lance's clips with
+their hiss, no smoothing or colour grade, the normal track speed, and
+straight into the original boot videos (no title screen). Your settings
+are left exactly as they were: nothing classic is saved, and Options >
+ADVANCED is locked for the session. Run without it and everything is back.
+
 It opens on the port's own title screen: MEGARACE in chrome over a synthwave
 night, all drawn by code, with the music playing. It stays for a minute
 and fades out to what comes next; ENTER goes on sooner, and ESC skips the
@@ -150,6 +157,8 @@ TRIPLED and SMOOTHING MORE:
 - MUSIC: ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default, a dance remix) ([docs/music.md](docs/music.md))
 - TRACK SPEED: NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how much
   faster the track video scrolls in races
+- TRACK COLOR: OFF, VIVID (the default) or INTENSE: more colour and contrast
+  on the track video in races (the cars, HUD and text untouched)
 - VOICE FILTER: the hiss filter on Lance's clips
 
 The game always works in 320×200 coordinates, so gameplay is the
@@ -233,7 +242,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | Table | Functions |
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
-| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on]) smoothing([level]) video_repeat([n])`, 16:9 `aspect([a]) wing() sides([style]) ambient([on]) hud_begin() hud_end()` (drawing stays 320×200 in every mode) |
+| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on]) smoothing([level]) video_repeat([n])`, 16:9 `aspect([a]) wing() sides([style]) ambient([on]) hud_begin() hud_end()`, `video_grade([level])` (drawing stays 320×200 in every mode) |
 | `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop[,gm]]) stop_song() fade_song([s]) song_playing() song_volume(v)`, styles `music_style([s]) soundfont()` (original, stereo, soundfont, enhanced), optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |

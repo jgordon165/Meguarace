@@ -109,6 +109,13 @@ public:
     // stretched across the whole width (the game's 320 columns over the
     // canvas's 426). What's drawn after it in the frame stays on top. In 4:3
     // these do nothing. clear() ends the HUD for the next frame.
+    // TRACK COLOR: a grade on the video pixels only (the track video in a
+    // race; the race sets it and clears it): 0 off, 1 VIVID, 2 INTENSE. More
+    // saturation, more contrast, darks lifted a little. The palette itself
+    // isn't changed (HD packs still compare against it), so cars, the HUD
+    // and text are untouched. HD pictures get the same grade.
+    void setVideoGrade(int level);
+    int videoGrade() const { return grade_; }
     void hudBegin();
     void hudEnd();
     int smoothing() const { return smoothing_; }
@@ -193,6 +200,12 @@ private:
     std::vector<uint32_t> ambientPx_;
     void resizeCanvas();                      // after cw_ changed
     void drawAmbient();
+    int grade_ = 0;
+    int gradeSat_ = 256;                      // saturation, 8.8 fixed point
+    uint8_t gradeLut_[256] = {};              // contrast and lift, per channel
+    std::array<uint32_t, 256> palGraded_{};   // pal_ graded (rebuilt each frame it's used)
+    uint32_t grade(uint32_t c) const;
+    void gradePalette();
     int hudPhase_ = 0;                        // 0 no HUD this frame, 1 drawing it, 2 drawn
     std::vector<uint8_t> hudFb_, hudMask_;    // the HUD, w_ x h_ (game columns)
     std::vector<uint32_t> hudLayer_, postLayer_;   // HUD layer; game pixels drawn after it

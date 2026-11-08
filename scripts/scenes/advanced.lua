@@ -36,6 +36,8 @@
 --   TRACK SPEED   NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how
 --                 much faster the track video scrolls in races (the race goes
 --                 by quicker; the rest is unchanged).
+--   TRACK COLOR   OFF, VIVID or INTENSE: more colour and contrast on the
+--                 track video in races (the cars, HUD and text untouched).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -47,14 +49,14 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "track", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "track", "color", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
 local TOP, H = 30, 152
-local TITLE_Y, FIRST_Y, STEP = 36, 50, 12
+local TITLE_Y, FIRST_Y, STEP = 36, 49, 11
 
 -- The box: as wide as the screen allows (16:9 adds the wings).
 local function box()
@@ -95,10 +97,11 @@ function S:value(what)
     elseif what == "smoothing" then return SMOOTHING[gfx.smoothing()]
     elseif what == "aspect" then return gfx.aspect()
     elseif what == "sides" then return gfx.sides():upper()
-    elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
+    elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
-    elseif what == "track" then return display.TRACK_SPEED_LABELS[self.state.track_speed] or "NORMAL"
-    elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
+    elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
+    elseif what == "color" then return (display.effective(self.state).track_color or "vivid"):upper()
+    elseif what == "voice" then return display.effective(self.state).voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
     if v == "" then v = "DEFAULT" end
@@ -109,6 +112,10 @@ end
 
 function S:change(what, dir)
     local st = self.state
+    if sys.classic then
+        self.note = "CLASSIC MODE (--CLASSIC): SETTINGS LOCKED"
+        return
+    end
     if what == "resolution" then
         if not sys.hd then self.note = "HD MODES NEED HD VIDEOS: RUN HD-CONVERSION-UTILITY"; return end
         st.display = display.cycle(dir)
@@ -147,6 +154,11 @@ function S:change(what, dir)
         for k, v in ipairs(order) do if v == st.track_speed then i = k end end
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
+    elseif what == "color" then
+        local order, i = display.TRACK_COLOR_ORDER, 2
+        for k, v in ipairs(order) do if v == st.track_color then i = k end end
+        st.track_color = order[(i - 1 + dir) % #order + 1]
+        require("scenes.race").track_color = display.TRACK_COLORS[st.track_color]
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter
