@@ -39,7 +39,7 @@ function M.defaults()
         total = 0,                 -- championship score so far
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
-        display = nil,             -- display mode (options); nil: the largest that fits
+        display = "1920x1080",     -- display mode (options; 1080p HD by default, with the HD packs)
         hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
         smoothing = 1,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
         sharpen = "light",         -- after the smoothing: "off", "light" or "strong" (an unsharp mask, GPU)

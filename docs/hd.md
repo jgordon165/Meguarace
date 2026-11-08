@@ -47,8 +47,8 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 
 Pick one in **Options > ADVANCED > RESOLUTION** (Left/Right or Enter). It's saved in
 `meguarace.sav`, or you can give it with `--display <mode>`, which takes
-precedence over the saved one. Without a setting the game picks the largest
-mode that fits your desktop. When there are no HD packs, only `native` is
+precedence over the saved one. The default is `1920x1080` (`native` with
+`--classic` or CLASSIC RACE). When there are no HD packs, only `native` is
 offered and a saved HD mode is ignored.
 
 **The game always works in the original 320×200 pixels.** Every position,
