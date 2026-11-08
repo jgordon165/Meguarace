@@ -72,6 +72,8 @@ bool Video::init(int width, int height, int scale, bool hidden) {
     if (!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_PRESENTVSYNC);
   
     if (!renderer_) { std::fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError()); return false; }
+    if (SDL_RendererInfo ri{}; SDL_GetRendererInfo(renderer_, &ri) == 0 && std::getenv("MEGARACE_LOG_RENDERER"))
+        std::printf("renderer: %s\n", ri.name);
     // The original runs at 320x200 on a 4:3 monitor (non-square pixels).
     SDL_RenderSetLogicalSize(renderer_, w_, w_ * 3 / 4);
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888,
@@ -405,7 +407,7 @@ std::string Video::bestMode() const {
 
 void Video::destroyModeTextures() {
     for (SDL_Texture** t : {&gameTexture_, &sharpTexture_, &videoTexture_, &videoScaled_, &hdSmall_,
-                            &hudTexture_, &hudSharp_, &postTexture_})
+                            &hudTexture_, &hudSharp_, &postTexture_, &shA_, &shSmall_, &shB_, &shP_, &shM_})
         if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
 }
 
@@ -475,7 +477,7 @@ void Video::createSmoothingTextures() {
     }
 }
 
-void Video::drawThrough(SDL_Texture* tex, SDL_Texture* target) {
+void Video::drawThrough(SDL_Texture* tex, SDL_Texture* target, bool sharpen) {
     if (target && SDL_SetRenderTarget(renderer_, target) == 0) {
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
@@ -485,9 +487,88 @@ void Video::drawThrough(SDL_Texture* tex, SDL_Texture* target) {
         SDL_RenderCopy(renderer_, tex, nullptr, nullptr);
         SDL_SetTextureBlendMode(tex, was);
         SDL_SetRenderTarget(renderer_, nullptr);
-        SDL_RenderCopy(renderer_, target, nullptr, nullptr);
+        if (sharpen && sharpen_ > 0 && sharpenOk_ && shA_) drawSharpened(target);
+        else SDL_RenderCopy(renderer_, target, nullptr, nullptr);
     } else {
         SDL_RenderCopy(renderer_, tex, nullptr, nullptr);
+    }
+}
+
+void Video::setSharpen(int level) {
+    level = std::clamp(level, 0, 2);
+    if (level == sharpen_) return;
+    sharpen_ = level;
+    if (mode().hd) createSharpenTextures();
+}
+
+// The unsharp mask's render targets, at the picture's size, and its blend
+// modes. Off (or no custom blend modes): none.
+void Video::createSharpenTextures() {
+    for (SDL_Texture** t : {&shA_, &shSmall_, &shB_, &shP_, &shM_})
+        if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
+    sharpenOk_ = false;
+    if (!sharpen_ || !renderer_ || !SDL_RenderTargetSupported(renderer_) || !mode().hd) return;
+    const int W = picCurW_, H = picCurH_;
+    auto target = [&](int w, int h) {
+        SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
+                                           std::max(1, w), std::max(1, h));
+        if (t) SDL_SetTextureScaleMode(t, SDL_ScaleModeLinear);
+        return t;
+    };
+    shA_ = target(W, H); shSmall_ = target(W / 3, H / 3); shB_ = target(W, H);
+    shP_ = target(W, H); shM_ = target(W, H);
+    // dst - src, keeping dst's alpha; add src x its alpha; subtract src x its alpha.
+    bmRevSubKeep_ = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_REV_SUBTRACT,
+                                               SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+    bmAddA_ = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_SRC_ALPHA, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+                                         SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+    bmSubA_ = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_SRC_ALPHA, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_REV_SUBTRACT,
+                                         SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+    sharpenOk_ = shA_ && shSmall_ && shB_ && shP_ && shM_ &&
+                 SDL_SetTextureBlendMode(shB_, bmRevSubKeep_) == 0 && SDL_SetTextureBlendMode(shP_, bmAddA_) == 0 &&
+                 SDL_SetTextureBlendMode(shM_, bmSubA_) == 0;
+    if (!sharpenOk_) {
+        std::fprintf(stderr, "SHARPEN: this renderer has no custom blend modes; off\n");
+        for (SDL_Texture** t : {&shA_, &shSmall_, &shB_, &shP_, &shM_})
+            if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
+    }
+}
+
+// Unsharp mask: A (the smoothed layer at picture size) + k (A - B), B being A
+// blurred (down to a third and back up, linear). The difference goes in two
+// parts, as colours can't be negative: where A is brighter it's added, where
+// it's darker subtracted. The passes weight colour by alpha, so the layer's
+// transparent pixels add nothing.
+void Video::drawSharpened(SDL_Texture* layer) {
+    auto pass = [&](SDL_Texture* to, SDL_Texture* from, SDL_BlendMode mode, bool clear) {
+        SDL_SetRenderTarget(renderer_, to);
+        if (clear) { SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0); SDL_RenderClear(renderer_); }
+        SDL_BlendMode was;
+        SDL_GetTextureBlendMode(from, &was);
+        SDL_SetTextureBlendMode(from, mode);
+        SDL_RenderCopy(renderer_, from, nullptr, nullptr);
+        SDL_SetTextureBlendMode(from, was);
+    };
+    pass(shA_, layer, SDL_BLENDMODE_NONE, true);           // A
+    pass(shSmall_, shA_, SDL_BLENDMODE_NONE, true);        // blur: down...
+    pass(shB_, shSmall_, SDL_BLENDMODE_NONE, true);        // ...and up: B
+    pass(shP_, shA_, SDL_BLENDMODE_NONE, true);            // A - B
+    pass(shP_, shB_, bmRevSubKeep_, false);
+    pass(shM_, shB_, SDL_BLENDMODE_NONE, true);            // B - A
+    pass(shM_, shA_, bmRevSubKeep_, false);
+    SDL_SetRenderTarget(renderer_, nullptr);
+    SDL_SetTextureBlendMode(shA_, SDL_BLENDMODE_BLEND);
+    SDL_RenderCopy(renderer_, shA_, nullptr, nullptr);
+    const Uint8 k = sharpen_ == 2 ? 255 : 150;             // strong: 1.0, light: 0.6
+    for (SDL_Texture* t : {shP_, shM_}) SDL_SetTextureColorMod(t, k, k, k);
+    SDL_SetTextureBlendMode(shP_, bmAddA_);
+    SDL_RenderCopy(renderer_, shP_, nullptr, nullptr);
+    SDL_SetTextureBlendMode(shM_, bmSubA_);
+    SDL_RenderCopy(renderer_, shM_, nullptr, nullptr);
+    if (sharpen_ == 2) {                                   // strong: half as much again
+        for (SDL_Texture* t : {shP_, shM_}) SDL_SetTextureColorMod(t, 128, 128, 128);
+        SDL_RenderCopy(renderer_, shP_, nullptr, nullptr);
+        SDL_RenderCopy(renderer_, shM_, nullptr, nullptr);
     }
 }
 
@@ -537,6 +618,7 @@ bool Video::setMode(const std::string& name) {
         if (videoTexture_) SDL_SetTextureBlendMode(videoTexture_, SDL_BLENDMODE_BLEND);
         videoLayer_.assign(fb_.size(), 0);
         createSmoothingTextures();
+        createSharpenTextures();
         // The HUD layer (16:9 stretches it): its pixels, then the same sharp
         // scaling as the game layer; and the game pixels drawn over it.
         postTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, cw_, h_);
@@ -756,7 +838,7 @@ void Video::render(bool showHd) {
     if (showHd) {
         if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), hdCW_ * 4);
         hdDirty_ = false;
-        if (smoothing_ > 0 && hdSmall_) drawThrough(hdTexture_, hdSmall_);   // alpha kept: wings stay clear
+        if (smoothing_ > 0 && hdSmall_) drawThrough(hdTexture_, hdSmall_, true);   // alpha kept: wings stay clear
         else SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
     }
     // Which layer shows each pixel: HD pixels show the video layer when the
@@ -780,7 +862,7 @@ void Video::render(bool showHd) {
     //    a smaller whole-number size first, so the seams blend wider).
     if (anyVideo && videoTexture_) {
         SDL_UpdateTexture(videoTexture_, nullptr, videoLayer_.data(), cw_ * 4);
-        drawThrough(videoTexture_, videoScaled_);
+        drawThrough(videoTexture_, videoScaled_, true);
     }
     // 3. Game layer: everything else the game draws, always sharp.
     SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), cw_ * 4);

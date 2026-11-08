@@ -152,6 +152,8 @@ COLOR INTENSE:
   softer (F10 switches while playing)
 - SMOOTHING: OFF, SUBTLE, MORE or MAX, a soft touch on every video, done on the
   GPU (no cost to the frame rate); everything else stays sharp
+- SHARPEN: OFF, LIGHT or STRONG: with the smoothing, crisps the edges back up
+  (an unsharp mask on the GPU)
 - LANCE VIDEOS: Lance's clips one SMOOTHING level softer than the rest
   (the default), or SAME
 - HD FOLDER: where the packs go (the default is your user folder)

@@ -18,6 +18,10 @@ M.TRACK_SPEED_ORDER = { "normal", "fast", "faster", "fastest" }
 M.TRACK_SPEEDS = { normal = 1.0, fast = 1.25, faster = 1.33, fastest = 1.5 }
 M.TRACK_SPEED_LABELS = { normal = "NORMAL", fast = "FAST +25%", faster = "FASTER +33%", fastest = "FASTEST +50%" }
 
+-- SHARPEN (Options > ADVANCED): after the smoothing.
+M.SHARPEN_ORDER = { "off", "light", "strong" }
+M.SHARPEN = { off = 0, light = 1, strong = 2 }
+
 -- TRACK COLOR (Options > ADVANCED): the grade on the track video in races.
 M.TRACK_COLOR_ORDER = { "off", "vivid", "intense" }
 M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
@@ -26,7 +30,7 @@ M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
 -- only. The saved settings aren't changed: these are applied over a copy.
 M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
-    music_style = "original", track_speed = "normal", track_color = "off",
+    music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off",
     voice_filter = false, lance_smoother = false,
 }
 
@@ -50,6 +54,7 @@ function M.apply_saved(state)
     gfx.hd_pictures(not original)
     gfx.video_repeat(state.hd_style == "line_tripled" and 3 or 0)
     gfx.smoothing(tonumber(state.smoothing) or 0)
+    gfx.sharpen(M.SHARPEN[state.sharpen] or 0)
     -- (Older saves have ambient = false for black sides.)
     local sides = state.sides or (state.ambient == false and "black") or "ambient"
     if not pcall(gfx.sides, sides) then gfx.sides("ambient") end

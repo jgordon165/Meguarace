@@ -879,6 +879,7 @@ end)
 test("classic mode and track color", function()
     local display, save = require("game.display"), require("game.save")
     check(save.defaults().track_color == "intense", "intense by default")
+    check(save.defaults().sharpen == "off" and gfx.sharpen(1) == 1 and gfx.sharpen(9) == 2 and gfx.sharpen(0) == 0, "sharpen levels")
     check(gfx.video_grade(2) == 2 and gfx.video_grade(5) == 2 and gfx.video_grade(0) == 0, "grade levels")
     local st = save.defaults()
     st.music_style, st.aspect, st.smoothing = "enhanced", "16:9", 2

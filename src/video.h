@@ -115,6 +115,13 @@ public:
     // isn't changed (HD packs still compare against it), so cars, the HUD
     // and text are untouched. HD pictures get the same grade.
     void setVideoGrade(int level);
+    // SHARPEN, with the smoothing: an unsharp mask on the smoothed videos at
+    // screen size, so the stair-steps stay gone but edges come back crisp:
+    // 0 off, 1 light, 2 strong. All on the GPU (custom blend modes: add and
+    // reverse-subtract); renderers without them (the software one) skip it.
+    void setSharpen(int level);
+    int sharpen() const { return sharpen_; }
+    bool sharpenSupported() const { return sharpenOk_; }
     int videoGrade() const { return grade_; }
     void hudBegin();
     void hudEnd();
@@ -220,7 +227,17 @@ private:
     void createSmoothingTextures();
     // Copies `tex` through `target` (nearest into it, alpha as it is), then
     // the target onto the screen, linear; straight onto the screen without one.
-    void drawThrough(SDL_Texture* tex, SDL_Texture* target);
+    void drawThrough(SDL_Texture* tex, SDL_Texture* target, bool sharpen = false);
+    void drawSharpened(SDL_Texture* layer);
+    void createSharpenTextures();
+    int sharpen_ = 0;
+    bool sharpenOk_ = false;
+    SDL_Texture* shA_ = nullptr;      // the layer at picture size
+    SDL_Texture* shSmall_ = nullptr;  // it, a third the size (the blur)
+    SDL_Texture* shB_ = nullptr;      // blurred, at picture size
+    SDL_Texture* shP_ = nullptr;      // A - B where positive
+    SDL_Texture* shM_ = nullptr;      // B - A where positive
+    SDL_BlendMode bmRevSubKeep_{}, bmAddA_{}, bmSubA_{};
     void render(bool hdShown);
     bool hdShown() const;
     void destroyModeTextures();

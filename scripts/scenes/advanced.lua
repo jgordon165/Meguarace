@@ -24,6 +24,10 @@
 --   HD FOLDER     where the packs are; ENTER edits it (type, or paste with
 --                 CTRL+V; ENTER keeps it, ESC leaves it as it was; empty = the
 --                 default, your Meguarace user folder).
+--   SHARPEN       OFF, LIGHT or STRONG: crisps the smoothed videos back up (an
+--                 unsharp mask at screen size, on the GPU), so the stair-steps
+--                 stay gone but the edges come back. Renderers without custom
+--                 blend modes can't (the note says so).
 --   LANCE VIDEOS  1 SMOOTHER: Lance's clips one SMOOTHING level softer than
 --                 the other videos (MAX at most); or SAME.
 --   MUSIC         ORIGINAL (the OPL2 FM chip, as on a Sound Blaster),
@@ -49,14 +53,14 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "track", "color", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "color", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
-local TOP, H = 30, 152
-local TITLE_Y, FIRST_Y, STEP = 36, 49, 11
+local TOP, H = 22, 166
+local TITLE_Y, FIRST_Y, STEP = 28, 41, 11
 
 -- The box: as wide as the screen allows (16:9 adds the wings).
 local function box()
@@ -100,6 +104,7 @@ function S:value(what)
     elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
+    elseif what == "sharpen" then return (display.effective(self.state).sharpen or "off"):upper()
     elseif what == "color" then return (display.effective(self.state).track_color or "intense"):upper()
     elseif what == "voice" then return display.effective(self.state).voice_filter == false and "OFF" or "ON"
     end
@@ -154,6 +159,13 @@ function S:change(what, dir)
         for k, v in ipairs(order) do if v == st.track_speed then i = k end end
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
+    elseif what == "sharpen" then
+        local order, i = display.SHARPEN_ORDER, 1
+        for k, v in ipairs(order) do if v == st.sharpen then i = k end end
+        st.sharpen = order[(i - 1 + dir) % #order + 1]
+        local _, ok = gfx.sharpen(display.SHARPEN[st.sharpen])
+        if (gfx.display()) == "native" then self.note = "SHARPEN SHOWS IN THE HD RESOLUTIONS"
+        elseif not ok then self.note = "THIS RENDERER CAN'T SHARPEN (NO CUSTOM BLENDING)" end
     elseif what == "color" then
         local order, i = display.TRACK_COLOR_ORDER, 3
         for k, v in ipairs(order) do if v == st.track_color then i = k end end
