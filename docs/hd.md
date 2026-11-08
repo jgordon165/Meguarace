@@ -26,6 +26,7 @@ level more, MAX, on Lance's clips), the default HD folder and the voice filter o
 | LANCE VIDEOS | **1 SMOOTHER** (the default): Lance's clips play one SMOOTHING level softer than the other videos (SUBTLE when SMOOTHING is OFF, MAX at most), or **SAME**. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
+| TRACK SPEED | NORMAL, or **+25%**: in races the track video scrolls a quarter faster (15.6 instead of 12.5 frames a second while you move), so the race goes by quicker. Menus, videos and effects are unchanged. |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes

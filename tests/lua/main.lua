@@ -876,6 +876,18 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("track speed", function()
+    local save, race = require("game.save"), require("scenes.race")
+    check(save.defaults().track_speed == "normal", "normal by default")
+    local st = save.defaults()
+    st.track_speed = "fast"
+    require("game.display").apply_saved(st)
+    check(race.track_speed == 1.25, "+25%")
+    st.track_speed = "normal"
+    require("game.display").apply_saved(st)
+    check(race.track_speed == 1.0, "normal")
+end)
+
 test("title screen", function()
     local scenes = require("core.scenes")
     local depth, done = scenes.depth(), nil

@@ -33,6 +33,8 @@
 --                 ENHANCED, the default (a dance remix on that SoundFont:
 --                 layered synths, dance drums with a four-on-the-floor kick,
 --                 sidechain pumping, a delay in time with the song).
+--   TRACK SPEED   NORMAL, or +25%: the track video scrolls a quarter faster
+--                 in races (the race goes by quicker; the rest is unchanged).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -44,9 +46,9 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "track", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
@@ -94,6 +96,7 @@ function S:value(what)
     elseif what == "sides" then return gfx.sides():upper()
     elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
+    elseif what == "track" then return self.state.track_speed == "fast" and "+25%" or "NORMAL"
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -138,6 +141,9 @@ function S:change(what, dir)
         if (st.music_style == "soundfont" or st.music_style == "enhanced") and not audio.soundfont() then
             self.note = "NO .SF2 IN A SOUNDFONT FOLDER: PLAYING STEREO FM"
         end
+    elseif what == "track" then
+        st.track_speed = st.track_speed == "fast" and "normal" or "fast"
+        require("scenes.race").track_speed = st.track_speed == "fast" and 1.25 or 1.0
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter

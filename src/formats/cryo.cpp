@@ -425,7 +425,37 @@ bool HnmVideo::decode(int i, Frame& f) {
     for (int k = 0; k < 6; ++k) sum += z[k];
     switch (sum & 0xFF) {
     case 0xAD: unpack173(z, end - p, f); break;
-    case 0xAB: f.pixels = unHsq(z, end - p); f.x = f.y = 0; break;
+    case 0xAB: {
+        // HSQ-packed. A full frame unpacks to its raw pixels. A smaller one
+        // (CREDIT.HNM's overlays: the credits text) unpacks to its place on
+        // screen, x and y as 16-bit words, then PackBits pixels (as sprite
+        // sets have: n < 0x80 copies n+1 bytes, else repeats one 257-n times).
+        std::vector<uint8_t> u = unHsq(z, end - p);
+        const size_t want = size_t(f.w) * size_t(f.h);
+        f.x = f.y = 0;
+        if (u.size() >= 4 && u.size() < want) {
+            f.x = u[0] | u[1] << 8;
+            f.y = u[2] | u[3] << 8;
+            if (f.x + f.w > 320 || f.y + f.h > 200) { f.x = f.y = 0; f.pixels = std::move(u); break; }
+            f.pixels.clear();
+            f.pixels.reserve(want);
+            size_t r = 4;
+            while (r < u.size() && f.pixels.size() < want) {
+                const uint8_t c = u[r++];
+                if (c & 0x80) {
+                    if (r >= u.size()) break;
+                    f.pixels.insert(f.pixels.end(), size_t(257 - c), u[r++]);
+                } else {
+                    const size_t k = std::min<size_t>(size_t(c) + 1, u.size() - r);
+                    f.pixels.insert(f.pixels.end(), u.begin() + long(r), u.begin() + long(r + k));
+                    r += k;
+                }
+            }
+        } else {
+            f.pixels = std::move(u);
+        }
+        break;
+    }
     default:   return false;
     }
     f.pixels.resize(size_t(f.w) * f.h);

@@ -45,6 +45,7 @@ function M.defaults()
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         sides = "ambient",         -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
         lance_smoother = true,     -- Lance's clips one smoothing level softer than the other videos
+        track_speed = "normal",    -- "normal" or "fast" (+25%): how fast the track video scrolls in a race
         music_style = "enhanced",  -- "original" (OPL2), "stereo" (FM), "soundfont" or "enhanced" (the EDM remix; Options > ADVANCED)
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run

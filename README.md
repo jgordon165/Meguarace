@@ -148,6 +148,7 @@ TRIPLED and SMOOTHING MORE:
   (the default), or SAME
 - HD FOLDER: where the packs go (the default is your user folder)
 - MUSIC: ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default, a dance remix) ([docs/music.md](docs/music.md))
+- TRACK SPEED: NORMAL, or +25% (the track video scrolls a quarter faster in races)
 - VOICE FILTER: the hiss filter on Lance's clips
 
 The game always works in 320×200 coordinates, so gameplay is the
