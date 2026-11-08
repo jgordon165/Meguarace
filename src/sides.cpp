@@ -231,14 +231,19 @@ void cyberpunk(Picture& p) {
             const float ang = std::atan2(float(y) - vy, vx - float(x));
             const float k = std::fabs(std::fmod(ang * 22.0f, 1.0f) - 0.5f);
             const float lineB = std::exp(-std::pow((0.5f - k) * depth * 7.0f, 2.0f) * 8.0f);
-            c = add(c, magenta, std::max(lineA, lineB) * (0.25f + 0.75f * depth));
+            // Blue at the horizon, purple, then red up close.
+            const Rgb blue = {0.15f, 0.35f, 1.0f}, purple = {0.65f, 0.15f, 0.95f}, red = {1.0f, 0.08f, 0.12f};
+            // (Compressed toward the horizon, so the red shows above the race's dashboard.)
+            const Rgb grid = depth < 0.15f ? mix(blue, purple, depth / 0.15f)
+                                           : mix(purple, red, std::min(1.0f, (depth - 0.15f) / 0.25f));
+            c = add(c, grid, std::max(lineA, lineB) * (0.45f + 0.55f * depth));
             at(x, y) = c;
         }
     }
     // The horizon glows.
     for (int y = std::max(0, horizon - H / 40); y < std::min(H, horizon + H / 60); ++y) {
         const float k = std::exp(-std::pow(float(y - horizon) / float(std::max(1, H / 120)), 2.0f));
-        for (int x = 0; x < W; ++x) at(x, y) = add(at(x, y), magenta, 0.6f * k);
+        for (int x = 0; x < W; ++x) at(x, y) = add(at(x, y), Rgb{0.3f, 0.3f, 1.0f}, 0.6f * k);   // where the grid starts blue
     }
     for (int y = 0; y < H; ++y)
         for (int x = 0; x < W; ++x) {

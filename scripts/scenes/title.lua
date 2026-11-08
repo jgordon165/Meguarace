@@ -23,7 +23,7 @@ local SUN, SUN_N = 49, 32
 local FAR, NEAR, RIM_PINK, RIM_CYAN = 81, 82, 83, 84
 local AMBER, CYAN, AMBER_DIM, NEON, NEON_GLOW, CYAN_GLOW = 97, 98, 99, 100, 101, 102
 local GROUND, GROUND_N = 113, 32
-local GRID, GRID_N = 145, 16
+local GRID, GRID_N = 145, 16         -- by distance: blue at the horizon, purple, red up close
 local CHROME, CHROME_N = 161, 32
 local OUTLINE, SHADOW = 193, 194
 local ROAD, EDGE, DASH, BODY, BODY_HI, TAIL, TAIL_GLOW, UNDERGLOW, GLASS = 201, 202, 203, 204, 205, 206, 207, 208, 209
@@ -55,7 +55,7 @@ local function make_palette()
     pal[AMBER], pal[CYAN], pal[AMBER_DIM] = { 255, 190, 70 }, { 90, 235, 255 }, { 120, 80, 40 }
     pal[NEON], pal[NEON_GLOW], pal[CYAN_GLOW] = { 255, 60, 200 }, { 110, 20, 90 }, { 20, 90, 110 }
     fill(GROUND, GROUND_N, { { 0, 45, 6, 55 }, { 1, 6, 0, 10 } })
-    fill(GRID, GRID_N, { { 0, 70, 6, 70 }, { 1, 255, 70, 225 } })
+    fill(GRID, GRID_N, { { 0, 30, 70, 255 }, { 0.45, 150, 40, 230 }, { 1, 255, 25, 35 } })
     fill(CHROME, CHROME_N, { { 0, 235, 255, 255 }, { 0.3, 120, 200, 255 }, { 0.52, 30, 50, 190 },
                              { 0.56, 255, 255, 255 }, { 0.7, 255, 150, 70 }, { 1, 255, 40, 150 } })
     pal[OUTLINE], pal[SHADOW] = { 0, 255, 255 }, { 170, 0, 110 }
@@ -246,16 +246,26 @@ function S:draw()
     gfx.blit(x0, 0, W, 200, self.bg)
     local phase = (self.t * 1.6) % 1
     -- The grid: lines across, coming toward you, and lines to the vanishing point.
+    local function grid_colour(y)        -- by the row: the horizon blue, the bottom red
+        return GRID + math.max(0, math.min(GRID_N - 1, (y - HORIZON) * GRID_N // (200 - HORIZON)))
+    end
+    local last
     for n = 0, 22 do
         local d = n - phase
         if d > 0 then
             local y = row_at(d)
-            local c = GRID + math.max(0, math.min(GRID_N - 1, math.floor(GRID_N * (1 - d / 23))))
-            gfx.line(x0, y, x0 + W - 1, y, c)
+            -- Far lines would merge into a band: a clear row between, none at the horizon.
+            if y - HORIZON >= 5 and (not last or last - y >= 2) then
+                gfx.line(x0, y, x0 + W - 1, y, grid_colour(y))
+                last = y
+            end
         end
     end
-    for k = -16, 16 do
-        gfx.line(160, HORIZON, 160 + k * 34, 199, GRID + GRID_N - 4)
+    for y = HORIZON + 8, 198 do          -- lines to the vanishing point (from where they're apart), a segment per row
+        local c, t1, t2 = grid_colour(y), (y - HORIZON) / 87, (y + 1 - HORIZON) / 87
+        for k = -16, 16 do
+            gfx.line(160 + math.floor(k * 34 * t1 + 0.5), y, 160 + math.floor(k * 34 * t2 + 0.5), y + 1, c)
+        end
     end
     -- The road, edges and centre dashes.
     for y = HORIZON + 1, 199 do
