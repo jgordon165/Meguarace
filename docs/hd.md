@@ -30,6 +30,7 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%) or **FASTEST** (+50%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 18.75), so the race goes by quicker. Menus, videos and effects are unchanged. |
 | TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
+| MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. **CLASSIC**: the original's small text on a black box. |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes

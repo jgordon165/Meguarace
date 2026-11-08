@@ -30,7 +30,7 @@ M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
 -- only. The saved settings aren't changed: these are applied over a copy.
 M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
-    music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off",
+    music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off", messages = "classic",
     voice_filter = false, lance_smoother = false,
 }
 
@@ -62,6 +62,7 @@ function M.apply_saved(state)
     require("game.music").set_style(state.music_style)
     require("scenes.race").track_speed = M.TRACK_SPEEDS[state.track_speed] or 1.33
     require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 2
+    require("scenes.race").big_messages = state.messages ~= "classic"
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))

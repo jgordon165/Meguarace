@@ -32,6 +32,10 @@ S.track_speed = 1.33
 -- Options > ADVANCED > TRACK COLOR: the grade on the track video (0 off,
 -- 1 VIVID, 2 INTENSE), on while the race is up.
 S.track_color = 2
+-- Options > ADVANCED > MESSAGES: the race's messages (SKID, ENERGY +...) in
+-- the big race font with an outline and no box (true), or the original's
+-- small text on a black box.
+S.big_messages = true
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
@@ -693,9 +697,15 @@ function S:draw()
     end
 
     if s.message and s.tick < s.message_until then
-        local w = #s.message * 4
-        gfx.fill(160 - w // 2 - 3, 32, w + 6, 9, 0)
-        gfx.text(160 - w // 2, 34, s.message, s.message:find("+", 1, true) and C_GOOD or C_TEXT)
+        local colour = s.message:find("+", 1, true) and C_GOOD or C_TEXT
+        if S.big_messages then
+            -- As big as LAPS and the score, outlined, over the picture.
+            font.draw_outlined(160 - font.width(s.message) // 2, 28, s.message, colour, gfx.nearest(0, 0, 0))
+        else
+            local w = #s.message * 4
+            gfx.fill(160 - w // 2 - 3, 32, w + 6, 9, 0)
+            gfx.text(160 - w // 2, 34, s.message, colour)
+        end
     end
 
     if self.demo and (s.tick // 50) % 2 == 0 then               -- 0x14B8: blinks every 50 ticks

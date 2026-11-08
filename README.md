@@ -162,6 +162,8 @@ FASTER (+33%) and TRACK COLOR INTENSE:
   faster the track video scrolls in races
 - TRACK COLOR: OFF, VIVID (the default) or INTENSE: more colour and contrast
   on the track video in races (the cars, HUD and text untouched)
+- MESSAGES: ENHANCED (the race's messages as big as LAPS and the score,
+  outlined, no box) or CLASSIC (small text on a black box)
 - VOICE FILTER: the hiss filter on Lance's clips
 
 The game always works in 320×200 coordinates, so gameplay is the
