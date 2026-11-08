@@ -30,7 +30,7 @@ local music  = require("game.music")
 local career = require("game.career")
 local sequence = require("core.sequence")
 local subs   = require("formats.subtitles")
-local S = {}
+local S = { hd_menu = true }
 
 -- Centres of PANEL2's images 0..29 (DS:0xFA4): car pictures, lit bars,
 -- dark bars, lit buttons, dark buttons.

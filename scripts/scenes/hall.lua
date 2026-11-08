@@ -13,7 +13,7 @@
 local scenes = require("core.scenes")
 local font   = require("ui.font")
 local save   = require("game.save")
-local S = {}
+local S = { hd_menu = true }
 
 S.NAME_MAX = 16
 

@@ -881,6 +881,12 @@ test("classic mode and track color", function()
     check(save.defaults().track_color == "intense", "intense by default")
     check(save.defaults().messages == "enhanced", "big messages by default")
     check(save.defaults().dashboard == "hd", "HD dashboard by default")
+    check(save.defaults().menus == "hd" and display.CLASSIC.menus == "original", "HD menus by default, not classic")
+    local was = gfx.hd_menus()
+    check(gfx.hd_menus(false) == false and gfx.hd_menus(true) == true, "hd_menus switches")
+    gfx.hd_menus(was)
+    check(require("scenes.menu").hd_menu and require("scenes.options").hd_menu and require("scenes.hall").hd_menu,
+          "the menu screens are marked")
     check(display.CLASSIC.dashboard == "original", "classic: the original dashboard")
     local tset = spr.open("TJO_2")
     if tset then

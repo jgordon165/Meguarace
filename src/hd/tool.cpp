@@ -230,7 +230,8 @@ int main(int argc, char** argv) {
         if (!force) {
             hd::Pack existing;
             if (existing.open(packPath.string(), hd::crc32(d->data(), d->size())) &&
-                existing.header().pictureW == opt.pictureW && existing.header().pictureH == opt.pictureH) {
+                existing.header().pictureW == opt.pictureW && existing.header().pictureH == opt.pictureH &&
+                (existing.header().sharpened || !hd::menuVideo(v.stem))) {   // menu videos: remade sharpened
                 ++skipped;
                 continue;
             }
@@ -241,6 +242,8 @@ int main(int argc, char** argv) {
             std::fflush(stdout);
         };
         std::string err;
+        opt.sharpen = hd::menuVideo(v.stem) ? 2.0f : 0.0f;
+        opt.sharpenRadius = 1.5f;
         if (!hd::convertVideo(*d, packPath.string(), opt, err)) {
             std::fprintf(stderr, "\n%s: %s\n", v.name.c_str(), err.c_str());
             ++failed;
@@ -264,7 +267,7 @@ int main(int argc, char** argv) {
             if (hd::readSpritePack(packPath.string(), hd::crc32(d->data(), d->size()), existing, e) &&
                 existing.pictureW == opt.pictureW && existing.pictureH == opt.pictureH &&
                 // dashboards made before they were sharpened: remade
-                (existing.sharpened || existing.kind != 0 || !hd::dashboardSprite(sname))) {
+                (existing.sharpened || existing.kind != 0)) {   // colour sets made before sharpening: remade
                 ++sSkipped;
                 continue;
             }
@@ -272,7 +275,8 @@ int main(int argc, char** argv) {
         std::string kind, err;
         hd::ConvertOptions sopt = opt;
         sopt.strip = hd::spriteStrip(sname);
-        if (hd::dashboardSprite(sname)) { sopt.sharpen = 2.0f; sopt.sharpenRadius = 1.5f; }
+        sopt.sharpen = 2.0f;   // (colour sets; indexed ones are traced sharp already)
+        sopt.sharpenRadius = 1.5f;
         if (!hd::convertSprites(*d, packPath.string(), sopt, kind, err)) {
             std::fprintf(stderr, "%s: %s\n", sname.c_str(), err.c_str());
             ++sFailed;

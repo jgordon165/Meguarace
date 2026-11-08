@@ -30,7 +30,7 @@ local scenes = require("core.scenes")
 local save   = require("game.save")
 local career = require("game.career")
 local font   = require("ui.font")
-local S = { overlay = true }
+local S = { overlay = true, hd_menu = true }
 
 local KINDS = {
     level   = { res = "KONTROL", panel = 1, x = 160, y = 95, first = 2, count = 2, step = 16 },

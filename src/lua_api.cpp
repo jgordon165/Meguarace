@@ -194,6 +194,17 @@ static int gfx_hd_pictures(lua_State* L) {
     return 1;
 }
 
+// gfx.hd_menus([on]) -> whether the menu screens use the HD packs whatever
+// the HD style (Options > ADVANCED > MENUS), after setting it.
+// gfx.menu_frame(on): marks this frame as a menu screen (core/scenes.lua).
+static int gfx_hd_menus(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setHdMenus(lua_toboolean(L, 1) != 0);
+    lua_pushboolean(L, v.hdMenus());
+    return 1;
+}
+static int gfx_menu_frame(lua_State* L) { E(L).video.setMenuFrame(lua_toboolean(L, 1) != 0); return 0; }
+
 // gfx.smoothing([level]) -> the video smoothing (0 off, 1 subtle, 2 more, 3 max),
 // after setting it if a level is given. HD resolutions only; GPU only.
 static int gfx_smoothing(lua_State* L) {
@@ -918,7 +929,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
-        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
+        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"hd_menus", gfx_hd_menus}, {"menu_frame", gfx_menu_frame}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
         {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end}, {"video_grade", gfx_video_grade}, {"sharpen", gfx_sharpen},
         {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient}, {"sides", gfx_sides},
         {nullptr, nullptr}};

@@ -19,7 +19,8 @@
 //   u32     frame count (same as the HNM's)
 //   u32     CRC-32 of the source .HNM file (a pack only loads over the exact
 //           video it was made from)
-//   u32     flags: bits 0-1, the upscaler that made it (kUpscaler*; 0 unknown)
+//   u32     flags: bits 0-1, the upscaler that made it (kUpscaler*; 0 unknown);
+//           bit 2, sharpened after it (the menu screens)
 //   frame count x { u32 offset, u32 size }   size 0: same picture as the
 //                                            previous frame (no video chunk)
 //   WebP images, each picture width x height: the whole composited screen
@@ -54,6 +55,7 @@ struct PackHeader {
     uint32_t frames = 0;
     uint32_t sourceCrc = 0;
     uint32_t upscaler = kUpscalerUnknown;
+    bool sharpened = false;                     // flags bit 2: an unsharp mask after the upscale
 };
 
 class PackWriter {

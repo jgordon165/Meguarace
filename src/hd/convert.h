@@ -68,6 +68,8 @@ bool spriteStrip(const std::string& name);
 // Whether it's one of the race dashboard sets (sharpened after upscaling:
 // they're seen stretched, and close up).
 bool dashboardSprite(const std::string& name);
+// The menu screens' videos (PANEL1, HALL1), sharpened like the sprites.
+bool menuVideo(const std::string& stem);
 
 // Converts one sprite set (its bytes as stored in the archive) into an HD
 // sprite pack at outPath (see sprpack.h). `kind` gets "colour" or "indexed".

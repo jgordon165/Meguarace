@@ -31,8 +31,16 @@ function M.top() return stack[#stack] end
 
 function M.update(dt) call(stack[#stack], "update", dt) end
 
+-- A scene with hd_menu = true is a menu screen: drawn (or under an overlay
+-- that's drawn), it marks the frame (gfx.menu_frame), so MENUS = HD shows its
+-- HD packs whatever HD STYLE says.
 function M.draw()
     local n = #stack
+    if gfx and gfx.menu_frame then
+        local top = stack[n]
+        local under = top and top.overlay and n > 1 and stack[n - 1]
+        gfx.menu_frame((top and top.hd_menu) or (under and under.hd_menu) or false)
+    end
     if n == 0 then return end
     if stack[n].overlay and n > 1 then call(stack[n - 1], "draw") end
     call(stack[n], "draw")
