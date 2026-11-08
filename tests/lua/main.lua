@@ -880,9 +880,11 @@ test("track speed", function()
     local save, race = require("game.save"), require("scenes.race")
     check(save.defaults().track_speed == "normal", "normal by default")
     local st = save.defaults()
-    st.track_speed = "fast"
-    require("game.display").apply_saved(st)
-    check(race.track_speed == 1.25, "+25%")
+    for name, k in pairs({ fast = 1.25, faster = 1.33, fastest = 1.5 }) do
+        st.track_speed = name
+        require("game.display").apply_saved(st)
+        check(race.track_speed == k, name)
+    end
     st.track_speed = "normal"
     require("game.display").apply_saved(st)
     check(race.track_speed == 1.0, "normal")
@@ -908,7 +910,11 @@ test("title screen", function()
     check(done == nil, "fading")
     for _ = 1, 10 do scenes.update(0.1) end
     check(done == true and scenes.depth() == depth, "ESC: faded, then skips the videos")
-    local z = require("game.sfx").shot_sounds()
+    local sfx = require("game.sfx")
+    for voc_name, mine in pairs(sfx.REPLACES) do
+        check(sfx.sound(mine) and #sfx.sound(mine) % 4 == 0, "a sound for " .. voc_name)
+    end
+    local z = sfx.shot_sounds()
     check(#z == 3 and #z[1] > 40000 and #z[1] % 4 == 0, "three zaps, 16-bit stereo")
 end)
 

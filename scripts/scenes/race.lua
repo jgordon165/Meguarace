@@ -26,7 +26,8 @@ local font   = require("ui.rawfont")
 local music  = require("game.music")
 local S = {}
 -- Options > ADVANCED > TRACK SPEED: how much faster than the original the
--- track video scrolls (1.0, or 1.25: +25%). Set from the settings.
+-- track video scrolls (1.0; FAST 1.25, FASTER 1.33, FASTEST 1.5). Set from
+-- the settings (game/display.lua).
 S.track_speed = 1.0
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
@@ -111,6 +112,7 @@ function S:update(dt)
     end
     if input.pressed("F1") then self.debug = not self.debug end
     self.clock = self.clock + dt
+    if not self.sfx_ready then self.sfx_ready = sfx.prepare_step() end   -- ENHANCED sounds, one a frame (the countdown)
     if self.finished then
         if self.demo then return self:end_demo() end
         if input.pressed("Return") or input.pressed("Space") then
@@ -164,7 +166,7 @@ function S:update(dt)
         self.carx = self.carx + st.vel
         self.carx = self.carx + handling.tick_dx(p, self.carx, self.curv, s.speed, steering)
         -- Walls: steering ticks in a row ([0x6939]), then scrape or crash.
-        if alive and collide.wall(s, self.at_wall, st.ticks) == "crash" then voc.play("CHOCRR2") end
+        if alive and collide.wall(s, self.at_wall, st.ticks) == "crash" then sfx.play("CHOCRR2") end
         self:rival_tick()
         -- Eased view angle toward (160 - x)/8 (RACEPRG 0x24A5).
         local target = (160 - self.carx) / 8
@@ -180,7 +182,7 @@ function S:update(dt)
     if self.carx <= lim then self.carx, self.at_wall = lim, "left"
     elseif self.carx >= 320 - lim then self.carx, self.at_wall = 320 - lim, "right" end
     if self.at_wall and s.speed > 0 and alive then
-        if not self.scrape_sound then voc.play("CRRR3"); self.scrape_sound = true end
+        if not self.scrape_sound then sfx.play("CRRR3"); self.scrape_sound = true end
     else
         self.scrape_sound = false
     end
@@ -210,7 +212,7 @@ function S:update(dt)
         local code = self.T:tile(si, lane)
         if code ~= 0 then
             local sound = rules.apply_tile(s, code, self.steer)
-            if sound then voc.play(sound) end
+            if sound then sfx.play(sound) end
         end
     end
 
@@ -263,7 +265,7 @@ function S:collisions(r, prev)
         local kind = collide.classify(r.pos, r.pos ~= prev, span, { b[1], b[1] + b[3] }, r.destroyed)
         if kind then
             if kind == "ahead" or kind == "behind" then r.pos = prev end
-            if collide.respond(s, r, kind, r.x_lane > self.carx, self.hold) then voc.play("CHOC4") end
+            if collide.respond(s, r, kind, r.x_lane > self.carx, self.hold) then sfx.play("CHOC4") end
         else
             collide.clear(s)
         end
@@ -346,7 +348,7 @@ function S:effects_frame()
     -- Scraping a wall: smoke on that side, 1 armour a cycle (0x301B).
     if s.scraping and s.speed > 0 and not s.destroyed then
         self.smoke_frame = collide.smoke(s)
-        if self.smoke_frame == collide.SMOKE_FIRST then voc.play("CRRR3") end
+        if self.smoke_frame == collide.SMOKE_FIRST then sfx.play("CRRR3") end
     else
         self.smoke_frame = nil
     end
@@ -366,7 +368,7 @@ function S:effects_frame()
                 if r.box and not r.destroyed and r.pos >= 0 and r.pos <= range
                    and bx >= r.box[1] and bx <= r.box[1] + r.box[3] then
                     s.shot_target = r
-                    voc.play("CHOCTIR")
+                    sfx.play("CHOCTIR")
                     if rules.hit(s, r) then self:destroy(r) end
                     break
                 end
@@ -376,14 +378,14 @@ function S:effects_frame()
     -- The rival's shot at you.
     if s.rshot then
         local res = rules.rival_shot_step(s)
-        if res == "hit" then voc.play("CHOC4")
+        if res == "hit" then sfx.play("CHOC4")
         elseif res == "destroyed" then self:wreck() end
     end
     local from = s.rshot and s.rshot.from
     if from and not s.rshot.hit and not from.destroyed and self:lined_up(from)
        and from.pos <= -rules.RIVAL_HIT_BEHIND[1] and from.pos >= -rules.RIVAL_HIT_BEHIND[2] then
         rules.rival_hit(s)
-        voc.play("CHOCTIR")
+        sfx.play("CHOCTIR")
     end
     if self.wreck_frame then
         self.wreck_frame = self.wreck_frame + 1
@@ -406,7 +408,7 @@ end
 function S:wreck()
     if self.wreck_frame then return end
     self.wreck_frame = 0
-    voc.play("EXPLOD2")
+    sfx.play("EXPLOD2")
 end
 
 -- After a rival's explosion the next one comes in, 28 sections ahead at
@@ -436,7 +438,7 @@ function S:finish(outcome)
     end
     local qualified = rivalai.qualifies(outcome, self.left, s.points)
     self.result = { outcome = outcome, left = self.left, points = s.points, qualified = qualified }
-    voc.play(qualified and "BONUS11" or "MALUS2")
+    sfx.play(qualified and "BONUS11" or "MALUS2")
 end
 
 -- A rival at full damage blows up and falls back (RACEPRG 0x3E98: EXPLOD2,
@@ -446,7 +448,7 @@ function S:destroy(r)
     r.destroyed, r.damage, r.boom = true, rules.RIVAL_HEALTH, 0
     r.speed = math.max(0, self.rules.speed - 20)
     self.radar_quiet_until = self.rules.tick + 50       -- [0x68EB] = 1 for 50 ticks
-    voc.play("EXPLOD2")
+    sfx.play("EXPLOD2")
 end
 
 -- Damage bar over a hit rival: (100 - damage) / 2 pixels, segmented every

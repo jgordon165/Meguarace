@@ -53,11 +53,24 @@ The synths pump to the kick (sidechain: down 70%, back over 60% of a beat),
 and go through a stereo ping-pong delay on the dotted eighth of the song's
 own tempo and a bigger room. The drums have their own bus: more low end
 and only a touch of room. A soft limiter over the mix catches the peaks.
-In ENHANCED the shots change too: instead of the game's LASER sample, a
-plasma zap synthesized by `scripts/game/sfx.lua`. It's an FM sweep down
-from 2.4 kHz on an inharmonic ratio, doubled and detuned across the stereo
-field, with a click, a sub thump, a metallic ring-mod zing and ping-pong
-echoes. Three pitches take turns.
+In ENHANCED the race's sound effects change too: instead of the game's
+samples, sounds synthesized by `scripts/game/sfx.lua` (no samples):
+
+| Effect | ENHANCED sound |
+|---|---|
+| Shots (LASER) | A plasma zap: an FM sweep down from 2.4 kHz on an inharmonic ratio, doubled and detuned in stereo, with a click, a sub thump, a ring-mod zing and ping-pong echoes; three pitches take turns |
+| Explosions (EXPLOD2) | A sub boom, a roaring noise burst that darkens, crackle and a falling digital swoosh, with a stereo tail |
+| Shot hits (CHOCTIR) | An electric metallic impact: a crack, a ring-mod clang, sparks |
+| Bumping a rival (CHOC4) | A heavy armoured thud: a sub thump and a resonant clunk |
+| Wall crashes (CHOCRR2) | A grinding metal crash: comb-filtered noise and a thump |
+| Scraping (CRRR3) | Plasma sparks: crackles and fluttering hiss over a rising whine |
+| Pickups (BONUS1, 10, 14, 15, 16) | A shimmering FM-bell arpeggio, pitched per bonus |
+| SUPER SPEED, qualifying (BONUS11) | A rising sweep into a chime |
+| ENERGY + (ENERGYP) | A warm rising hum and a chime |
+| Penalties, weapon lost (MALUS2, 6, 7, 9, 11, PLUARME) | A detuned buzz falling in pitch |
+
+They're made once, one a frame during a race's countdown, so nothing stalls
+mid-race. The other styles play the game's samples.
 
 The kicks follow the song's measures (96 ticks, a beat every 24), so they
 land on the beat. Drum-free intros and breaks stay without them.

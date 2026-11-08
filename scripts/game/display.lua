@@ -13,6 +13,11 @@ function M.label(name, _, _, hd)
     return name:upper() .. (hd and " HD" or "")
 end
 
+-- TRACK SPEED (Options > ADVANCED): the track video's speed in races.
+M.TRACK_SPEED_ORDER = { "normal", "fast", "faster", "fastest" }
+M.TRACK_SPEEDS = { normal = 1.0, fast = 1.25, faster = 1.33, fastest = 1.5 }
+M.TRACK_SPEED_LABELS = { normal = "NORMAL", fast = "FAST +25%", faster = "FASTER +33%", fastest = "FASTEST +50%" }
+
 -- Applies the saved HD style and mode at start (the mode unless --display
 -- was given). HD style "line_doubled": the HD modes show the original
 -- videos and menus line doubled and interpolated instead of the packs;
@@ -27,7 +32,7 @@ function M.apply_saved(state)
     if not pcall(gfx.sides, sides) then gfx.sides("ambient") end
     gfx.aspect(state.aspect == "16:9" and "16:9" or "4:3")
     require("game.music").set_style(state.music_style)
-    require("scenes.race").track_speed = state.track_speed == "fast" and 1.25 or 1.0
+    require("scenes.race").track_speed = M.TRACK_SPEEDS[state.track_speed] or 1.0
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))
