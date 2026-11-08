@@ -565,6 +565,11 @@ static void testMusicStyles() {
     // SoundFont without a bank plays Enhanced.
     FmMusic sf(MusicStyle::SoundFont, nullptr);
     CHECK(sf.style() == MusicStyle::Enhanced && sf.load(d.data(), d.size(), false));
+    FmMusic edm(MusicStyle::Edm, nullptr);
+    CHECK(edm.style() == MusicStyle::Enhanced);
+    // The soft limiter: unity below the knee, never past the ceiling.
+    CHECK(musicfx::soft_clip(0.5f, 0.7f, 1.0f) == 0.5f);
+    CHECK(musicfx::soft_clip(10.0f, 0.7f, 1.0f) <= 1.0f && musicfx::soft_clip(-10.0f, 0.7f, 1.0f) >= -1.0f);
     CHECK(!SoundFontBank::load("no-such-file.sf2"));
     // Starting part-way: the sequencer is already there.
     FmMusic later(MusicStyle::Original);

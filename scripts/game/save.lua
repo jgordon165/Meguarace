@@ -45,7 +45,7 @@ function M.defaults()
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         ambient = true,            -- 16:9 wings: blurred picture (true) or black
         lance_smoother = true,     -- Lance's clips one smoothing level softer than the other videos
-        music_style = "enhanced",  -- "original" (OPL2), "enhanced" (stereo FM) or "soundfont" (Options > ADVANCED)
+        music_style = "enhanced",  -- "original" (OPL2), "enhanced" (stereo FM) or "soundfont" or "edm" (Options > ADVANCED)
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run
     }

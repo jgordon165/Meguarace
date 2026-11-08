@@ -10,6 +10,11 @@
 //              (TinySoundFont, MIT) instead of the chip: each FM instrument
 //              mapped to a GM program or drum (formats/gm_map.h), with the
 //              same reverb.
+//   Edm        a remix on the same SoundFont: layered synths (detuned saw
+//              leads, acid bass over a sine sub, sweep pads), the Dance drum
+//              kit with claps on the snares and a four-on-the-floor kick,
+//              everything else pumping to the kick (sidechain), a ping-pong
+//              delay in time with the song, a bigger reverb, a brighter EQ.
 // No SDL, so the tests render it directly; the mixer (audio.cpp) calls
 // render() from the audio thread.
 
@@ -21,7 +26,7 @@
 #include <string>
 #include <vector>
 
-enum class MusicStyle { Original = 0, Enhanced = 1, SoundFont = 2 };
+enum class MusicStyle { Original = 0, Enhanced = 1, SoundFont = 2, Edm = 3 };
 
 // A SoundFont (.sf2), loaded once and shared: each song plays on a cheap
 // copy that shares the samples.
@@ -39,7 +44,7 @@ private:
 
 class FmMusic {
 public:
-    // SoundFont without a bank plays Enhanced (style() says which).
+    // SoundFont and Edm without a bank play Enhanced (style() says which).
     explicit FmMusic(MusicStyle style = MusicStyle::Original, std::shared_ptr<SoundFontBank> bank = nullptr);
     ~FmMusic();
 
@@ -70,10 +75,14 @@ private:
     void render_sf(int32_t* out, int frames, int rate, float gain);
     void sf_setup(int rate);
     void sf_events(bool notes);
+    void edm_note_on(int track, int program, int key, float gain);
+    void edm_mix(int frames, const std::vector<int>& kicks);
 
     MusicStyle style_;
     std::shared_ptr<SoundFontBank> bank_;
-    void* sf_ = nullptr;                     // tsf* (this song's copy)
+    void* sf_ = nullptr;                     // tsf* (this song's copy; Edm: the synths)
+    void* drums_ = nullptr;                  // Edm: tsf* for the drums (their own bus)
+    bool edm_ = false;
     std::unique_ptr<Chip2> chip2_;
     std::unique_ptr<Chip3> chip3_;
     herad::Song song_;
@@ -89,8 +98,17 @@ private:
     // SoundFont
     struct Voice { int program = -1, drum = -1, shift = 0; };
     std::vector<Voice> gm_;        // per song instrument
-    struct Held { int ch = -1, key = -1; };
+    struct Held { int n = 0; bool drum = false; int ch[3] = {-1, -1, -1}, key[3] = {-1, -1, -1}; };
     Held held_[9];
+    std::vector<int> chPreset_;    // bank * 128 + program on each channel (Edm layers)
+    uint32_t lastPos_ = 0xFFFFFFFFu, lastDrumPos_ = 0xFFFFFFFFu;
+    bool kickNow_ = false;
+    double duck_ = 1e9;            // Edm: samples since the last kick
+    double beat_ = 0.5;            // seconds per beat (24 sequencer ticks)
+    musicfx::Chain drumFx_;
+    musicfx::PingPong delay_;
+    std::vector<float> buf2_;
+    std::vector<int> kicks_;
     int chProgram_[9] = {-1, -1, -1, -1, -1, -1, -1, -1, -1};
     int sfRate_ = 0;
     musicfx::Chain fx_;

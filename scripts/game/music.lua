@@ -12,7 +12,8 @@
 --
 -- Styles (Options > ADVANCED > MUSIC, audio.music_style): ORIGINAL, the OPL2
 -- as on a Sound Blaster; ENHANCED, the same FM in stereo with EQ and reverb;
--- SOUNDFONT, the notes played by a General MIDI SoundFont.
+-- SOUNDFONT, the notes played by a General MIDI SoundFont; EDM, a remix on
+-- that SoundFont (layered synths, dance drums, sidechain, synced delay).
 
 local M = {}
 
@@ -41,7 +42,7 @@ M.GM = {
     -- NEWSAN = { [4] = 81, [13] = M.DRUM + 36 },
 }
 
-M.STYLES = { "original", "enhanced", "soundfont" }
+M.STYLES = { "original", "enhanced", "soundfont", "edm" }
 
 M.enabled = true
 local current = nil          -- song id playing, or nil
@@ -81,7 +82,7 @@ end
 
 function M.playing() return current end
 
--- The music style: "original", "enhanced" or "soundfont" (others: enhanced).
+-- The music style: "original", "enhanced", "soundfont" or "edm" (others: enhanced).
 function M.set_style(style)
     local ok = false
     for _, s in ipairs(M.STYLES) do ok = ok or s == style end

@@ -27,6 +27,11 @@ constexpr float CENTRE = 0.74f, NEAR = 0.92f, FAR = 0.38f;
 // Levels: Enhanced and SoundFont about as loud as Original.
 constexpr float ENHANCED_GAIN = 0.39f;
 constexpr float SF_GAIN = 0.20f * 32767.0f;
+constexpr float SYNTH_BUS = 0.8f, DRUM_BUS = 2.0f;   // the kick on top, as in a dance mix
+constexpr float EDM_DRIVE = 0.22f;             // into the limiter: it catches only the peaks
+constexpr float EDM_GAIN = 0.70f * 32767.0f;
+constexpr int DANCE_KIT = 26;               // GM drum kit numbers as GS banks have them
+constexpr int LAYER_CH = 16;                // Edm: channels 16.. for the synth layers (3 per track)
 }
 
 struct FmMusic::Chip2 : ymfm::ymfm_interface {
@@ -54,17 +59,27 @@ SoundFontBank::~SoundFontBank() {
 // ------------------------------------------------------------------ FmMusic --
 
 FmMusic::FmMusic(MusicStyle style, std::shared_ptr<SoundFontBank> bank) : style_(style), bank_(std::move(bank)) {
-    if (style_ == MusicStyle::SoundFont) {
-        if (bank_ && bank_->synth()) sf_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
-        if (!sf_) style_ = MusicStyle::Enhanced;
+    if (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Edm) {
+        if (bank_ && bank_->synth()) {
+            sf_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
+            if (style_ == MusicStyle::Edm) drums_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
+        }
+        if (!sf_ || (style_ == MusicStyle::Edm && !drums_)) {
+            if (sf_) tsf_close(static_cast<tsf*>(sf_));
+            sf_ = nullptr;
+            style_ = MusicStyle::Enhanced;
+        }
+        edm_ = style_ == MusicStyle::Edm;
     }
     if (style_ == MusicStyle::Original) chip2_ = std::make_unique<Chip2>();
     if (style_ == MusicStyle::Enhanced) chip3_ = std::make_unique<Chip3>();
-    if (sf_) tsf_set_max_voices(static_cast<tsf*>(sf_), 96);   // no allocations on the audio thread
+    if (sf_) tsf_set_max_voices(static_cast<tsf*>(sf_), edm_ ? 160 : 96);   // no allocations on the audio thread
+    if (drums_) tsf_set_max_voices(static_cast<tsf*>(drums_), 48);
 }
 
 FmMusic::~FmMusic() {
     if (sf_) tsf_close(static_cast<tsf*>(sf_));
+    if (drums_) tsf_close(static_cast<tsf*>(drums_));
 }
 
 double FmMusic::chip_rate() { return double(OPL2_CLOCK) / 72.0; }
@@ -110,8 +125,15 @@ bool FmMusic::load(const uint8_t* data, size_t size, bool loop, uint32_t start, 
             else if (o >= 0) gm_[i] = Voice{o, -1, map[i].drum >= 0 ? 0 : map[i].shift};
         }
         tsf_reset(static_cast<tsf*>(sf_));
+        if (drums_) tsf_reset(static_cast<tsf*>(drums_));
         for (auto& h : held_) h = Held{};
         for (auto& p : chProgram_) p = -1;
+        chPreset_.assign(LAYER_CH + 3 * VOICES, -1);
+        kicks_.reserve(256);
+        lastPos_ = lastDrumPos_ = 0xFFFFFFFFu;
+        kickNow_ = false;
+        duck_ = 1e9;
+        beat_ = 24.0 * song_.speed / (herad::Song::TIMER_HZ * 256.0);
         sfRate_ = 0;
         player_->set_events(&events_);
     }
@@ -210,10 +232,21 @@ void FmMusic::render_chip3(int32_t* out, int frames, int rate, float gain) {
 void FmMusic::sf_setup(int rate) {
     tsf* f = static_cast<tsf*>(sf_);
     tsf_set_output(f, TSF_STEREO_INTERLEAVED, rate, 0.0f);
-    tsf_channel_set_presetnumber(f, DRUMS, 0, 1);
-    for (int c = 0; c < VOICES; ++c) tsf_channel_set_pitchrange(f, c, 2.0f);
-    for (int c = 0; c < VOICES; ++c) if (chProgram_[c] >= 0) tsf_channel_set_presetnumber(f, c, chProgram_[c], 0);
-    fx_.init(rate, 0.0f, 0.0f, 0.6f, 0.5f, 0.14f);
+    if (!edm_) {
+        tsf_channel_set_presetnumber(f, DRUMS, 0, 1);
+        for (int c = 0; c < VOICES; ++c) tsf_channel_set_pitchrange(f, c, 2.0f);
+        for (int c = 0; c < VOICES; ++c) if (chProgram_[c] >= 0) tsf_channel_set_presetnumber(f, c, chProgram_[c], 0);
+        fx_.init(rate, 0.0f, 0.0f, 0.6f, 0.5f, 0.14f);
+    } else {
+        tsf* d = static_cast<tsf*>(drums_);
+        tsf_set_output(d, TSF_STEREO_INTERLEAVED, rate, 0.0f);
+        if (!tsf_channel_set_bank_preset(d, DRUMS, 128, DANCE_KIT)) tsf_channel_set_presetnumber(d, DRUMS, 0, 1);
+        chPreset_.assign(chPreset_.size(), -1);          // set again at the new rate
+        // Synths: a bigger, brighter room; drums: punchy, nearly dry.
+        fx_.init(rate, 0.0f, 2.5f, 0.85f, 0.4f, 0.20f);
+        drumFx_.init(rate, 4.0f, 2.0f, 0.4f, 0.5f, 0.05f);
+        delay_.init(int(0.75 * beat_ * rate), 0.38f, 0.24f);   // dotted eighth
+    }
     sfRate_ = rate;
 }
 
@@ -230,8 +263,74 @@ static float note_gain(const herad::Instrument& in, uint8_t vel) {
     return std::clamp(float(std::pow(10.0, -0.75 * att / 20.0)), 0.03f, 1.0f);
 }
 
+namespace {
+// Edm: what plays a GM program. Up to three layers, each its own channel.
+struct Layer { int bank, program, shift; float tune, pan, gain; };
+
+int edm_layers(int program, Layer* out) {
+    if (program >= 32 && program <= 39) {                   // bass: acid over a sine sub
+        out[0] = {8, 38, 0, 0.0f, 0.5f, 0.6f};
+        out[1] = {8, 80, -12, 0.0f, 0.5f, 0.45f};
+        return 2;
+    }
+    if ((program >= 80 && program <= 87) || program == 62 || program == 63) {   // leads: supersaw
+        out[0] = {0, 81, 0, -0.14f, 0.15f, 0.55f};
+        out[1] = {0, 81, 0, 0.14f, 0.85f, 0.55f};
+        out[2] = {0, 81, -12, 0.0f, 0.5f, 0.3f};
+        return 3;
+    }
+    if ((program >= 88 && program <= 95) || (program >= 48 && program <= 51)) {   // pads, wide
+        out[0] = {0, 95, 0, -0.08f, 0.2f, 0.6f};
+        out[1] = {0, 90, 0, 0.08f, 0.8f, 0.5f};
+        return 2;
+    }
+    if (program >= 8 && program <= 15) {                    // bells: echo drops
+        out[0] = {0, 102, 0, 0.0f, 0.5f, 0.8f};
+        return 1;
+    }
+    if (program <= 7 || (program >= 24 && program <= 31) || program == 84) {   // keys, plucks: polysynth stabs
+        out[0] = {0, 90, 0, -0.06f, 0.35f, 0.6f};
+        out[1] = {0, 81, 0, 0.06f, 0.65f, 0.4f};
+        return 2;
+    }
+    out[0] = {0, program, 0, 0.0f, 0.5f, 0.8f};
+    return 1;
+}
+}  // namespace
+
+void FmMusic::edm_note_on(int t, int program, int key, float gain) {
+    tsf* f = static_cast<tsf*>(sf_);
+    Layer L[3];
+    const int n = edm_layers(program, L);
+    Held& h = held_[t];
+    h = Held{};
+    for (int i = 0; i < n; ++i) {
+        const int ch = LAYER_CH + 3 * t + i;
+        const int preset = L[i].bank * 128 + L[i].program;
+        if (chPreset_[size_t(ch)] != preset) {
+            chPreset_[size_t(ch)] = preset;
+            if (!tsf_channel_set_bank_preset(f, ch, L[i].bank, L[i].program))
+                tsf_channel_set_presetnumber(f, ch, L[i].program, 0);   // no variation bank: the GM one
+            tsf_channel_set_tuning(f, ch, L[i].tune);
+            tsf_channel_set_pan(f, ch, L[i].pan);
+        }
+        tsf_channel_set_pitchwheel(f, ch, 8192);
+        const int k = std::clamp(key + L[i].shift, 0, 127);
+        tsf_channel_note_on(f, ch, k, gain * L[i].gain);
+        h.ch[i] = ch;
+        h.key[i] = k;
+    }
+    h.n = n;
+}
+
 void FmMusic::sf_events(bool notes) {
     tsf* f = static_cast<tsf*>(sf_);
+    tsf* drum = edm_ ? static_cast<tsf*>(drums_) : f;
+    auto release = [&](Held& h) {
+        if (notes && !h.drum)                                  // drums ring out
+            for (int i = 0; i < h.n; ++i) tsf_channel_note_off(f, h.ch[i], h.key[i]);
+        h = Held{};
+    };
     for (const auto& e : events_) {
         if (e.track >= VOICES || e.inst >= gm_.size()) continue;
         const int t = e.track;
@@ -240,58 +339,120 @@ void FmMusic::sf_events(bool notes) {
         const herad::Instrument& in = song_.instruments[e.inst];
         switch (e.type) {
         case herad::Event::NoteOn: {
-            if (h.ch >= 0 && h.ch != DRUMS && notes) tsf_channel_note_off(f, h.ch, h.key);
-            h = Held{};
+            release(h);
             if (v.program < 0) break;
-            if (v.drum < 0 && chProgram_[t] != v.program) {
+            if (!edm_ && v.drum < 0 && chProgram_[t] != v.program) {
                 chProgram_[t] = v.program;
                 if (sfRate_) tsf_channel_set_presetnumber(f, t, v.program, 0);
             }
             if (!notes || !sfRate_) break;
             const float g = note_gain(in, e.vel);
             if (v.drum >= 0) {
-                tsf_channel_note_on(f, DRUMS, v.drum, g);
-                h = Held{DRUMS, v.drum};
+                tsf_channel_note_on(drum, DRUMS, v.drum, g);
+                if (edm_) {
+                    lastDrumPos_ = player_->position();
+                    if (v.drum == 38 || v.drum == 40) tsf_channel_note_on(drum, DRUMS, 39, g * 0.7f);   // + clap
+                    if (v.drum == 35 || v.drum == 36) kickNow_ = true;
+                }
+                h.drum = true;
+                h.n = 1;
+                h.ch[0] = DRUMS;
+                h.key[0] = v.drum;
+                break;
+            }
+            const int key = std::clamp(herad::midi_key(song_, in, e.note) + v.shift, 0, 127);
+            const float range = (in.slide_coarse & 1) ? 12.8f : 2.0f;
+            if (edm_) {
+                edm_note_on(t, v.program, key, g);
+                for (int i = 0; i < held_[t].n; ++i) tsf_channel_set_pitchrange(f, held_[t].ch[i], range);
             } else {
-                const int key = std::clamp(herad::midi_key(song_, in, e.note) + v.shift, 0, 127);
-                tsf_channel_set_pitchrange(f, t, (in.slide_coarse & 1) ? 12.8f : 2.0f);
+                tsf_channel_set_pitchrange(f, t, range);
                 tsf_channel_set_pitchwheel(f, t, 8192);
                 tsf_channel_note_on(f, t, key, g);
-                h = Held{t, key};
+                h.n = 1;
+                h.ch[0] = t;
+                h.key[0] = key;
             }
             break;
         }
         case herad::Event::NoteOff:
-            if (h.ch >= 0 && h.ch != DRUMS && notes) tsf_channel_note_off(f, h.ch, h.key);   // drums ring out
-            h = Held{};
+            release(h);
             break;
         case herad::Event::Bend:
-            if (h.ch >= 0 && h.ch != DRUMS && notes)
-                tsf_channel_set_pitchwheel(f, t, std::clamp(8192 + (int(e.bend) - 0x40) * 128, 0, 16383));
+            if (notes && !h.drum)
+                for (int i = 0; i < h.n; ++i)
+                    tsf_channel_set_pitchwheel(f, h.ch[i], std::clamp(8192 + (int(e.bend) - 0x40) * 128, 0, 16383));
             break;
         }
     }
     events_.clear();
+    // Edm: four on the floor. A kick on every beat while the song's drums are
+    // playing (within the last two measures), unless the song kicked there.
+    if (edm_ && notes && sfRate_) {
+        const uint32_t pos = player_->position();
+        if (pos != lastPos_) {
+            lastPos_ = pos;
+            const bool drumming = lastDrumPos_ != 0xFFFFFFFFu && pos >= lastDrumPos_ && pos - lastDrumPos_ < 192;
+            if (drumming && pos % 24 == 0 && !kickNow_) {
+                tsf_channel_note_on(drum, DRUMS, 36, 1.0f);
+                kickNow_ = true;
+            }
+        }
+    }
+}
+
+// Edm: synths (in buf_) pump to the kick (kicks: the sample each lands on),
+// then delay and room; drums (in buf2_) their own EQ and room; then the two
+// together through a soft limiter.
+void FmMusic::edm_mix(int frames, const std::vector<int>& kicks) {
+    const double release = 0.6 * beat_ * sfRate_;
+    const float depth = 0.7f;
+    size_t k = 0;
+    for (int i = 0; i < frames; ++i) {
+        while (k < kicks.size() && kicks[k] <= i) { duck_ = 0; ++k; }
+        const double x = duck_ / release;
+        const float g = x < 1.0 ? 1.0f - depth * float((1.0 - x) * (1.0 - x)) : 1.0f;
+        duck_ += 1.0;
+        float& l = buf_[size_t(2 * i)];
+        float& r = buf_[size_t(2 * i + 1)];
+        l *= g;
+        r *= g;
+        delay_.run(l, r);
+    }
+    fx_.run(buf_.data(), frames);
+    drumFx_.run(buf2_.data(), frames);
+    for (size_t i = 0; i < size_t(2 * frames); ++i)
+        buf_[i] = musicfx::soft_clip((buf_[i] * SYNTH_BUS + buf2_[i] * DRUM_BUS) * EDM_DRIVE, 0.7f, 1.0f);
 }
 
 void FmMusic::render_sf(int32_t* out, int frames, int rate, float gain) {
     if (sfRate_ != rate) sf_setup(rate);
     tsf* f = static_cast<tsf*>(sf_);
     buf_.resize(size_t(frames) * 2);
+    if (edm_) buf2_.resize(size_t(frames) * 2);
+    kicks_.clear();
     const double per_tick = double(rate) / herad::Song::TIMER_HZ;
     int done = 0;
     while (done < frames) {
         if (timer_acc_ <= 0) {
             timer_acc_ += per_tick;
             tick_timer();
+            if (kickNow_) { kicks_.push_back(done); kickNow_ = false; }
             continue;
         }
         const int n = std::min(frames - done, std::max(1, int(std::ceil(timer_acc_))));
         tsf_render_float(f, buf_.data() + 2 * done, n, 0);
+        if (edm_) tsf_render_float(static_cast<tsf*>(drums_), buf2_.data() + 2 * done, n, 0);
         timer_acc_ -= n;
         done += n;
     }
-    fx_.run(buf_.data(), frames);
-    const float g = gain * SF_GAIN;
+    float g = gain;
+    if (edm_) {
+        edm_mix(frames, kicks_);
+        g *= EDM_GAIN;
+    } else {
+        fx_.run(buf_.data(), frames);
+        g *= SF_GAIN;
+    }
     for (int i = 0; i < 2 * frames; ++i) out[i] += clamp_out(buf_[size_t(i)] * g);
 }

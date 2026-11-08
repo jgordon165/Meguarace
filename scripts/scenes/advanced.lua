@@ -27,7 +27,10 @@
 --   MUSIC         ORIGINAL (the OPL2 FM chip, as on a Sound Blaster),
 --                 ENHANCED (the same FM in stereo, with EQ and reverb) or
 --                 SOUNDFONT (the notes on a General MIDI SoundFont: the
---                 bundled GeneralUser GS, or a .sf2 of your own).
+--                 bundled GeneralUser GS, or a .sf2 of your own) or
+--                 EDM (a remix on that SoundFont: layered synths, dance
+--                 drums with a four-on-the-floor kick, sidechain pumping,
+--                 a delay in time with the song).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -126,7 +129,7 @@ function S:change(what, dir)
         local i = 1
         for k, s in ipairs(music.STYLES) do if s == audio.music_style() then i = k end end
         st.music_style = music.set_style(music.STYLES[(i - 1 + dir) % #music.STYLES + 1])
-        if st.music_style == "soundfont" and not audio.soundfont() then
+        if (st.music_style == "soundfont" or st.music_style == "edm") and not audio.soundfont() then
             self.note = "NO .SF2 IN A SOUNDFONT FOLDER: PLAYING ENHANCED"
         end
     elseif what == "voice" then

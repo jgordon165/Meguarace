@@ -89,6 +89,41 @@ private:
     float fb_ = 0.84f, damp_ = 0.2f, wet_ = 0.2f;
 };
 
+// Stereo ping-pong delay: the echoes alternate left and right.
+class PingPong {
+public:
+    void init(int samples, float feedback, float wet) {
+        l_.assign(size_t(std::max(1, samples)), 0.f);
+        r_.assign(l_.size(), 0.f);
+        p_ = 0;
+        fb_ = feedback;
+        wet_ = wet;
+    }
+    bool ready() const { return !l_.empty(); }
+    void run(float& l, float& r) {
+        const float yl = l_[p_], yr = r_[p_];
+        l_[p_] = (l + r) * 0.5f + yr * fb_;
+        r_[p_] = yl * fb_;
+        if (++p_ >= l_.size()) p_ = 0;
+        l += yl * wet_;
+        r += yr * wet_;
+    }
+
+private:
+    std::vector<float> l_, r_;
+    size_t p_ = 0;
+    float fb_ = 0.35f, wet_ = 0.25f;
+};
+
+// Soft limiter: unity below `knee`, then a tanh curve that never passes `ceiling`.
+inline float soft_clip(float x, float knee, float ceiling) {
+    const float a = std::fabs(x);
+    if (a <= knee) return x;
+    const float room = ceiling - knee;
+    const float y = knee + room * std::tanh((a - knee) / room);
+    return x < 0 ? -y : y;
+}
+
 // EQ then reverb, on interleaved stereo floats.
 class Chain {
 public:
@@ -101,6 +136,11 @@ public:
         rev_.set(room, damp, wet);
     }
     int rate() const { return rate_; }
+    Reverb& reverb() { return rev_; }
+    void eq(float& l, float& r) {
+        l = high_.run(0, low_.run(0, l));
+        r = high_.run(1, low_.run(1, r));
+    }
     void run(float* lr, int frames) {
         for (int i = 0; i < frames; ++i) {
             float l = lr[2 * i], r = lr[2 * i + 1];

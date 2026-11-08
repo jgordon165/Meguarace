@@ -25,7 +25,8 @@ public:
     bool playSong(const uint8_t* data, size_t len, bool loop, const std::vector<int>& gm = {});
     // The music style (fm.h). Switching carries on the song that's playing
     // from where it is. SoundFont loads the first .sf2 found in the folders
-    // given to setSoundFontDirs (once); without one it plays Enhanced.
+    // given to setSoundFontDirs (once); without one it plays Enhanced. Edm
+    // too (it's a remix on the same SoundFont).
     void setMusicStyle(MusicStyle s);
     MusicStyle musicStyle() const { return style_; }
     void setSoundFontDirs(std::vector<std::string> dirs) { sfDirs_ = std::move(dirs); }
