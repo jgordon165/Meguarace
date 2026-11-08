@@ -25,6 +25,9 @@ local hud    = require("race.hud")
 local font   = require("ui.rawfont")
 local music  = require("game.music")
 local S = {}
+-- Options > ADVANCED > TRACK SPEED: how much faster than the original the
+-- track video scrolls (1.0, or 1.25: +25%). Set from the settings.
+S.track_speed = 1.0
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
@@ -184,7 +187,7 @@ function S:update(dt)
 
     -- Scenery: fixed rate while moving.
     local moving = s.speed > 0
-    if moving then self.pos = self.pos + TRACK_FPS * dt end
+    if moving then self.pos = self.pos + TRACK_FPS * S.track_speed * dt end
     -- Curvature: once per video frame (RACEPRG 0x1838).
     local fnow = math.floor(self.pos)
     while self.curv_frame < fnow do
