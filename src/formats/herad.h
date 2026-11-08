@@ -20,6 +20,17 @@ struct Write {
     uint8_t val;
 };
 
+// A musical event, alongside the register writes (for synths other than the
+// OPL: the SoundFont mode). `inst` is the instrument that sounds (a keymap
+// already resolved to its entry), `note` the song's own note number.
+struct Event {
+    enum Type : uint8_t { NoteOn, NoteOff, Bend };
+    Type type;
+    uint8_t track;
+    uint8_t note = 0, vel = 0, inst = 0;
+    uint8_t bend = 0x40;     // Bend (and NoteOn: 0x40)
+};
+
 // One 40-byte instrument record. Signed fields are macro sensitivities.
 struct Instrument {
     int8_t  mode = 0;          // 0/1 = instrument, 4 = AGD, -1 = keymap (v2)
@@ -66,6 +77,9 @@ public:
     bool timer(std::vector<Write>& out);
 
     uint32_t position() const { return ticks_; }   // sequencer ticks played
+    // Also report note events here (nullptr: none). Cleared by nobody: the
+    // caller takes them after each timer().
+    void set_events(std::vector<Event>* ev) { ev_ = ev; }
     int loops() const { return loops_; }
 
 private:
@@ -94,6 +108,7 @@ private:
     const Song& s_;
     bool loop_;
     std::vector<Write>* out_ = nullptr;
+    std::vector<Event>* ev_ = nullptr;
     int32_t time_ = 0;                // timer divider accumulator (16-bit in the driver)
     uint32_t ticks_ = 0;              // ticks played; starts at -1 (one spare tick)
     uint32_t total_ = 0;

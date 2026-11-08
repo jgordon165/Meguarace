@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cctype>
 #include <cstring>
+#include <filesystem>
 
 bool Audio::init() {
     if (!SDL_WasInit(SDL_INIT_AUDIO)) return false;
@@ -60,10 +62,58 @@ bool Audio::playMusicWav(const std::string& hostPath, bool loop) {
     return true;
 }
 
-bool Audio::playSong(const uint8_t* data, size_t len, bool loop) {
+std::string Audio::soundFontPath() {
+    if (bank_) return bank_->path();
+    std::error_code ec;
+    for (const auto& d : sfDirs_) {
+        if (d.empty() || !std::filesystem::is_directory(d, ec)) continue;
+        std::vector<std::string> found;
+        for (const auto& e : std::filesystem::directory_iterator(d, ec)) {
+            std::string ext = e.path().extension().string();
+            for (auto& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
+            if (ext == ".sf2" && e.is_regular_file(ec)) found.push_back(e.path().string());
+        }
+        if (!found.empty()) { std::sort(found.begin(), found.end()); return found.front(); }
+    }
+    return "";
+}
+
+std::shared_ptr<SoundFontBank> Audio::bank() {
+    if (!bank_ && !bankTried_) {
+        bankTried_ = true;
+        const std::string p = soundFontPath();
+        if (!p.empty()) {
+            bank_ = SoundFontBank::load(p);
+            if (bank_) std::printf("SoundFont: %s\n", p.c_str());
+            else std::fprintf(stderr, "SoundFont %s: can't read it\n", p.c_str());
+        }
+    }
+    return bank_;
+}
+
+void Audio::setMusicStyle(MusicStyle s) {
+    if (s == style_) return;
+    style_ = s;
+    if (!dev_ || songBytes_.empty()) return;
+    uint32_t at = 0;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        if (!song_ || !song_->playing() || songFadeTotal_) return;
+        at = song_->position();
+    }
+    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) ? bank() : nullptr);
+    if (!m->load(songBytes_.data(), songBytes_.size(), songLoop_, at, &songGm_)) return;
+    std::lock_guard<std::mutex> lk(mtx_);
+    song_.swap(m);
+}
+
+bool Audio::playSong(const uint8_t* data, size_t len, bool loop, const std::vector<int>& gm) {
     if (!dev_) return false;
-    auto m = std::make_unique<FmMusic>();
-    if (!m->load(data, len, loop)) return false;
+    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) ? bank() : nullptr);
+    if (!m->load(data, len, loop, 0, &gm)) return false;
+    songBytes_.assign(data, data + len);
+    songLoop_ = loop;
+    songGm_ = gm;
     {
         std::lock_guard<std::mutex> lk(mtx_);
         song_.swap(m);

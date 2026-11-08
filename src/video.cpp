@@ -389,8 +389,8 @@ void Video::setVideoRepeat(int n) {
 
 // The video layer's whole-number scale and the HD layer's smaller copy, for
 // the current mode and smoothing. Off: the same sharp scale as the game
-// layer (or 3 at most, LINE TRIPLED). Subtle: about 3/5 of the sharp scale
-// (1080p: 3x4 instead of 5x6), more: one less, max: 1 (straight to linear).
+// layer (or 3 at most, LINE TRIPLED). Subtle: about 3/5 of that (1080p line
+// doubled: 4x3 instead of 6x5), more: one less, max: below the original size.
 void Video::createSmoothingTextures() {
     for (SDL_Texture** t : {&videoScaled_, &hdSmall_})
         if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
@@ -398,14 +398,20 @@ void Video::createSmoothingTextures() {
     const Mode& m = mode();
     auto factor = [&](int pic, int canvas) {
         int sharp = (pic + canvas - 1) / canvas;
+        // Each level steps down from the style's own repeat, so every level
+        // shows in LINE TRIPLED too (3: subtle 2, more 1).
         int base = videoRepeat_ > 0 ? std::min(sharp, videoRepeat_) : sharp;
-        int subtle = std::max(1, (sharp * 3 + 2) / 5);
-        int k = smoothing_ == 0 ? base : smoothing_ == 1 ? subtle : smoothing_ == 2 ? std::max(1, subtle - 1) : 1;
-        return std::min(k, base);
+        int subtle = std::max(1, (base * 3 + 2) / 5);
+        if (subtle == base && base > 1) subtle = base - 1;
+        return smoothing_ == 0 ? base : smoothing_ == 1 ? subtle : std::max(1, subtle - 1);
     };
     (void)m;
+    // MAX: below the original size (0.7), filtered on the way down and up.
+    const bool max = smoothing_ == 3;
+    if (videoTexture_) SDL_SetTextureScaleMode(videoTexture_, max ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
     videoScaled_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
-                                     cw_ * factor(picCurW_, cw_), h_ * factor(picCurH_, h_));
+                                     max ? std::max(1, cw_ * 7 / 10) : cw_ * factor(picCurW_, cw_),
+                                     max ? std::max(1, h_ * 7 / 10) : h_ * factor(picCurH_, h_));
     if (videoScaled_) {
         SDL_SetTextureScaleMode(videoScaled_, SDL_ScaleModeLinear);
         SDL_SetTextureBlendMode(videoScaled_, SDL_BLENDMODE_BLEND);
