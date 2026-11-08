@@ -36,6 +36,9 @@ struct ConvertOptions {
     // Sprite sets: an unsharp mask on the finished pictures (0 = none):
     // amount, over a Gaussian of sharpenRadius picture pixels.
     float sharpen = 0, sharpenRadius = 1.5f;
+    // Pixel grain: this much of the original pixels (line doubled, the sharp
+    // upscale) mixed back into the finished pictures, 0..1 (menu screens).
+    float grain = 0;
     std::function<void(int done, int total)> progress;
 };
 

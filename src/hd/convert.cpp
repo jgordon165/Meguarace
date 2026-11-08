@@ -370,6 +370,23 @@ static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const st
 
 static void unsharp(std::vector<uint32_t>& px, int W, int H, float radius, float amount);   // below
 
+// Mixes `amount` of the original (w x h, line doubled to W x H) into the
+// picture's colours; alpha kept.
+static void addGrain(std::vector<uint32_t>& px, const std::vector<uint32_t>& orig, int w, int h, int W, int H,
+                     float amount) {
+    if (amount <= 0 || orig.empty()) return;
+    const auto o = resampleSharp(orig, w, h, W, H);
+    const int a = int(std::lround(std::clamp(amount, 0.0f, 1.0f) * 256));
+    for (size_t i = 0; i < px.size() && i < o.size(); ++i) {
+        uint32_t out = px[i] & 0xFF000000u;
+        for (int sh = 0; sh <= 16; sh += 8) {
+            int p = int((px[i] >> sh) & 0xFF), q = int((o[i] >> sh) & 0xFF);
+            out |= uint32_t(p + (((q - p) * a) >> 8)) << sh;
+        }
+        px[i] = out;
+    }
+}
+
 bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
                   const ConvertOptions& opt, std::string& err) {
     HnmVideo probe;
@@ -383,6 +400,7 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
                      : opt.upscaler == ConvertOptions::Upscaler::Smooth ? kUpscalerSmooth : kUpscalerSharp;
     h.frames = uint32_t(total);
     h.sharpened = opt.sharpen > 0;
+    h.grained = opt.grain > 0;
     h.sourceCrc = crc32(hnm.data(), hnm.size());
     const std::string part = outPath + ".part";
     PackWriter w;
@@ -397,6 +415,8 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
         // Real-ESRGAN upscales the batch 4x on the GPU; the rest (resize to
         // the picture size, encode) runs on every CPU core.
         int srcW = kW, srcH = kH;
+        std::vector<std::vector<uint32_t>> origs;
+        if (opt.grain > 0) origs = pics;
         if (opt.upscaler == ConvertOptions::Upscaler::RealEsrgan && !pics.empty()) {
             if (!upscaleRealEsrgan(pics, std::vector<std::pair<int, int>>(pics.size(), {kW, kH}), opt, err))
                 return false;
@@ -411,6 +431,7 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
             if (srcW != kW) p = resample(p, srcW, srcH, opt.pictureW, opt.pictureH);
             else p = upscale(opt, p, srcW, srcH, opt.pictureW, opt.pictureH);
             unsharp(p, opt.pictureW, opt.pictureH, opt.sharpenRadius, opt.sharpen);
+            if (!origs.empty()) addGrain(p, origs[size_t(i)], kW, kH, opt.pictureW, opt.pictureH, opt.grain);
             webp[size_t(i)] = encodeWebp(p.data(), opt.pictureW, opt.pictureH, opt.quality);
             p = {};
         });
@@ -698,9 +719,15 @@ bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPa
         }
     }
     pack.sharpened = opt.sharpen > 0 && own;
+    pack.grained = opt.grain > 0 && own;
     if (opt.sharpen > 0 && own && !strip)
         for (auto& im : pack.images)
             if (!im.px.empty()) unsharp(im.px, im.hdW, im.hdH, opt.sharpenRadius, opt.sharpen);
+    if (opt.grain > 0 && own)
+        for (size_t i = 0; i < pack.images.size(); ++i) {
+            auto& im = pack.images[i];
+            if (!im.px.empty()) addGrain(im.px, colours[i], im.w, im.h, im.hdW, im.hdH, opt.grain);
+        }
     return writeSpritePack(outPath, pack, opt.quality, err);
 }
 

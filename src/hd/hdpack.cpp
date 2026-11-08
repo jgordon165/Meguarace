@@ -87,7 +87,7 @@ static std::vector<uint8_t> headerBytes(const PackHeader& h) {
     put(b, uint32_t(h.height), 2);
     put(b, h.frames, 4);
     put(b, h.sourceCrc, 4);
-    put(b, (h.upscaler & 3) | (h.sharpened ? 4u : 0u), 4);
+    put(b, (h.upscaler & 3) | (h.sharpened ? 4u : 0u) | (h.grained ? 8u : 0u), 4);
     return b;
 }
 
@@ -147,6 +147,7 @@ static bool parseHeader(const uint8_t* hdr, PackHeader& h) {
     h.sourceCrc = get(hdr + 18, 4);
     h.upscaler = get(hdr + 22, 4) & 3;
     h.sharpened = (get(hdr + 22, 4) & 4) != 0;
+    h.grained = (get(hdr + 22, 4) & 8) != 0;
     return h.pictureW >= 1 && h.pictureH >= 1 && h.pictureW <= kMaxPicture && h.pictureH <= kMaxPicture &&
            h.width > 0 && h.height > 0 && h.frames <= 1000000;
 }
