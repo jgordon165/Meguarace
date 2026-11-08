@@ -33,8 +33,9 @@
 --                 ENHANCED, the default (a dance remix on that SoundFont:
 --                 layered synths, dance drums with a four-on-the-floor kick,
 --                 sidechain pumping, a delay in time with the song).
---   TRACK SPEED   NORMAL, or +25%: the track video scrolls a quarter faster
---                 in races (the race goes by quicker; the rest is unchanged).
+--   TRACK SPEED   NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how
+--                 much faster the track video scrolls in races (the race goes
+--                 by quicker; the rest is unchanged).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -96,7 +97,7 @@ function S:value(what)
     elseif what == "sides" then return gfx.sides():upper()
     elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
-    elseif what == "track" then return self.state.track_speed == "fast" and "+25%" or "NORMAL"
+    elseif what == "track" then return display.TRACK_SPEED_LABELS[self.state.track_speed] or "NORMAL"
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -142,8 +143,10 @@ function S:change(what, dir)
             self.note = "NO .SF2 IN A SOUNDFONT FOLDER: PLAYING STEREO FM"
         end
     elseif what == "track" then
-        st.track_speed = st.track_speed == "fast" and "normal" or "fast"
-        require("scenes.race").track_speed = st.track_speed == "fast" and 1.25 or 1.0
+        local order, i = display.TRACK_SPEED_ORDER, 1
+        for k, v in ipairs(order) do if v == st.track_speed then i = k end end
+        st.track_speed = order[(i - 1 + dir) % #order + 1]
+        require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter
