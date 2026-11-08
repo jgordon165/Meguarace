@@ -383,8 +383,8 @@ static std::string userDir() {
 bool loadHd(Engine& e) {
     e.hdDir.clear();
     std::string user = userDir();
-    if (e.hdOff || user.empty()) { e.video.disableHd(); return false; }
-    std::string dir = hd::packFolder(user);
+    if (e.hdOff || (user.empty() && e.hdArg.empty())) { e.video.disableHd(); return false; }
+    std::string dir = !e.hdArg.empty() ? e.hdArg : hd::packFolder(user);   // --hd first
     std::error_code ec;
     bool old = false;
     if (std::filesystem::is_directory(dir, ec)) {
@@ -420,6 +420,12 @@ static void setHdFields(lua_State* L, Engine& e) {
 // the default), looks there again and updates sys.hd and the rest. Packs are
 // made by hd-conversion-utility, which writes to the same setting's folder.
 static int sys_hd_folder(lua_State* L) {
+    const Engine& e = E(L);
+    if (!e.hdArg.empty()) {   // --hd: that folder, this session
+        lua_pushstring(L, e.hdArg.c_str());
+        lua_pushstring(L, e.hdArg.c_str());
+        return 2;
+    }
     std::string user = userDir();
     lua_pushstring(L, user.empty() ? "" : hd::configuredFolder(user).c_str());
     lua_pushstring(L, user.empty() ? "" : hd::packFolder(user).c_str());
@@ -1006,5 +1012,6 @@ void registerLuaApi(lua_State* L, Engine& e) {
     setHdFields(L, e);
     lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
     lua_pushboolean(L, e.classic);             lua_setfield(L, -2, "classic");
+    lua_pushstring(L, e.hdArg.c_str());        lua_setfield(L, -2, "hd_arg");
     lua_pop(L, 1);
 }

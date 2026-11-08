@@ -108,6 +108,17 @@ means the default: `hd/` in your Meguarace user folder, next to
 the 3.5–4 GB, then run `hd-conversion-utility`. It writes to the same place, because
 it reads the same setting (`hd.cfg` in the user folder).
 
+Or give the folder on the command line, for both programs, without touching
+the setting:
+
+```
+hd-conversion-utility --data V:\ --out D:\MegaRace\HDPack
+megarace --data V:\ --hd D:\MegaRace\HDPack
+```
+
+With `--hd`, Options > ADVANCED > HD FOLDER shows that folder and can't be
+edited for the session.
+
 Run it once; running it again only redoes videos that changed, or packs made
 by an older version.
 
@@ -145,6 +156,7 @@ depends on the GPU.
 megarace --data V:\                        # packs from the HD folder setting, saved display mode
 megarace --data V:\ --display 1024x768     # this mode, this time
 megarace --data V:\ --no-hd                # original videos, native mode
+megarace --data V:\ --hd D:\HDPack          # packs from this folder, this time
 ```
 
 **F10** switches between the HD packs and LINE DOUBLED (or TRIPLED) within a display
