@@ -2,6 +2,7 @@
 #include "engine.h"
 #include "hd/hdconfig.h"
 #include "hd/hdpack.h"
+#include "hd/sprpack.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -148,6 +149,23 @@ static int gfx_to_display(lua_State* L) {
     return 2;
 }
 
+// gfx.hd_pictures([on]) -> whether the HD pictures (packs) are shown, after
+// setting it if `on` is given. Off: the original videos and menus, line
+// doubled and interpolated (the "line doubled" HD style; F10 switches it too).
+static int gfx_hd_pictures(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setHdOn(lua_toboolean(L, 1) != 0);
+    lua_pushboolean(L, v.hdPicturesOn());
+    return 1;
+}
+
+// gfx.nearest(r, g, b) -> the palette index closest to that colour (1..255).
+static int gfx_nearest(lua_State* L) {
+    lua_pushinteger(L, E(L).video.nearest(int(luaL_checkinteger(L, 1)), int(luaL_checkinteger(L, 2)),
+                                          int(luaL_checkinteger(L, 3))));
+    return 1;
+}
+
 static int gfx_screenshot(lua_State* L) {
     lua_pushboolean(L, E(L).video.saveBmp(luaL_checkstring(L, 1)));
     return 1;
@@ -252,6 +270,7 @@ bool loadHd(Engine& e) {
             if (hd::Pack::peek(f.path().string(), h)) {
                 if (!e.video.enableHd(h.pictureW, h.pictureH)) break;
                 e.hdDir = dir;
+                e.hdUpscaler = hd::upscalerName(h.upscaler);
                 return true;
             }
             old = true;
@@ -268,6 +287,8 @@ static void setHdFields(lua_State* L, Engine& e) {
     lua_pushstring(L, e.hdDir.c_str());        lua_setfield(L, -2, "hd_path");
     lua_pushinteger(L, e.video.hdPictureW());  lua_setfield(L, -2, "hd_width");
     lua_pushinteger(L, e.video.hdPictureH());  lua_setfield(L, -2, "hd_height");
+    lua_pushstring(L, e.video.hdAvailable() ? e.hdUpscaler.c_str() : "");
+    lua_setfield(L, -2, "hd_upscaler");
 }
 
 // sys.hd_folder() -> the setting ("" = the default), the folder it means.
@@ -428,13 +449,13 @@ struct HnmUd {
     int index = -1;                 // last decoded frame
     std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
     std::string name;
-    // Frames drawn from the pack, and drawn from the original because the
-    // palette differed or the pack had no picture (MEGARACE_HD_STATS=1).
-    long hdDraws = 0, paletteMisses = 0, pictureMisses = 0;
+    // Frames drawn from the pack, pixels of those shown original because the
+    // game had changed their colour, frames without a picture (MEGARACE_HD_STATS=1).
+    long hdDraws = 0, recoloured = 0, pictureMisses = 0;
     ~HnmUd() {
         if (pack && std::getenv("MEGARACE_HD_STATS"))
-            std::printf("HD %s: %ld frames from the pack, %ld original (palette), %ld original (no picture)\n",
-                        name.c_str(), hdDraws, paletteMisses, pictureMisses);
+            std::printf("HD %s: %ld frames from the pack (%ld pixels recoloured by the game, shown original), "
+                        "%ld original (no picture)\n", name.c_str(), hdDraws, recoloured, pictureMisses);
     }
 };
 static const char* kHnmMeta = "megarace.hnm";
@@ -473,22 +494,19 @@ static int hnm_decode(lua_State* L) {
 }
 
 // Draws a decoded frame's pixels: from the HD pack when there is a picture
-// for that frame and the screen shows the video's own colours (not mid-fade,
-// not recoloured by the game), else the original pixels.
+// for that frame (pixels whose colour the game has changed since, in a fade
+// or a recoloured index, show the original), else the original pixels.
 static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w, int ht,
                       const uint8_t* px, size_t len, int key) {
     Video& v = h->eng->video;
     if (h->pack && v.hdOn()) {
-        if (!v.paletteMatches(h->video.palette().data(), px, len, key)) {
-            ++h->paletteMisses;
-        } else if (const auto* pic = h->pack->frame(index)) {
-            v.blitHd(ox, oy, fx, fy, w, ht, px, len, key, pic->data(), h->pack->hdWidth(),
-                     h->pack->hdHeight());
+        if (const auto* pic = h->pack->frame(index)) {
+            h->recoloured += v.blitHd(ox, oy, fx, fy, w, ht, px, len, key, pic->data(), h->pack->hdWidth(),
+                                      h->pack->hdHeight(), h->video.palette().data());
             ++h->hdDraws;
             return;
-        } else {
-            ++h->pictureMisses;
         }
+        ++h->pictureMisses;
     }
     v.blit(ox + fx, oy + fy, w, ht, px, len, key);
 }
@@ -590,7 +608,19 @@ static int hnm_open(lua_State* L) {
 // s:draw(i, x, y [, scale=1 [, flip=false]])   (i is 0-based, x/y top-left)
 // s:pixels(i) -> bytes
 
-struct SprUd { SpriteSet set; Engine* eng; };
+struct SprUd {
+    SpriteSet set;
+    Engine* eng;
+    // HD sprite pack (menu sets, made by hd-conversion-utility), if any.
+    std::unique_ptr<hd::SpritePackData> hd;
+    std::string name;
+    long hdDraws = 0, recoloured = 0;
+    ~SprUd() {
+        if (hd && std::getenv("MEGARACE_HD_STATS"))
+            std::printf("HD %s: %ld sprites from the pack (%ld pixels recoloured by the game, shown original)\n",
+                        name.c_str(), hdDraws, recoloured);
+    }
+};
 static const char* kSprMeta = "megarace.spr";
 static SprUd* checkSpr(lua_State* L) { return static_cast<SprUd*>(luaL_checkudata(L, 1, kSprMeta)); }
 
@@ -614,11 +644,27 @@ static int spr_apply_palette(lua_State* L) {
 
 static int spr_draw(lua_State* L) {
     SprUd* s = checkSpr(L);
-    const auto* img = s->set.image(size_t(luaL_checkinteger(L, 2)));
+    const size_t i = size_t(luaL_checkinteger(L, 2));
+    const auto* img = s->set.image(i);
     if (!img) return 0;
-    s->eng->video.sprite(img->pixels.data(), img->w, img->h,
-                         int(luaL_checknumber(L, 3)), int(luaL_checknumber(L, 4)),
-                         luaL_optnumber(L, 5, 1.0), lua_toboolean(L, 6));
+    const int x = int(luaL_checknumber(L, 3)), y = int(luaL_checknumber(L, 4));
+    const double scale = luaL_optnumber(L, 5, 1.0);
+    const bool flip = lua_toboolean(L, 6);
+    Video& v = s->eng->video;
+    // From the HD pack at scale 1, when the screen shows the colours it was
+    // made in (colour packs) or always (indexed packs, coloured as drawn).
+    if (s->hd && scale == 1.0 && v.hdOn() && i < s->hd->images.size()) {
+        const auto& h = s->hd->images[i];
+        if (!h.px.empty() && h.w == img->w && h.h == img->h) {
+            const bool indexed = s->hd->kind == 1;
+            if (v.spriteHd(img->pixels.data(), img->w, img->h, x, y, flip, h.px.data(), h.hdW, h.hdH, indexed,
+                           s->hd->palette.data(), &s->recoloured)) {
+                ++s->hdDraws;
+                return 0;
+            }
+        }
+    }
+    v.sprite(img->pixels.data(), img->w, img->h, x, y, scale, flip);
     return 0;
 }
 
@@ -635,6 +681,7 @@ static int spr_open(lua_State* L) {
     if (name.find('.') == std::string::npos) name += ".HSQ";
     auto d = e.dat.read(name);
     if (!d) { lua_pushnil(L); lua_pushstring(L, "not found"); return 2; }
+    const uint32_t crc = hd::crc32(d->data(), d->size());   // of the set as stored (HD packs match it)
     try {
         if (isHsq(d->data(), d->size())) *d = unHsq(d->data(), d->size());
         auto* s = static_cast<SprUd*>(lua_newuserdatauv(L, sizeof(SprUd), 0));
@@ -644,6 +691,27 @@ static int spr_open(lua_State* L) {
         if (!s->set.load(*d)) { lua_pushnil(L); lua_pushstring(L, "not a sprite set"); return 2; }
     } catch (const std::exception& ex) {
         lua_pushnil(L); lua_pushstring(L, ex.what()); return 2;
+    }
+    // <hd folder>/<NAME>.hds, made from exactly these bytes, at the session's size.
+    std::string stem = hd::safeSpriteStem(name);
+    if (!e.hdDir.empty() && e.video.hdAvailable() && !stem.empty()) {
+        std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hds");
+        std::error_code ec;
+        if (std::filesystem::exists(p, ec)) {
+            auto pack = std::make_unique<hd::SpritePackData>();
+            std::string err;
+            SprUd* s = static_cast<SprUd*>(lua_touserdata(L, -1));
+            if (!hd::readSpritePack(p.string(), crc, *pack, err))
+                std::fprintf(stderr, "HD sprites %s ignored: %s\n", p.string().c_str(), err.c_str());
+            else if (pack->pictureW != e.video.hdPictureW() || pack->pictureH != e.video.hdPictureH() ||
+                     pack->images.size() != s->set.count())
+                std::fprintf(stderr, "HD sprites %s ignored: they don't match the videos or the set\n",
+                             p.string().c_str());
+            else {
+                s->hd = std::move(pack);
+                s->name = stem;
+            }
+        }
     }
     return 1;
 }
@@ -731,7 +799,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
-        {"to_display", gfx_to_display},
+        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},

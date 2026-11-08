@@ -1,8 +1,22 @@
 # HD mode and display modes
 
-MegaRace's videos are 320×200. HD mode plays upscaled versions of them in a
-higher display mode. The game's own drawing (cars, dashboard, text, menus)
-stays pixel-exact on top, and gameplay doesn't change at all.
+MegaRace's videos and menus are 320×200. HD mode shows them upscaled to
+1080p in a higher display mode: the videos, plus the menu graphics (the main
+menu, the options panels, the Hall of Fame and save/key panels, and the menu
+fonts). The rest of the game's own drawing (cars, dashboard, race text) is
+drawn sharp on top, and gameplay doesn't change at all.
+
+## Settings: Options > ADVANCED
+
+In the main menu's OPTIONS panel, press Down past QUIT to reach ADVANCED and
+press Enter. Everything there is saved as it changes, and Esc goes back.
+
+| Setting | |
+|---|---|
+| RESOLUTION | 320×200 (the original), 800×600, 1024×768 or 1920×1080; see below |
+| HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. LINE DOUBLED needs no packs. F10 switches between them while playing. |
+| HD FOLDER | where the packs are (Enter edits it; see below) |
+| VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes
 
@@ -13,7 +27,7 @@ stays pixel-exact on top, and gameplay doesn't change at all.
 | `1024x768` | 1024×768 | 1024×768 | HD videos, scaled down |
 | `1920x1080` | 1920×1080 (whole screen when it doesn't fit a window) | 1440×1080, pillarboxed | HD videos at full size |
 
-Pick one in **Options > DISPLAY** (Left/Right or Enter). It's saved in
+Pick one in **Options > ADVANCED > RESOLUTION** (Left/Right or Enter). It's saved in
 `meguarace.sav`, or you can give it with `--display <mode>`, which takes
 precedence over the saved one. Without a setting the game picks the largest
 mode that fits your desktop. When there are no HD packs, only `native` is
@@ -60,9 +74,9 @@ Real-ESRGAN are all freely redistributable.
 hd-conversion-utility --data V:\
 ```
 
-This writes one `.hdv` pack per video to the **HD folder**, and the game
-reads them from there. The folder is a setting in the game: **Options > HD
-FOLDER** (press Down past QUIT). Press Enter, type or paste (Ctrl+V) a
+This writes one `.hdv` pack per video and one `.hds` pack per menu sprite set
+to the **HD folder**, and the game reads them from there. The folder is a
+setting in the game: **Options > ADVANCED > HD FOLDER**. Press Enter, type or paste (Ctrl+V) a
 folder, then Enter to keep it or Esc to leave it as it was. An empty line
 means the default: `hd/` in your Meguarace user folder, next to
 `meguarace.sav`. Set the folder first, for example on a drive with room for
@@ -85,7 +99,9 @@ playing, so there's only one set of packs.
 
 | Option | |
 |---|---|
-| `--upscaler realesrgan\|builtin` | Real-ESRGAN (GPU, Vulkan) when `realesrgan/realesrgan-ncnn-vulkan` is next to `hd-conversion-utility` (its package bundles it): it upscales 4× to 1280×800, which is then resized to 1440×1080. Otherwise a built-in Catmull-Rom resize straight to 1440×1080, which runs anywhere. |
+| `--upscaler realesrgan` | AI upscaling that adds detail: clean outlines, sharp bevels (the default when `realesrgan/` is next to `hd-conversion-utility`). It uses the GPU through Vulkan, upscaling 4× to 1280×800, which is then resized to 1440×1080. The utility's package bundles it, and so do builds from source (`MEGARACE_FETCH_REALESRGAN`, on by default with the converter). |
+| `--upscaler sharp` | Line doubling and interpolating: each original pixel repeated, only the seams blended. The original, cleanly enlarged; no detail added (the default without Real-ESRGAN). This is also what the game's LINE DOUBLED style shows without any packs. |
+| `--upscaler smooth` | A Catmull-Rom interpolation: softer, a little blurry. |
 | `--model NAME` | Real-ESRGAN model: `realesr-animevideov3` (default), `realesrgan-x4plus` or `realesrgan-x4plus-anime`; its files go in `realesrgan/models`. |
 | `--quality Q\|lossless` | WebP quality (default 90). |
 | `--only PATTERN` | Only some videos, e.g. `--only 'N*.HNM'`. |
@@ -106,8 +122,27 @@ megarace --data V:\ --display 1024x768     # this mode, this time
 megarace --data V:\ --no-hd                # original videos, native mode
 ```
 
-**F10** switches the HD videos on and off within a display mode, to
-compare them with the original videos.
+**F10** switches between the HD packs and LINE DOUBLED within a display
+mode, to compare them; the saved choice is Options > ADVANCED > HD STYLE.
+
+## Menu graphics
+
+`hd-conversion-utility` also upscales the menu sprite sets: PANEL2, KONTROL,
+KONTROL6, CONTROL2, CONTROL4, FONTOPT, FONTOPT2, FONTOPT3 and FONTHALL. That
+takes a few seconds and about 0.5 MB in all. There are two kinds:
+
+- **colour** sets carry a palette that covers every colour they use
+  (PANEL2, KONTROL, CONTROL2). They're upscaled like the videos, with alpha
+  for their edges.
+- **indexed** sets are drawn in the colours of the screen they're on
+  (CONTROL4, KONTROL6, the fonts). Each colour's region is traced smooth, and
+  every HD pixel keeps its palette index, so the engine colours them as it
+  draws and they're always right.
+
+In both, the engine checks pixel by pixel: where the game has changed a
+colour since the picture was made (a fade, an index recoloured for a
+highlight), those pixels show the original, so colours are always as the
+game means them. The same check applies to the videos.
 
 ## How it works
 
@@ -170,8 +205,8 @@ the model weights, so check its terms before a public release.
 
 ## Not done yet
 
-- HD sprites and dashboards (car sprites, HUD and fonts are still drawn at
-  320×200 and scaled up sharp).
+- HD race sprites and dashboard (cars, scanner, HUD are still drawn at
+  320×200 and scaled up sharp; the menus are done).
 - Frame prefetching. Each HD frame is decoded when it is drawn (a few
   milliseconds at x2, more at x4); a decoder thread would take that off the
   frame time.

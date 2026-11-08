@@ -22,5 +22,7 @@ bool setConfiguredFolder(const std::string& userDir, const std::string& folder);
 // (1..8 letters, digits or underscores, then .HNM, any case), upper-cased.
 // Empty for anything else, so a name can never point outside the folder.
 std::string safeVideoStem(const std::string& name);
+// The same for sprite sets: "PANEL2" or "PANEL2.HSQ" -> "PANEL2"; else empty.
+std::string safeSpriteStem(const std::string& name);
 
 }  // namespace hd

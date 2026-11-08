@@ -4,6 +4,7 @@
 #include "formats/cryo.h"
 #include "hd/convert.h"
 #include "hd/hdpack.h"
+#include "hd/sprpack.h"
 
 #include <cstdio>
 #include <cstring>
@@ -34,6 +35,64 @@ static void testModels() {
     // Only known Real-ESRGAN model names reach its command line.
     CHECK(hd::knownModel("realesr-animevideov3") != nullptr);
     CHECK(hd::knownModel("x; rm -rf /") == nullptr && hd::knownModel("") == nullptr);
+}
+
+static void testSharp() {
+    // Line doubled and interpolated: a flat picture stays flat, and away from
+    // the seams every pixel is exactly the original's.
+    std::vector<uint32_t> flat(size_t(320 * 200), 0xFF336699u);
+    auto up = hd::resampleSharp(flat, 320, 200, 1440, 1080);
+    CHECK(up.size() == 1440u * 1080u && up[size_t(540) * 1440 + 720] == 0xFF336699u);
+    std::vector<uint32_t> two = {0xFF000000u, 0xFFFFFFFFu};   // 2x1: black, white
+    auto r = hd::resampleSharp(two, 2, 1, 9, 1);               // 4.5x: 4 black, a seam, 4 white
+    CHECK(r[0] == 0xFF000000u && r[3] == 0xFF000000u && r[5] == 0xFFFFFFFFu && r[8] == 0xFFFFFFFFu);
+    CHECK((r[4] & 0xFF) > 100 && (r[4] & 0xFF) < 155);         // the seam pixel: half and half
+    // No ringing: never outside the originals' range (Catmull-Rom overshoots).
+    for (uint32_t v : r) CHECK((v & 0xFF) <= 255);
+}
+
+// A sprite set as stored (see test_formats.cpp): palette block, offsets, raw images.
+static Bytes spriteSet(const Bytes& pal, const std::vector<Bytes>& images) {
+    Bytes f;
+    auto put16 = [&](Bytes& b, unsigned v) { b.push_back(uint8_t(v)); b.push_back(uint8_t(v >> 8)); };
+    put16(f, unsigned(2 + pal.size()));
+    f.insert(f.end(), pal.begin(), pal.end());
+    size_t first = images.size() * 2, at = first;
+    for (const auto& im : images) { put16(f, unsigned(at)); at += im.size(); }
+    for (const auto& im : images) f.insert(f.end(), im.begin(), im.end());
+    return f;
+}
+
+static void testSprites() {
+    // 3x2 raw images (w, 0, h, 0xFF, pixels).
+    Bytes a = {3, 0, 2, 0xFF, 0, 5, 5, 5, 6, 0};
+    // Colour: its palette defines 5 and 6.
+    Bytes own = spriteSet({5, 2, 63, 0, 0, 0, 63, 0, 0xFF, 0xFF}, {a});
+    // Indexed: no palette; colours from the screen.
+    Bytes other = spriteSet({0xFF, 0xFF}, {a});
+    hd::ConvertOptions opt;
+    std::string kind, err;
+    std::string p1 = scratch("own.hds").string(), p2 = scratch("other.hds").string();
+    CHECK(hd::convertSprites(own, p1, opt, kind, err) && kind == "colour");
+    CHECK(hd::convertSprites(other, p2, opt, kind, err) && kind == "indexed");
+    hd::SpritePackData c, i;
+    CHECK(hd::readSpritePack(p1, hd::crc32(own.data(), own.size()), c, err));
+    CHECK(hd::readSpritePack(p2, hd::crc32(other.data(), other.size()), i, err));
+    CHECK(!hd::readSpritePack(p1, 1234, c, err));                         // other bytes: refused
+    CHECK(c.kind == 0 && c.upscaler == hd::kUpscalerSharp && c.images.size() == 1);
+    const auto& ci = c.images[0];
+    CHECK(ci.w == 3 && ci.h == 2 && ci.hdW == hd::hdSpan(3, 1440, 320) && ci.hdH == hd::hdSpan(2, 1080, 200));
+    // Colour pack: top-left is transparent (0), the middle of the top row red.
+    CHECK((ci.px[0] >> 24) < 40);
+    uint32_t mid = ci.px[size_t(ci.hdH / 4) * size_t(ci.hdW) + size_t(ci.hdW / 2)];
+    CHECK((mid >> 24) > 200 && ((mid >> 16) & 0xFF) > 200 && ((mid >> 8) & 0xFF) < 40);
+    CHECK(c.palette[5 * 3] == 255 && c.palette[6 * 3 + 1] == 255);
+    // Indexed pack: the index in red, alpha for the shape.
+    const auto& ii = i.images[0];
+    uint32_t imid = ii.px[size_t(ii.hdH / 4) * size_t(ii.hdW) + size_t(ii.hdW / 2)];
+    CHECK(i.kind == 1 && ((imid >> 16) & 0xFF) == 5 && (imid >> 24) > 200);
+    uint32_t ibot = ii.px[size_t(ii.hdH * 3 / 4) * size_t(ii.hdW) + size_t(ii.hdW / 2)];   // bottom-middle: colour 6
+    CHECK(((ibot >> 16) & 0xFF) == 6);
 }
 
 static void testResample() {
@@ -124,7 +183,7 @@ static void testConvert() {
 }
 
 int main() {
-    for (auto* t : {testModels, testResample, testComposite, testConvert}) t();
+    for (auto* t : {testModels, testSharp, testSprites, testResample, testComposite, testConvert}) t();
     std::error_code ec;
     fs::remove_all(fs::temp_directory_path() / "megarace_hdconvert_tests", ec);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

@@ -36,6 +36,9 @@ static void testConfig() {
     for (const char* bad : {"../B01.HNM", "..\\B01.HNM", "C:B01.HNM", "B01.TXT", ".HNM", "B01", "TOOLONGNAME1.HNM",
                             "B 1.HNM", "/etc/x.HNM"})
         CHECK(hd::safeVideoStem(bad).empty());
+    CHECK(hd::safeSpriteStem("PANEL2") == "PANEL2" && hd::safeSpriteStem("fontopt.hsq") == "FONTOPT");
+    for (const char* bad : {"../PANEL2", "PANEL2.HNM", "", "A/B", "TOOLONGNAME"})
+        CHECK(hd::safeSpriteStem(bad).empty());
     // The folder setting: default, set, cleared.
     fs::path user = scratch("user");
     fs::create_directories(user);

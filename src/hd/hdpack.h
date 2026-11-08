@@ -19,7 +19,7 @@
 //   u32     frame count (same as the HNM's)
 //   u32     CRC-32 of the source .HNM file (a pack only loads over the exact
 //           video it was made from)
-//   u32     flags (reserved, 0)
+//   u32     flags: bits 0-1, the upscaler that made it (kUpscaler*; 0 unknown)
 //   frame count x { u32 offset, u32 size }   size 0: same picture as the
 //                                            previous frame (no video chunk)
 //   WebP images, each picture width x height: the whole composited screen
@@ -37,6 +37,9 @@ constexpr uint16_t kPackVersion = 2;
 // The master size every pack is made at: the 4:3 picture of a 1920x1080 display.
 constexpr int kPictureW = 1440, kPictureH = 1080;
 constexpr int kMaxPicture = 4096;
+// Which upscaler made a pack (video pack flags, sprite pack reserved byte).
+enum : uint32_t { kUpscalerUnknown = 0, kUpscalerRealEsrgan = 1, kUpscalerSharp = 2, kUpscalerSmooth = 3 };
+const char* upscalerName(uint32_t code);   // "REAL-ESRGAN", "SHARP", "SMOOTH" or ""
 
 uint32_t crc32(const uint8_t* d, size_t n);
 
@@ -50,6 +53,7 @@ struct PackHeader {
     int width = 320, height = 200;              // canvas, in original pixels
     uint32_t frames = 0;
     uint32_t sourceCrc = 0;
+    uint32_t upscaler = kUpscalerUnknown;
 };
 
 class PackWriter {

@@ -316,9 +316,13 @@ bool Video::setMode(const std::string& name) {
     return true;
 }
 
-void Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
-                   int transparent, const uint32_t* pic, int picW, int picH) {
-    // Game layer: exactly blit(), marking the pixels drawn as showing HD.
+long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
+                   int transparent, const uint32_t* pic, int picW, int picH, const uint8_t* baked) {
+    bool changed[256];
+    changedColours(baked, changed);
+    long recoloured = 0;
+    // Game layer: exactly blit(), marking the pixels drawn as showing HD
+    // (except those whose colour isn't the picture's any more).
     for (int yy = 0; yy < h; ++yy) {
         for (int xx = 0; xx < w; ++xx) {
             size_t i = static_cast<size_t>(yy) * w + xx;
@@ -328,16 +332,17 @@ void Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
             if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
             size_t p = size_t(Y) * w_ + X;
             fb_[p] = src[i];
-            src_[p] = 1;
+            src_[p] = changed[src[i]] ? 0 : 1;
+            recoloured += changed[src[i]];
         }
     }
-    if (picW != picW_ || picH != picH_) return;   // the engine refuses such packs; be safe
+    if (picW != picW_ || picH != picH_) return recoloured;   // the engine refuses such packs; be safe
     // HD layer: the frame's rectangle of the picture, at its place on screen.
     // Picture and screen map the same way: x * picW / 320, y * picH / 200.
     auto mx = [&](int x) { return int(int64_t(x) * picW / w_); };
     auto my = [&](int y) { return int(int64_t(y) * picH / h_); };
     int x0 = std::max(fx, 0), x1 = std::min(fx + w, w_), y0 = std::max(fy, 0), y1 = std::min(fy + h, h_);
-    if (x0 >= x1 || y0 >= y1) return;
+    if (x0 >= x1 || y0 >= y1) return recoloured;
     int sx0 = mx(x0), sx1 = mx(x1), sy0 = my(y0), sy1 = my(y1);
     int dx0 = mx(ox + x0), dy0 = my(oy + y0);
     for (int r = sy0; r < sy1; ++r) {
@@ -351,17 +356,86 @@ void Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
                     size_t(b - a) * 4);
     }
     hdDirty_ = true;
+    return recoloured;
 }
 
-bool Video::paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const {
-    bool used[256] = {};
-    for (size_t i = 0; i < n; ++i) used[px[i]] = true;
-    for (int c = 0; c < 256; ++c) {
-        if (!used[c] || c == transparent) continue;
-        uint32_t want = 0xFF000000u | uint32_t(rgb[c * 3]) << 16 | uint32_t(rgb[c * 3 + 1]) << 8 | rgb[c * 3 + 2];
-        if (pal_[size_t(c)] != want) return false;
+bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
+                     const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
+                     long* recoloured) {
+    if (!hdOn() || clipOn_ || w <= 0 || h <= 0 || hdW <= 0 || hdH <= 0) return false;
+    // Screen <-> picture: x * picW / 320, rounded down (also for negatives).
+    auto fdiv = [](int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); };
+    auto mx = [&](int v) { return fdiv(int64_t(v) * picW_, w_); };
+    auto my = [&](int v) { return fdiv(int64_t(v) * picH_, h_); };
+    const int x0 = std::max(x, 0), x1 = std::min(x + w, w_), y0 = std::max(y, 0), y1 = std::min(y + h, h_);
+    if (x0 >= x1 || y0 >= y1) return true;   // off screen: nothing to draw either way
+    const size_t PW = size_t(picW_);
+    // 1. Under the sprite, where the HD layer doesn't already show something
+    //    (an HD video, an HD sprite), put the screen's own pixels into it.
+    for (int Y = y0; Y < y1; ++Y)
+        for (int X = x0; X < x1; ++X) {
+            size_t p = size_t(Y) * w_ + X;
+            if (src_[p]) continue;
+            uint32_t c = pal_[fb_[p]] | 0xFF000000u;
+            for (int r = my(Y); r < my(Y + 1); ++r)
+                std::fill(&hd_[size_t(r) * PW + size_t(mx(X))], &hd_[size_t(r) * PW + size_t(mx(X + 1))], c);
+        }
+    // 2. The HD image over it, alpha-blended.
+    const int ox = mx(x), oy = my(y);
+    for (int j = 0; j < hdH; ++j) {
+        int Y = oy + j;
+        if (Y < 0 || Y >= picH_) continue;
+        for (int i = 0; i < hdW; ++i) {
+            int X = ox + i;
+            if (X < 0 || X >= picW_) continue;
+            uint32_t s = hdPx[size_t(j) * size_t(hdW) + size_t(flip ? hdW - 1 - i : i)];
+            uint32_t a = s >> 24;
+            if (!a) continue;
+            uint32_t c = indexed ? pal_[(s >> 16) & 0xFF] : s;
+            uint32_t& d = hd_[size_t(Y) * PW + size_t(X)];
+            if (a == 255) { d = c | 0xFF000000u; continue; }
+            auto mix = [&](int sh) {
+                uint32_t sc = (c >> sh) & 0xFF, dc = (d >> sh) & 0xFF;
+                return ((sc * a + dc * (255 - a) + 127) / 255) << sh;
+            };
+            d = 0xFF000000u | mix(16) | mix(8) | mix(0);
+        }
     }
+    // 3. The original pixels as always (masks, pget and screenshots see
+    //    them), then the whole rectangle shows the HD layer.
+    sprite(px, w, h, x, y, 1.0, flip);
+    bool changed[256] = {};
+    if (!indexed) changedColours(baked, changed);
+    for (int Y = y0; Y < y1; ++Y)
+        for (int X = x0; X < x1; ++X) {
+            int sx = X - x, sy = Y - y;
+            if (flip) sx = w - 1 - sx;
+            uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
+            bool orig = c && changed[c];   // recoloured since the image was made: the original pixel
+            src_[size_t(Y) * w_ + size_t(X)] = orig ? 0 : 1;
+            if (orig && recoloured) ++*recoloured;
+        }
+    hdDirty_ = true;
     return true;
+}
+
+int Video::nearest(int r, int g, int b) const {
+    int best = 1;
+    long bestD = -1;
+    for (int c = 1; c < 256; ++c) {
+        uint32_t v = pal_[size_t(c)];
+        long dr = long((v >> 16) & 0xFF) - r, dg = long((v >> 8) & 0xFF) - g, db = long(v & 0xFF) - b;
+        long d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;   // weighted, roughly as the eye sees it
+        if (bestD < 0 || d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+}
+
+void Video::changedColours(const uint8_t* baked, bool changed[256]) const {
+    for (int c = 0; c < 256; ++c) {
+        uint32_t want = 0xFF000000u | uint32_t(baked[c * 3]) << 16 | uint32_t(baked[c * 3 + 1]) << 8 | baked[c * 3 + 2];
+        changed[c] = (pal_[size_t(c)] | 0xFF000000u) != want;
+    }
 }
 
 void Video::convert() {

@@ -37,12 +37,9 @@ bool setConfiguredFolder(const std::string& userDir, const std::string& folder) 
     return bool(out);
 }
 
-std::string safeVideoStem(const std::string& name) {
-    if (name.size() < 5 || name.size() > 12) return "";
-    std::string ext = name.substr(name.size() - 4);
-    for (auto& c : ext) c = char(std::toupper(static_cast<unsigned char>(c)));
-    if (ext != ".HNM") return "";
-    std::string stem = name.substr(0, name.size() - 4);
+// 1..8 letters, digits or underscores, upper-cased; else empty.
+static std::string plainStem(std::string stem) {
+    if (stem.empty() || stem.size() > 8) return "";
     for (auto& c : stem) {
         unsigned char u = static_cast<unsigned char>(c);
         if (!std::isalnum(u) && u != '_') return "";
@@ -50,5 +47,17 @@ std::string safeVideoStem(const std::string& name) {
     }
     return stem;
 }
+
+static std::string withExtension(const std::string& name, const char* ext, bool optional) {
+    if (name.size() >= 4) {
+        std::string e = name.substr(name.size() - 4);
+        for (auto& c : e) c = char(std::toupper(static_cast<unsigned char>(c)));
+        if (e == ext) return plainStem(name.substr(0, name.size() - 4));
+    }
+    return optional ? plainStem(name) : "";
+}
+
+std::string safeVideoStem(const std::string& name) { return withExtension(name, ".HNM", false); }
+std::string safeSpriteStem(const std::string& name) { return withExtension(name, ".HSQ", true); }
 
 }  // namespace hd

@@ -13,8 +13,11 @@ function M.label(name, _, _, hd)
     return name:upper() .. (hd and " HD" or "")
 end
 
--- Applies the saved mode at start, unless --display was given.
+-- Applies the saved HD style and mode at start (the mode unless --display
+-- was given). HD style "line_doubled": the HD modes show the original
+-- videos and menus line doubled and interpolated instead of the packs.
 function M.apply_saved(state)
+    gfx.hd_pictures(state.hd_style ~= "line_doubled")
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))

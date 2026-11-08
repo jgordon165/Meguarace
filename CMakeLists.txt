@@ -75,6 +75,32 @@ FetchContent_Declare(libwebp
 FetchContent_MakeAvailable(libwebp)
 
 if(MEGARACE_HD_CONVERTER)
+    # Real-ESRGAN ncnn-vulkan (MIT; models BSD-3), the upscaler that adds
+    # detail, copied next to hd-conversion-utility as realesrgan/ so local
+    # builds use it like the release packages do. Pinned upstream release.
+    option(MEGARACE_FETCH_REALESRGAN "Download Real-ESRGAN next to hd-conversion-utility" ON)
+    if(MEGARACE_FETCH_REALESRGAN)
+        if(WIN32)
+            set(esrgan_platform windows)
+        elseif(APPLE)
+            set(esrgan_platform macos)
+        else()
+            set(esrgan_platform ubuntu)
+        endif()
+        FetchContent_Declare(realesrgan
+            URL https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-${esrgan_platform}.zip
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_GetProperties(realesrgan)
+        if(NOT realesrgan_POPULATED)
+            FetchContent_Populate(realesrgan)
+        endif()
+        if(NOT WIN32 AND EXISTS "${realesrgan_SOURCE_DIR}/realesrgan-ncnn-vulkan")
+            # Zip archives don't keep the executable bit.
+            file(CHMOD "${realesrgan_SOURCE_DIR}/realesrgan-ncnn-vulkan"
+                 PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+        endif()
+    endif()
+
     # Header-only; pinned to a commit (stb has no release tags).
     FetchContent_Declare(stb
         GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -105,7 +131,7 @@ target_link_libraries(megarace_formats PUBLIC ymfm_opl)
 megarace_warnings(megarace_formats)
 
 # ---- HD packs: read by the game, made by the converter ----------------------------
-add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp)
+add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp src/hd/sprpack.cpp)
 target_include_directories(megarace_hdpack PUBLIC src)
 target_link_libraries(megarace_hdpack PUBLIC webp)
 megarace_warnings(megarace_hdpack)
@@ -123,6 +149,20 @@ if(MEGARACE_HD_CONVERTER)
     add_executable(hd-conversion-utility src/hd/tool.cpp)
     target_link_libraries(hd-conversion-utility PRIVATE megarace_hdconvert SDL2::SDL2-static)
     megarace_warnings(hd-conversion-utility)
+    if(MEGARACE_FETCH_REALESRGAN)
+        # The program, its libraries and the video model's files.
+        file(GLOB esrgan_files "${realesrgan_SOURCE_DIR}/realesrgan-ncnn-vulkan*" "${realesrgan_SOURCE_DIR}/*.dll"
+                               "${realesrgan_SOURCE_DIR}/*.dylib")
+        file(GLOB esrgan_models "${realesrgan_SOURCE_DIR}/models/realesr-animevideov3*")
+        # On every build (cheap: unchanged files aren't copied), so a removed
+        # folder comes back without relinking.
+        add_custom_target(copy_realesrgan ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:hd-conversion-utility>/realesrgan/models
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${esrgan_files} $<TARGET_FILE_DIR:hd-conversion-utility>/realesrgan
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${esrgan_models} $<TARGET_FILE_DIR:hd-conversion-utility>/realesrgan/models
+            COMMENT "Real-ESRGAN next to hd-conversion-utility")
+        add_dependencies(copy_realesrgan hd-conversion-utility)
+    endif()
 endif()
 
 # ---- Engine ----------------------------------------------------------------

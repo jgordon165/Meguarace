@@ -74,15 +74,31 @@ public:
     // HD pictures are shown: an HD mode, packs found, and not switched off (F10).
     bool hdOn() const { return hdAvailable() && hdOn_ && mode().hd; }
     void setHdOn(bool on) { hdOn_ = on; }
+    bool hdPicturesOn() const { return hdOn_; }   // the setting, whatever the mode
     // blit() of a video frame drawn with its top-left at (ox, oy) on screen,
     // its pixels at (fx, fy) in the video, also taking that part of `pic`, the
     // video's whole screen as an HD picture (picW x picH), for the HD layer.
-    void blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
-                int transparent, const uint32_t* pic, int picW, int picH);
-    // True when, for every colour index `px` uses (except `transparent`),
-    // the current palette is `rgb` (768 bytes, 8-bit). HD pictures carry the
-    // video's own colours, so they are only used while the screen shows them.
-    bool paletteMatches(const uint8_t* rgb, const uint8_t* px, size_t n, int transparent) const;
+    // `baked` (768 bytes, 8-bit) is the palette the picture was made with:
+    // pixels whose colour the game has changed since (a fade, a recoloured
+    // index) show the original pixel instead. Returns how many did.
+    long blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
+                int transparent, const uint32_t* pic, int picW, int picH, const uint8_t* baked);
+    // sprite() at scale 1, also drawn into the HD layer from its HD image
+    // (hd::SpriteImage: hdW x hdH, 0xAARRGGBB; `indexed`: the palette index in
+    // RR, coloured from the current palette now). What's under it in the HD
+    // layer is the HD video where there is one, else the screen's own pixels
+    // scaled up, so its smooth edges blend into the right thing. False (and
+    // nothing drawn) when it can't: no HD layer, or a clip mask is on.
+    // Colour images (not indexed) were made with `baked` (768 bytes): pixels
+    // whose colour the game has changed show the original pixel (counted in
+    // *recoloured).
+    bool spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
+                  const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
+                  long* recoloured = nullptr);
+
+    // The palette index (1..255) closest to r, g, b: for text drawn in an
+    // existing colour instead of changing one the artwork uses.
+    int nearest(int r, int g, int b) const;
 
     void present();
     // asShown: the window as shown (in display modes); else the 320x200 screen.
@@ -116,4 +132,6 @@ private:
     void render(bool hdShown);
     bool hdShown() const;
     void destroyModeTextures();
+    // changed[c]: the palette's colour c is no longer `baked`'s.
+    void changedColours(const uint8_t* baked, bool changed[256]) const;
 };

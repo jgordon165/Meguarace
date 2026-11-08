@@ -2,6 +2,7 @@
 
 #include "formats/cryo.h"
 #include "hd/hdpack.h"
+#include "hd/sprpack.h"
 
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -159,6 +160,65 @@ std::vector<uint32_t> resample(const std::vector<uint32_t>& argb, int w, int h, 
     return out;
 }
 
+// Area coverage: output pixel X spans [X*n/N, (X+1)*n/N) in the source;
+// each source pixel weighs by how much of that span it covers. Enlarging,
+// that is the source pixel repeated with only the seams blended.
+static Taps coverage(int n, int N) {
+    Taps t;
+    t.first.resize(size_t(N));
+    t.w.resize(size_t(N));
+    for (int i = 0; i < N; ++i) {
+        double a = double(i) * n / N, b = double(i + 1) * n / N;
+        int lo = int(std::floor(a)), hi = std::min(n - 1, int(std::ceil(b)) - 1);
+        t.first[size_t(i)] = lo;
+        for (int k = lo; k <= hi; ++k)
+            t.w[size_t(i)].push_back(float((std::min(b, double(k + 1)) - std::max(a, double(k))) / (b - a)));
+    }
+    return t;
+}
+
+static std::vector<uint32_t> separable(const std::vector<uint32_t>& argb, int w, int h, int W, int H,
+                                       const Taps& tx, const Taps& ty) {
+    auto clampi = [](int v, int hi) { return v < 0 ? 0 : v > hi ? hi : v; };
+    std::vector<float> tmp(size_t(W) * size_t(h) * 3);
+    for (int y = 0; y < h; ++y)
+        for (int X = 0; X < W; ++X) {
+            float acc[3] = {0, 0, 0};
+            const auto& wt = tx.w[size_t(X)];
+            for (size_t t = 0; t < wt.size(); ++t) {
+                uint32_t c = argb[size_t(y) * size_t(w) + size_t(clampi(tx.first[size_t(X)] + int(t), w - 1))];
+                acc[0] += wt[t] * float((c >> 16) & 0xFF);
+                acc[1] += wt[t] * float((c >> 8) & 0xFF);
+                acc[2] += wt[t] * float(c & 0xFF);
+            }
+            float* o = &tmp[(size_t(y) * size_t(W) + size_t(X)) * 3];
+            o[0] = acc[0]; o[1] = acc[1]; o[2] = acc[2];
+        }
+    std::vector<uint32_t> out(size_t(W) * size_t(H));
+    auto byte = [](float v) { return uint32_t(v <= 0 ? 0 : v >= 255 ? 255 : int(v + 0.5f)); };
+    for (int Y = 0; Y < H; ++Y) {
+        const auto& wt = ty.w[size_t(Y)];
+        for (int X = 0; X < W; ++X) {
+            float acc[3] = {0, 0, 0};
+            for (size_t t = 0; t < wt.size(); ++t) {
+                const float* c = &tmp[(size_t(clampi(ty.first[size_t(Y)] + int(t), h - 1)) * size_t(W) + size_t(X)) * 3];
+                acc[0] += wt[t] * c[0]; acc[1] += wt[t] * c[1]; acc[2] += wt[t] * c[2];
+            }
+            out[size_t(Y) * size_t(W) + size_t(X)] = 0xFF000000u | byte(acc[0]) << 16 | byte(acc[1]) << 8 | byte(acc[2]);
+        }
+    }
+    return out;
+}
+
+std::vector<uint32_t> resampleSharp(const std::vector<uint32_t>& argb, int w, int h, int W, int H) {
+    return separable(argb, w, h, W, H, coverage(w, W), coverage(h, H));
+}
+
+std::vector<uint32_t> upscale(const ConvertOptions& opt, const std::vector<uint32_t>& argb, int w, int h, int W, int H) {
+    return opt.upscaler == ConvertOptions::Upscaler::Smooth ? resample(argb, w, h, W, H)
+                                                            : resampleSharp(argb, w, h, W, H);
+}
+
 template <class F>
 static void parallelFor(int n, int jobs, F&& fn) {
     if (jobs <= 0) jobs = int(std::max(1u, std::thread::hardware_concurrency()));
@@ -249,9 +309,10 @@ static int runProgram(const fs::path& exe, const std::vector<std::string>& args)
 // Real-ESRGAN's video model, run at 4x: 320x200 -> 1280x800.
 static constexpr int kEsrganScale = 4;
 
-// Runs Real-ESRGAN over `pics` (in place). Each comes back 4x larger.
-static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const ConvertOptions& opt,
-                              std::string& err) {
+// Runs Real-ESRGAN over `pics` (in place), each sizes[i] = {w, h}; each
+// comes back 4x larger. Video frames are all 320x200; sprites vary.
+static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const std::vector<std::pair<int, int>>& sizes,
+                              const ConvertOptions& opt, std::string& err) {
     fs::path base = opt.tempDir.empty() ? fs::temp_directory_path() / "hd-conversion-utility" : fs::path(opt.tempDir);
     fs::path in = base / "in", out = base / "out";
     std::error_code ec;
@@ -264,7 +325,8 @@ static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const Co
         auto rgb = argbToRgb(pics[i]);
         char name[32];
         std::snprintf(name, sizeof name, "%06zu.png", i);
-        if (!stbi_write_png((in / name).string().c_str(), kW, kH, 3, rgb.data(), kW * 3)) {
+        const int pw = sizes[i].first, ph = sizes[i].second;
+        if (!stbi_write_png((in / name).string().c_str(), pw, ph, 3, rgb.data(), pw * 3)) {
             err = "cannot write scratch frame";
             return false;
         }
@@ -284,8 +346,8 @@ static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const Co
         return false;
     }
 
-    const int W = kW * kEsrganScale, H = kH * kEsrganScale;
     for (size_t i = 0; i < pics.size(); ++i) {
+        const int W = sizes[i].first * kEsrganScale, H = sizes[i].second * kEsrganScale;
         char name[32];
         std::snprintf(name, sizeof name, "%06zu.png", i);
         int w = 0, h = 0, n = 0;
@@ -314,6 +376,8 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
     PackHeader h;
     h.pictureW = opt.pictureW;
     h.pictureH = opt.pictureH;
+    h.upscaler = opt.upscaler == ConvertOptions::Upscaler::RealEsrgan ? kUpscalerRealEsrgan
+                     : opt.upscaler == ConvertOptions::Upscaler::Smooth ? kUpscalerSmooth : kUpscalerSharp;
     h.frames = uint32_t(total);
     h.sourceCrc = crc32(hnm.data(), hnm.size());
     const std::string part = outPath + ".part";
@@ -330,14 +394,18 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
         // the picture size, encode) runs on every CPU core.
         int srcW = kW, srcH = kH;
         if (opt.upscaler == ConvertOptions::Upscaler::RealEsrgan && !pics.empty()) {
-            if (!upscaleRealEsrgan(pics, opt, err)) return false;
+            if (!upscaleRealEsrgan(pics, std::vector<std::pair<int, int>>(pics.size(), {kW, kH}), opt, err))
+                return false;
             srcW = kW * kEsrganScale;
             srcH = kH * kEsrganScale;
         }
         std::vector<std::vector<uint8_t>> webp(pics.size());
         parallelFor(int(pics.size()), opt.jobs, [&](int i) {
             auto& p = pics[size_t(i)];
-            if (srcW != opt.pictureW || srcH != opt.pictureH) p = resample(p, srcW, srcH, opt.pictureW, opt.pictureH);
+            // Real-ESRGAN's 1280x800 to the picture size: a small smooth step.
+            // Built-in: the chosen upscaler straight from 320x200.
+            if (srcW != kW) p = resample(p, srcW, srcH, opt.pictureW, opt.pictureH);
+            else p = upscale(opt, p, srcW, srcH, opt.pictureW, opt.pictureH);
             webp[size_t(i)] = encodeWebp(p.data(), opt.pictureW, opt.pictureH, opt.quality);
             p = {};
         });
@@ -367,6 +435,170 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
     fs::rename(part, outPath, ec);
     if (ec) { err = "cannot rename " + part + ": " + ec.message(); return false; }
     return true;
+}
+
+// ---- menu sprites ------------------------------------------------------------
+
+const char* const kMenuSprites[] = {"PANEL2", "KONTROL", "KONTROL6", "CONTROL2", "CONTROL4",
+                                    "FONTOPT", "FONTOPT2", "FONTOPT3", "FONTHALL", nullptr};
+
+// The set's own palette (8-bit), as Video::applyPaletteBlocks applies it at
+// shift 0, and which indices it defines. Index 0 stays black (transparent).
+static void ownPalette(const std::vector<uint8_t>& p, std::vector<uint8_t>& pal, bool defined[256]) {
+    pal.assign(768, 0);
+    std::fill(defined, defined + 256, false);
+    size_t i = 0;
+    while (i + 2 <= p.size()) {
+        int start = p[i], count = p[i + 1];
+        i += 2;
+        if (start == 0xFF && count == 0xFF) break;
+        if (count == 0) count = 256;
+        for (int k = 0; k < count && i + 3 <= p.size(); ++k, i += 3) {
+            int at = start + k;
+            if (at == 0 || at > 255) continue;
+            for (int c = 0; c < 3; ++c) {
+                uint8_t v = p[i + size_t(c)] & 63;
+                pal[size_t(at) * 3 + size_t(c)] = uint8_t(v << 2 | v >> 4);
+            }
+            defined[at] = true;
+        }
+    }
+}
+
+static std::vector<uint32_t> grey(const std::vector<float>& v) {
+    std::vector<uint32_t> g(v.size());
+    for (size_t i = 0; i < v.size(); ++i) {
+        uint32_t b = uint32_t(std::lround(std::clamp(v[i], 0.0f, 1.0f) * 255));
+        g[i] = 0xFF000000u | b << 16 | b << 8 | b;
+    }
+    return g;
+}
+
+// Pads colours outward into transparent pixels (several rings), so filtering
+// at an edge blends toward the sprite's own colours instead of black.
+static void dilate(std::vector<uint32_t>& c, std::vector<bool> opaque, int w, int h) {
+    for (int ring = 0; ring < 6; ++ring) {
+        auto next = opaque;
+        auto out = c;
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                size_t i = size_t(y) * size_t(w) + size_t(x);
+                if (opaque[i]) continue;
+                int n = 0, r = 0, g = 0, b = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int X = x + dx, Y = y + dy;
+                        if ((dx || dy) && X >= 0 && Y >= 0 && X < w && Y < h && opaque[size_t(Y) * size_t(w) + size_t(X)]) {
+                            uint32_t v = c[size_t(Y) * size_t(w) + size_t(X)];
+                            r += int((v >> 16) & 0xFF); g += int((v >> 8) & 0xFF); b += int(v & 0xFF); ++n;
+                        }
+                    }
+                if (n) { out[i] = 0xFF000000u | uint32_t(r / n) << 16 | uint32_t(g / n) << 8 | uint32_t(b / n); next[i] = true; }
+            }
+        c.swap(out);
+        opaque.swap(next);
+    }
+}
+
+bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPath,
+                    const ConvertOptions& opt, std::string& kind, std::string& err) {
+    SpriteSet set;
+    try {
+        std::vector<uint8_t> raw = isHsq(stored.data(), stored.size()) ? unHsq(stored.data(), stored.size()) : stored;
+        if (!set.load(raw)) { err = "not a sprite set"; return false; }
+    } catch (const std::exception& ex) { err = ex.what(); return false; }
+
+    SpritePackData pack;
+    pack.pictureW = opt.pictureW;
+    pack.pictureH = opt.pictureH;
+    pack.sourceCrc = crc32(stored.data(), stored.size());
+    pack.upscaler = opt.upscaler == ConvertOptions::Upscaler::RealEsrgan ? kUpscalerRealEsrgan
+                     : opt.upscaler == ConvertOptions::Upscaler::Smooth ? kUpscalerSmooth : kUpscalerSharp;
+    bool defined[256];
+    ownPalette(set.paletteBlock(), pack.palette, defined);
+    // Colour if the set's palette covers every colour it uses.
+    bool own = true;
+    for (size_t i = 0; i < set.count() && own; ++i)
+        if (const auto* im = set.image(i))
+            for (uint8_t c : im->pixels) if (c && !defined[c]) { own = false; break; }
+    pack.kind = own ? 0 : 1;
+    kind = own ? "colour" : "indexed";
+
+    pack.images.resize(set.count());
+    std::vector<size_t> forEsrgan;
+    std::vector<std::vector<uint32_t>> colours(set.count());
+    for (size_t i = 0; i < set.count(); ++i) {
+        const auto* im = set.image(i);
+        if (!im) continue;
+        auto& out = pack.images[i];
+        out.w = im->w; out.h = im->h;
+        out.hdW = std::max(1, hdSpan(im->w, opt.pictureW, kW));
+        out.hdH = std::max(1, hdSpan(im->h, opt.pictureH, kH));
+        const size_t n = im->pixels.size();
+        std::vector<float> solid(n);
+        for (size_t k = 0; k < n; ++k) solid[k] = im->pixels[k] ? 1.0f : 0.0f;
+        // Alpha: the sprite's shape, upscaled like its colours (smooth for
+        // indexed sets: their shapes are traced smooth).
+        auto alpha = (own && opt.upscaler != ConvertOptions::Upscaler::Smooth)
+                         ? resampleSharp(grey(solid), im->w, im->h, out.hdW, out.hdH)
+                         : resample(grey(solid), im->w, im->h, out.hdW, out.hdH);
+        out.px.assign(size_t(out.hdW) * size_t(out.hdH), 0);
+        if (own) {
+            std::vector<uint32_t> c(n);
+            std::vector<bool> opaque(n);
+            for (size_t k = 0; k < n; ++k) {
+                const uint8_t* rgb = &pack.palette[size_t(im->pixels[k]) * 3];
+                c[k] = 0xFF000000u | uint32_t(rgb[0]) << 16 | uint32_t(rgb[1]) << 8 | rgb[2];
+                opaque[k] = im->pixels[k] != 0;
+            }
+            dilate(c, opaque, im->w, im->h);
+            colours[i] = std::move(c);
+            for (size_t k = 0; k < out.px.size(); ++k) out.px[k] = (alpha[k] & 0xFF) << 24;   // alpha now, colour below
+            if (opt.upscaler == ConvertOptions::Upscaler::RealEsrgan) forEsrgan.push_back(i);
+            else {
+                auto up = upscale(opt, colours[i], im->w, im->h, out.hdW, out.hdH);
+                for (size_t k = 0; k < out.px.size(); ++k) out.px[k] |= up[k] & 0xFFFFFF;
+            }
+        } else {
+            // Indexed: each colour's region upscaled smooth; every HD pixel
+            // takes the colour whose region covers it most.
+            std::vector<int> used;
+            bool seen[256] = {};
+            for (uint8_t c : im->pixels) if (c && !seen[c]) { seen[c] = true; used.push_back(c); }
+            std::vector<uint8_t> best(out.px.size(), 0), bestW(out.px.size(), 0);
+            for (int c : used) {
+                std::vector<float> m(n);
+                for (size_t k = 0; k < n; ++k) m[k] = im->pixels[k] == c ? 1.0f : 0.0f;
+                auto up = resample(grey(m), im->w, im->h, out.hdW, out.hdH);
+                for (size_t k = 0; k < up.size(); ++k) {
+                    uint8_t v = uint8_t(up[k] & 0xFF);
+                    if (v > bestW[k]) { bestW[k] = v; best[k] = uint8_t(c); }
+                }
+            }
+            for (int y = 0; y < out.hdH; ++y)
+                for (int x = 0; x < out.hdW; ++x) {
+                    size_t k = size_t(y) * size_t(out.hdW) + size_t(x);
+                    uint8_t idx = best[k];
+                    if (!idx) {   // no region reaches here: the nearest original pixel
+                        int sx = std::min(im->w - 1, x * im->w / out.hdW), sy = std::min(im->h - 1, y * im->h / out.hdH);
+                        idx = im->pixels[size_t(sy) * size_t(im->w) + size_t(sx)];
+                    }
+                    out.px[k] = (alpha[k] & 0xFF) << 24 | uint32_t(idx) << 16;
+                }
+        }
+    }
+    if (!forEsrgan.empty()) {
+        std::vector<std::vector<uint32_t>> pics;
+        std::vector<std::pair<int, int>> sizes;
+        for (size_t i : forEsrgan) { pics.push_back(colours[i]); sizes.emplace_back(pack.images[i].w, pack.images[i].h); }
+        if (!upscaleRealEsrgan(pics, sizes, opt, err)) return false;
+        for (size_t j = 0; j < forEsrgan.size(); ++j) {
+            auto& out = pack.images[forEsrgan[j]];
+            auto up = resample(pics[j], out.w * kEsrganScale, out.h * kEsrganScale, out.hdW, out.hdH);
+            for (size_t k = 0; k < out.px.size(); ++k) out.px[k] |= up[k] & 0xFFFFFF;
+        }
+    }
+    return writeSpritePack(outPath, pack, opt.quality, err);
 }
 
 }  // namespace hd
