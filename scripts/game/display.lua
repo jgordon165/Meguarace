@@ -55,8 +55,8 @@ function M.apply_saved(state)
     if not pcall(gfx.sides, sides) then gfx.sides("ambient") end
     gfx.aspect(state.aspect == "16:9" and "16:9" or "4:3")
     require("game.music").set_style(state.music_style)
-    require("scenes.race").track_speed = M.TRACK_SPEEDS[state.track_speed] or 1.0
-    require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 1
+    require("scenes.race").track_speed = M.TRACK_SPEEDS[state.track_speed] or 1.33
+    require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 2
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))

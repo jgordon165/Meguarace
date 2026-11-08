@@ -30,7 +30,7 @@ S.language = nil
 S.voice_filter = true
 S.on_voice_filter = nil
 -- Lance's clips one smoothing level softer (set by the menu from the settings).
-S.lance_smoother = true
+S.lance_smoother = false
 
 -- The announcer's clips: every B*.HNM (career.VIDEO 0x30..0x6F).
 function S.is_voice(name)

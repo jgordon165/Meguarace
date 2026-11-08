@@ -100,7 +100,7 @@ function S:value(what)
     elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
-    elseif what == "color" then return (display.effective(self.state).track_color or "vivid"):upper()
+    elseif what == "color" then return (display.effective(self.state).track_color or "intense"):upper()
     elseif what == "voice" then return display.effective(self.state).voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -155,7 +155,7 @@ function S:change(what, dir)
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
     elseif what == "color" then
-        local order, i = display.TRACK_COLOR_ORDER, 2
+        local order, i = display.TRACK_COLOR_ORDER, 3
         for k, v in ipairs(order) do if v == st.track_color then i = k end end
         st.track_color = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_color = display.TRACK_COLORS[st.track_color]
