@@ -22,6 +22,9 @@ M.TRACK_SPEED_LABELS = { normal = "NORMAL", fast = "FAST +25%", faster = "FASTER
 M.SHARPEN_ORDER = { "off", "light", "strong" }
 M.SHARPEN = { off = 0, light = 1, strong = 2 }
 
+-- MENU STATUS (Options > ADVANCED): the main menu's level/round/track/score.
+M.MENU_STATUS_ORDER = { "plate", "strip", "off" }
+
 -- TRACK COLOR (Options > ADVANCED): the grade on the track video in races.
 M.TRACK_COLOR_ORDER = { "off", "vivid", "intense" }
 M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
@@ -31,7 +34,7 @@ M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
 M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
     music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off", messages = "classic",
-    dashboard = "original", menus = "original",
+    dashboard = "original", menus = "original", menu_status = "strip",
     voice_filter = false, lance_smoother = false,
 }
 

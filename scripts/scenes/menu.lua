@@ -328,6 +328,16 @@ function S:draw_status()
     end
 end
 
+-- MENU STATUS = STRIP: the same as plain text on a black bar.
+function S:draw_status_strip()
+    local st = self.state
+    local white = gfx.nearest(235, 235, 240)
+    local names = data.track_names()
+    local line = string.format("%s  ROUND %d  %s  SCORE %d", st.level, st.round, names[st.round] or "", st.total)
+    gfx.fill(160 - #line * 2 - 3, 136, #line * 4 + 6, 8, 0)
+    gfx.text(160 - #line * 2, 137, line, white)
+end
+
 function S:draw()
     gfx.clear(0)
     self.bg:draw(0, 0)
@@ -341,7 +351,9 @@ function S:draw()
     for b = 0, 2 do
         centred(p, (self.focus == 8 + b and BUTTON_LIT or BUTTON_OFF) + b)
     end
-    self:draw_status()
+    local how = require("game.display").effective(self.state).menu_status or "plate"
+    if how == "plate" then self:draw_status()
+    elseif how == "strip" then self:draw_status_strip() end
     if self.note then
         gfx.fill(160 - #self.note * 2 - 3, 126, #self.note * 4 + 6, 8, 0)
         gfx.text(160 - #self.note * 2, 127, self.note, yellow)
