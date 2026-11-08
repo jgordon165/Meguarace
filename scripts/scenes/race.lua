@@ -16,6 +16,7 @@ local ui     = require("core.ui")
 local track  = require("formats.track")
 local cars   = require("formats.cars")
 local voc    = require("formats.voc")
+local sfx    = require("game.sfx")
 local rules  = require("race.rules")
 local rivalai = require("race.rival")
 local collide = require("race.collision")
@@ -211,7 +212,7 @@ function S:update(dt)
     end
 
     if alive and input.pressed(self.keys.fire) then
-        if rules.fire(s) then voc.play("LASER") end
+        if rules.fire(s) then sfx.shot() end
     end
     self.fx_t = self.fx_t + dt
     while self.fx_t >= 1 / FX_FPS do
@@ -239,7 +240,7 @@ function S:autopilot_fire()
     if r.pos <= 10 or r.pos >= 20 or math.abs(r.x_lane - self.carx) > 50 then return end
     if s.tick < self.demo_fire_at then return end
     self.demo_fire_at = s.tick + 30
-    if rules.fire(s) then voc.play("LASER") end
+    if rules.fire(s) then sfx.shot() end
 end
 
 function S:end_demo()
@@ -322,7 +323,7 @@ function S:rival_tick()
     })
     if fire and rules.rival_fire(s) then
         s.rshot.from = r
-        voc.play("LASER", 0.5)
+        sfx.shot(0.5)
     end
 end
 

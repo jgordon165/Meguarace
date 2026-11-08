@@ -883,8 +883,21 @@ test("title screen", function()
     check(scenes.depth() == depth + 1, "pushed")
     for _ = 1, 3 do scenes.update(0.5); scenes.draw() end
     check(done == nil, "still showing")
-    for _ = 1, 40 do scenes.update(0.5) end
-    check(done == false and scenes.depth() == depth, "goes on by itself to the videos")
+    for _ = 1, 100 do scenes.update(0.5) end
+    check(done == nil, "still showing at 50 s")
+    for _ = 1, 30 do scenes.update(0.5) end
+    check(done == false and scenes.depth() == depth, "a minute, a fade, then on by itself to the videos")
+    -- A key starts the fade; on_done comes at its end.
+    done = nil
+    scenes.push(require("scenes.title"), { on_done = function(skip_all) done = skip_all end })
+    local t = require("scenes.title")
+    t:leave_by(true)
+    scenes.update(0.1)
+    check(done == nil, "fading")
+    for _ = 1, 10 do scenes.update(0.1) end
+    check(done == true and scenes.depth() == depth, "ESC: faded, then skips the videos")
+    local z = require("game.sfx").shot_sounds()
+    check(#z == 3 and #z[1] > 40000 and #z[1] % 4 == 0, "three zaps, 16-bit stereo")
 end)
 
 test("music styles", function()
