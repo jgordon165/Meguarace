@@ -876,6 +876,17 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("title screen", function()
+    local scenes = require("core.scenes")
+    local depth, done = scenes.depth(), nil
+    scenes.push(require("scenes.title"), { on_done = function(skip_all) done = skip_all end })
+    check(scenes.depth() == depth + 1, "pushed")
+    for _ = 1, 3 do scenes.update(0.5); scenes.draw() end
+    check(done == nil, "still showing")
+    for _ = 1, 40 do scenes.update(0.5) end
+    check(done == false and scenes.depth() == depth, "goes on by itself to the videos")
+end)
+
 test("music styles", function()
     local music = require("game.music")
     check(require("game.save").defaults().music_style == "enhanced", "enhanced (the EDM remix) by default")
@@ -911,6 +922,9 @@ test("display modes without HD packs", function()
     -- 16:9 only widens the HD resolutions; native stays 320 wide.
     check(gfx.aspect("16:9") == "16:9" and gfx.wing() == 0, "native: no wings")
     check(gfx.aspect("4:3") == "4:3" and gfx.ambient(false) == false and gfx.ambient(true) == true, "aspect, sides")
+    for _, st in ipairs({ "black", "carbon", "space", "cyberpunk", "ambient" }) do check(gfx.sides(st) == st, "sides " .. st) end
+    check(gfx.ambient() == true and not pcall(gfx.sides, "plaid"), "ambient; unknown sides rejected")
+    check(require("game.save").defaults().sides == "ambient", "ambient sides by default")
     check(not pcall(gfx.aspect, "21:9"), "unknown aspect refused")
     local i = gfx.nearest(0, 0, 0)
     check(type(i) == "number" and i >= 1 and i <= 255, "nearest palette colour")

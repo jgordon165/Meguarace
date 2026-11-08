@@ -167,6 +167,16 @@ static int gfx_aspect(lua_State* L) {
     return 1;
 }
 static int gfx_wing(lua_State* L) { lua_pushinteger(L, E(L).video.wing()); return 1; }
+// gfx.sides([style]) -> "black", "ambient", "carbon", "space" or "cyberpunk"
+// (the 16:9 wings' background), after setting it if given.
+static int gfx_sides(lua_State* L) {
+    static const char* const NAMES[] = {"black", "ambient", "carbon", "space", "cyberpunk", nullptr};
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setSides(sides::Style(luaL_checkoption(L, 1, nullptr, NAMES)));
+    lua_pushstring(L, NAMES[int(v.sidesStyle())]);
+    return 1;
+}
+
 static int gfx_ambient(lua_State* L) {
     Video& v = E(L).video;
     if (!lua_isnoneornil(L, 1)) v.setAmbient(lua_toboolean(L, 1) != 0);
@@ -884,7 +894,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
         {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
         {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end},
-        {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient},
+        {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient}, {"sides", gfx_sides},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},

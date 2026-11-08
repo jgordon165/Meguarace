@@ -22,7 +22,9 @@ function M.apply_saved(state)
     gfx.hd_pictures(not original)
     gfx.video_repeat(state.hd_style == "line_tripled" and 3 or 0)
     gfx.smoothing(tonumber(state.smoothing) or 0)
-    gfx.ambient(state.ambient ~= false)
+    -- (Older saves have ambient = false for black sides.)
+    local sides = state.sides or (state.ambient == false and "black") or "ambient"
+    if not pcall(gfx.sides, sides) then gfx.sides("ambient") end
     gfx.aspect(state.aspect == "16:9" and "16:9" or "4:3")
     require("game.music").set_style(state.music_style)
     if sys.display_arg ~= "" or not state.display then return end

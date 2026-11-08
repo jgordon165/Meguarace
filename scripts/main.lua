@@ -38,7 +38,11 @@ function game.init()
     menu.report = report
     scenes.switch(menu)
     if not os.getenv("MEGARACE_SKIP_INTRO") then
-        menu:pre_round("boot", { "MINDSCAP.HNM", "CRYO.HNM" })
+        -- The port's own title screen first (scenes/title.lua), then the boot
+        -- videos; ESC on the title skips those too.
+        scenes.push(require("scenes.title"), { on_done = function(skip_all)
+            if not skip_all then menu:pre_round("boot", { "MINDSCAP.HNM", "CRYO.HNM" }) end
+        end })
     end
 end
 

@@ -4,6 +4,7 @@
 // converts through the palette and scales to the window on present().
 
 #include <SDL.h>
+#include "sides.h"
 #include <array>
 #include <cstdint>
 #include <string>
@@ -20,14 +21,16 @@ public:
     // wing() pixels on each side (53), with the 320x200 screen in the middle.
     // Every drawing call takes game coordinates, so x = -wing() is the left
     // edge of the canvas and 320 + wing() the right. Wings nothing drew on
-    // show the ambient fill (a blurred, darkened stretch of the picture) or
-    // black.
+    // show the SIDES: the ambient fill (a blurred, darkened stretch of the
+    // picture), black, or a background (sides.h: carbon, space, cyberpunk).
     int wing() const { return ox_; }
     int canvasWidth() const { return cw_; }
     void setWide(bool wide);
     bool wide() const { return wide_; }
-    void setAmbient(bool on) { ambient_ = on; }
-    bool ambient() const { return ambient_; }
+    void setAmbient(bool on) { sides_ = on ? sides::Ambient : sides::Black; }
+    bool ambient() const { return sides_ == sides::Ambient; }
+    void setSides(sides::Style s) { sides_ = s; }
+    sides::Style sidesStyle() const { return sides_; }
 
     void clear(uint8_t idx);
     void pset(int x, int y, uint8_t idx);
@@ -175,7 +178,15 @@ private:
     int smoothing_ = 0;
     int videoRepeat_ = 0;
     int cw_ = 320, ox_ = 0;                   // canvas width, wing (game x 0 is canvas x ox_)
-    bool wide_ = false, ambient_ = true;
+    bool wide_ = false;
+    sides::Style sides_ = sides::Ambient;
+    // The SIDES background: textures for each wing and their scrolling
+    // overlays, made for the style and the wings' size on screen.
+    SDL_Texture* sideTex_[2] = {nullptr, nullptr};
+    SDL_Texture* sideOver_[2] = {nullptr, nullptr};
+    int sideKey_[3] = {-1, 0, 0};             // style, width, height they were made for
+    void drawSides();
+    void freeSides();
     int picCurW_ = 320, picCurH_ = 240;       // the current mode's picture
     int hdCW_ = 0;                            // HD layer width: the canvas at the packs' scale
     SDL_Texture* ambientTexture_ = nullptr;   // 32x20 average of the picture (wings)

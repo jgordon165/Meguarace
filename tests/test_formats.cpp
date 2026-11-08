@@ -8,6 +8,7 @@
 #include "formats/cryo.h"
 #include "formats/herad.h"
 #include "formats/gm_map.h"
+#include "sides.h"
 #include "resampler.h"
 #include "voice_filter.h"
 
@@ -587,8 +588,22 @@ static void testMusicStyles() {
     CHECK(tail > 1e-5f);
 }
 
+static void testSides() {
+    for (auto st : {sides::Carbon, sides::Space, sides::Cyberpunk}) {
+        const auto p = sides::make(st, 60, 270);
+        CHECK(p.w == 60 && p.h == 270 && p.base.size() == size_t(60 * 270));
+        bool opaque = true, varied = false;
+        for (auto c : p.base) { opaque &= (c >> 24) == 0xFF; varied |= c != p.base[0]; }
+        CHECK(opaque && varied);
+        CHECK(p.overlay.empty() || p.overlay.size() == p.base.size());
+        CHECK(sides::make(st, 60, 270).base == p.base);    // the same picture every time
+    }
+    CHECK(!sides::make(sides::Space, 60, 270).right.empty());
+    CHECK(sides::make(sides::Carbon, 0, 10).base.empty());
+}
+
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad, testMusicStyles}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad, testMusicStyles, testSides}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }
