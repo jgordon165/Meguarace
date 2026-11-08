@@ -167,6 +167,9 @@ FASTER (+33%) and TRACK COLOR INTENSE:
 - MENUS: HD (the default: the main menu, options, Hall of Fame and their
   panels from the HD packs, with some of the original pixel grain, even when HD STYLE is LINE DOUBLED or
   TRIPLED, and never smoothed) or ORIGINAL (as HD STYLE says)
+- MENU STATUS: PLATE (the default: level, round, track and score under the
+  globe on a console readout), STRIP (plain text on a black bar; what
+  `--classic` shows) or OFF
 - DASHBOARD: HD (the default: the race dashboard, gauges and scanner from
   HD packs, which `hd-conversion-utility` makes; run it again on an older
   pack folder to add them) or ORIGINAL (the original pixels)
