@@ -295,15 +295,16 @@ function S:draw()
         centred(p, (self.focus == 8 + b and BUTTON_LIT or BUTTON_OFF) + b)
     end
     -- This port's: level, round and score on the globe's strip.
-    gfx.setcolor(C_NOTE + 1, 235, 235, 240)
+    -- In the palette's own nearest colours: changing an entry would also
+    -- recolour the artwork's pixels that use it.
+    local white, yellow = gfx.nearest(235, 235, 240), gfx.nearest(255, 210, 60)
     local names = data.track_names()
     local line = string.format("%s  ROUND %d  %s  SCORE %d", st.level, st.round, names[st.round] or "", st.total)
     gfx.fill(160 - #line * 2 - 3, 136, #line * 4 + 6, 8, 0)
-    gfx.text(160 - #line * 2, 137, line, C_NOTE + 1)
+    gfx.text(160 - #line * 2, 137, line, white)
     if self.note then
-        gfx.setcolor(C_NOTE, 255, 210, 60)
         gfx.fill(160 - #self.note * 2 - 3, 126, #self.note * 4 + 6, 8, 0)
-        gfx.text(160 - #self.note * 2, 127, self.note, C_NOTE)
+        gfx.text(160 - #self.note * 2, 127, self.note, yellow)
     end
 end
 

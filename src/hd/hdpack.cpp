@@ -9,6 +9,15 @@
 
 namespace hd {
 
+const char* upscalerName(uint32_t code) {
+    switch (code) {
+        case kUpscalerRealEsrgan: return "REAL-ESRGAN";
+        case kUpscalerSharp: return "SHARP";
+        case kUpscalerSmooth: return "SMOOTH";
+        default: return "";
+    }
+}
+
 uint32_t crc32(const uint8_t* d, size_t n) {
     static const auto table = [] {
         std::array<uint32_t, 256> t{};
@@ -78,7 +87,7 @@ static std::vector<uint8_t> headerBytes(const PackHeader& h) {
     put(b, uint32_t(h.height), 2);
     put(b, h.frames, 4);
     put(b, h.sourceCrc, 4);
-    put(b, 0, 4);
+    put(b, h.upscaler & 3, 4);
     return b;
 }
 
@@ -136,6 +145,7 @@ static bool parseHeader(const uint8_t* hdr, PackHeader& h) {
     h.height = int(get(hdr + 12, 2));
     h.frames = get(hdr + 14, 4);
     h.sourceCrc = get(hdr + 18, 4);
+    h.upscaler = get(hdr + 22, 4) & 3;
     return h.pictureW >= 1 && h.pictureH >= 1 && h.pictureW <= kMaxPicture && h.pictureH <= kMaxPicture &&
            h.width > 0 && h.height > 0 && h.frames <= 1000000;
 }

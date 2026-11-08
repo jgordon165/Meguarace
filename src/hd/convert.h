@@ -14,11 +14,17 @@ struct ConvertOptions {
     // Smaller modes are scaled down from it by the engine.
     int pictureW = 1440, pictureH = 1080;
     int quality = 90;           // WebP quality; >100 = lossless
-    // Built-in: a Catmull-Rom resize, no extra programs, runs anywhere.
+    // Sharp (built-in, the default without Real-ESRGAN): line doubling
+    //   and interpolating. Each original pixel is repeated, so edges stay
+    //   crisp, and only the seams between pixels are blended, by how much of
+    //   each output pixel each original pixel covers. That keeps the original
+    //   pixels even even though 320x200 -> 1440x1080 is 4.5 x 5.4. No detail
+    //   is added; it's the original, cleanly enlarged.
+    // Smooth (built-in): a Catmull-Rom resize; softer.
     // Real-ESRGAN: runs realesrgan-ncnn-vulkan (MIT, uses the GPU through
-    // Vulkan) at 4x over each batch of frames (1280x800), then resizes that
-    // to the picture size.
-    enum class Upscaler { Builtin, RealEsrgan } upscaler = Upscaler::Builtin;
+    //   Vulkan) at 4x over each batch of frames (1280x800), then resizes that
+    //   to the picture size. The only one that adds detail.
+    enum class Upscaler { Sharp, Smooth, RealEsrgan } upscaler = Upscaler::Sharp;
     std::string realesrgan;     // the bundled realesrgan-ncnn-vulkan(.exe) (see tool.cpp)
     std::string model = "realesr-animevideov3";   // one of kModels
     std::string tempDir;        // scratch folder for Real-ESRGAN batches
@@ -41,6 +47,21 @@ bool compositeFrames(const std::vector<uint8_t>& hnm,
 
 // Resize an ARGB picture w x h to W x H (Catmull-Rom; widened when shrinking).
 std::vector<uint32_t> resample(const std::vector<uint32_t>& argb, int w, int h, int W, int H);
+// Enlarge by line doubling and interpolating (area coverage; see Upscaler::Sharp).
+std::vector<uint32_t> resampleSharp(const std::vector<uint32_t>& argb, int w, int h, int W, int H);
+// The built-in upscaler opt asks for (Sharp or Smooth).
+std::vector<uint32_t> upscale(const struct ConvertOptions& opt, const std::vector<uint32_t>& argb, int w, int h,
+                              int W, int H);
+
+// The menu sprite sets hd-conversion-utility upscales (names in the archive,
+// without .HSQ): the main menu, the options panels and messages, the Hall of
+// Fame / key setup / save panels, and the menu fonts.
+extern const char* const kMenuSprites[];
+
+// Converts one sprite set (its bytes as stored in the archive) into an HD
+// sprite pack at outPath (see sprpack.h). `kind` gets "colour" or "indexed".
+bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPath,
+                    const ConvertOptions& opt, std::string& kind, std::string& err);
 
 // Converts one HNM file (its bytes) into an HD pack at outPath.
 bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,

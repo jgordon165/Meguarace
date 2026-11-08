@@ -117,11 +117,14 @@ make them on your own machine, from your own CD, with
 `hd-conversion-utility`, a separate utility with its own package and
 workflow. No HD video is
 ever committed or shipped, because an upscaled video is still the game's
-content. Optionally pick where they go in Options > HD FOLDER (the default
-is your user folder), run `hd-conversion-utility --data V:\` once, then pick a display
-mode in Options > DISPLAY: 800×600, 1024×768 or 1920×1080, or 320×200 for the
-original. You can also give one with `--display`. F10 switches the HD videos
-on and off. The game always works in 320×200 coordinates, so gameplay is the
+content. It upscales the menu graphics too. Run `hd-conversion-utility --data V:\`
+once, then use **Options > ADVANCED** (Down past QUIT):
+- RESOLUTION: 800×600, 1024×768 or 1920×1080, or 320×200 for the original
+  (also `--display`)
+- HD STYLE: the packs (Real-ESRGAN), or LINE DOUBLED: the originals with each
+  pixel repeated and the seams interpolated (F10 switches while playing)
+- HD FOLDER: where the packs go (the default is your user folder)
+- VOICE FILTER: the hiss filter on Lance's clips The game always works in 320×200 coordinates, so gameplay is the
 same in every mode. Details: [docs/hd.md](docs/hd.md).
 
 ## Tests and CI
@@ -202,11 +205,11 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | Table | Functions |
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
-| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; display modes `displays() display() set_display(name) to_display(x,y)` (drawing stays 320×200 in every mode) |
+| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on])` (drawing stays 320×200 in every mode) |
 | `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound() :hd() :blit(i,x,y,w,h,pixels[,key])`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |
 | `input` | `down(key) pressed(key) released(key) any()`: SDL key names (`"Left"`, `"Return"`, `"Space"`, `"A"`); text entry `text_start() text_stop() text() paste()` |
-| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted hd hd_width hd_height hd_path display_arg`, HD folder setting `hd_folder() set_hd_folder(folder)` |
+| `sys` | `ticks() quit([code]) log(v) save(name, text) load(name)` and `data_path music_path music_mounted hd hd_width hd_height hd_path hd_upscaler display_arg`, HD folder setting `hd_folder() set_hd_folder(folder)` |
 

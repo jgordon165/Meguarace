@@ -26,5 +26,6 @@ struct Engine {
     // empty when HD is off or there are none.
     std::string hdDir;
     bool hdOff = false;       // --no-hd
+    std::string hdUpscaler;   // what made the packs: "REAL-ESRGAN", "SHARP", "SMOOTH" or ""
     std::string displayArg;   // --display: overrides the saved display mode
 };

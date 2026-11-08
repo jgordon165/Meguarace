@@ -40,6 +40,7 @@ function M.defaults()
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
         display = nil,             -- display mode (options); nil: the largest that fits
+        hd_style = "upscaled",     -- HD modes: "upscaled" (the packs) or "line_doubled" (Options > ADVANCED)
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run
     }
