@@ -276,10 +276,10 @@ static int audio_song(lua_State* L) {
     return 1;
 }
 
-// audio.music_style([style]) -> "original", "enhanced", "soundfont" or "edm", after
+// audio.music_style([style]) -> "original", "stereo", "soundfont" or "enhanced", after
 // setting it if given (the song playing carries on in the new style).
 static int audio_music_style(lua_State* L) {
-    static const char* const NAMES[] = {"original", "enhanced", "soundfont", "edm", nullptr};
+    static const char* const NAMES[] = {"original", "stereo", "soundfont", "enhanced", nullptr};
     Audio& a = E(L).audio;
     if (!lua_isnoneornil(L, 1)) a.setMusicStyle(MusicStyle(luaL_checkoption(L, 1, nullptr, NAMES)));
     lua_pushstring(L, NAMES[int(a.musicStyle())]);

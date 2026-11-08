@@ -101,7 +101,7 @@ void Audio::setMusicStyle(MusicStyle s) {
         if (!song_ || !song_->playing() || songFadeTotal_) return;
         at = song_->position();
     }
-    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Edm) ? bank() : nullptr);
+    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) ? bank() : nullptr);
     if (!m->load(songBytes_.data(), songBytes_.size(), songLoop_, at, &songGm_)) return;
     std::lock_guard<std::mutex> lk(mtx_);
     song_.swap(m);
@@ -109,7 +109,7 @@ void Audio::setMusicStyle(MusicStyle s) {
 
 bool Audio::playSong(const uint8_t* data, size_t len, bool loop, const std::vector<int>& gm) {
     if (!dev_) return false;
-    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Edm) ? bank() : nullptr);
+    auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) ? bank() : nullptr);
     if (!m->load(data, len, loop, 0, &gm)) return false;
     songBytes_.assign(data, data + len);
     songLoop_ = loop;

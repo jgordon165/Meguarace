@@ -554,9 +554,9 @@ static void testMusicStyles() {
 
     // Enhanced: OPL3, stereo out, sound once the notes play.
     Bytes d = keymapSong();
-    FmMusic e(MusicStyle::Enhanced);
+    FmMusic e(MusicStyle::Stereo);
     CHECK(e.load(d.data(), d.size(), false));
-    CHECK(e.style() == MusicStyle::Enhanced);
+    CHECK(e.style() == MusicStyle::Stereo);
     std::vector<int32_t> out(2 * 4410, 0);
     e.render(out.data(), 4410, 44100, 1.0f);
     int32_t peak = 0;
@@ -564,9 +564,9 @@ static void testMusicStyles() {
     CHECK(peak > 50);
     // SoundFont without a bank plays Enhanced.
     FmMusic sf(MusicStyle::SoundFont, nullptr);
-    CHECK(sf.style() == MusicStyle::Enhanced && sf.load(d.data(), d.size(), false));
-    FmMusic edm(MusicStyle::Edm, nullptr);
-    CHECK(edm.style() == MusicStyle::Enhanced);
+    CHECK(sf.style() == MusicStyle::Stereo && sf.load(d.data(), d.size(), false));
+    FmMusic edm(MusicStyle::Enhanced, nullptr);
+    CHECK(edm.style() == MusicStyle::Stereo);
     // The soft limiter: unity below the knee, never past the ceiling.
     CHECK(musicfx::soft_clip(0.5f, 0.7f, 1.0f) == 0.5f);
     CHECK(musicfx::soft_clip(10.0f, 0.7f, 1.0f) <= 1.0f && musicfx::soft_clip(-10.0f, 0.7f, 1.0f) >= -1.0f);

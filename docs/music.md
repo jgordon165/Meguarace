@@ -10,11 +10,11 @@ from where it was.
 | Style | What you hear |
 |---|---|
 | ORIGINAL | The emulated OPL2 ([ymfm](https://github.com/aaronsgiles/ymfm)), mono, as on a Sound Blaster in 1994. |
-| ENHANCED (the default) | The same FM, register for register, on an emulated OPL3. The OPL3 can send each voice to its own output, so the tracks spread across the stereo field: the bass and the drums in the middle, the others alternating left and right. Then a warmer EQ (+3 dB at 120 Hz, −2.5 dB above 9 kHz) and a small room reverb. |
+| STEREO FM | The same FM, register for register, on an emulated OPL3. The OPL3 can send each voice to its own output, so the tracks spread across the stereo field: the bass and the drums in the middle, the others alternating left and right. Then a warmer EQ (+3 dB at 120 Hz, −2.5 dB above 9 kHz) and a small room reverb. |
 | SOUNDFONT | The songs' notes played by a General MIDI SoundFont ([TinySoundFont](https://github.com/schellingb/TinySoundFont)) instead of the chip, with the same reverb. Pitch bends, slides and each instrument's level and velocity response come from the song. |
-| EDM | A dance remix on the same SoundFont. The songs already run at 106–148 BPM. See below. |
+| ENHANCED (the default) | A dance (EDM) remix on the same SoundFont. The songs already run at 106–148 BPM. See below. |
 
-All four are about equally loud (EDM a little louder), and they're cheap: the SoundFont style
+All four are about equally loud (ENHANCED a little louder), and they're cheap: the SoundFont style
 takes about 2% of one CPU core.
 
 ## The SoundFont
@@ -33,9 +33,9 @@ To use your own bank instead of the bundled one, replace or remove the
 `.sf2` in the first folder. Building from source downloads GeneralUser GS
 into the build folder (`MEGARACE_FETCH_SOUNDFONT`, on by default; the
 download is pinned and checked by hash). Without a SoundFont, SOUNDFONT
-and EDM play ENHANCED, and ADVANCED tells you why.
+and ENHANCED play STEREO FM, and ADVANCED tells you why.
 
-## EDM
+## ENHANCED: the dance remix
 
 The same notes and the same instrument choices as SOUNDFONT, played as a
 dance mix (`src/fm.cpp`, `edm_layers`):

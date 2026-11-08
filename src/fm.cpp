@@ -20,18 +20,18 @@ constexpr uint32_t OPL2_CLOCK = 3579545;    // Sound Blaster / AdLib crystal
 constexpr int VOICES = 9;
 constexpr int DRUMS = 9;                    // GM channel 10
 
-// Enhanced: where each OPL3 output goes. A (bit 4) the centre, C (bit 6)
+// Stereo: where each OPL3 output goes. A (bit 4) the centre, C (bit 6)
 // mostly left, D (bit 7) mostly right.
 constexpr uint8_t BUS_CENTRE = 0x10, BUS_LEFT = 0x40, BUS_RIGHT = 0x80;
 constexpr float CENTRE = 0.74f, NEAR = 0.92f, FAR = 0.38f;
-// Levels: Enhanced and SoundFont about as loud as Original.
-constexpr float ENHANCED_GAIN = 0.39f;
+// Levels: about as loud as Original.
+constexpr float STEREO_GAIN = 0.39f;
 constexpr float SF_GAIN = 0.20f * 32767.0f;
 constexpr float SYNTH_BUS = 0.8f, DRUM_BUS = 2.0f;   // the kick on top, as in a dance mix
 constexpr float EDM_DRIVE = 0.22f;             // into the limiter: it catches only the peaks
 constexpr float EDM_GAIN = 0.70f * 32767.0f;
 constexpr int DANCE_KIT = 26;               // GM drum kit numbers as GS banks have them
-constexpr int LAYER_CH = 16;                // Edm: channels 16.. for the synth layers (3 per track)
+constexpr int LAYER_CH = 16;                // Enhanced: channels 16.. for the synth layers (3 per track)
 }
 
 struct FmMusic::Chip2 : ymfm::ymfm_interface {
@@ -59,20 +59,20 @@ SoundFontBank::~SoundFontBank() {
 // ------------------------------------------------------------------ FmMusic --
 
 FmMusic::FmMusic(MusicStyle style, std::shared_ptr<SoundFontBank> bank) : style_(style), bank_(std::move(bank)) {
-    if (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Edm) {
+    if (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) {
         if (bank_ && bank_->synth()) {
             sf_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
-            if (style_ == MusicStyle::Edm) drums_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
+            if (style_ == MusicStyle::Enhanced) drums_ = tsf_copy(static_cast<tsf*>(bank_->synth()));
         }
-        if (!sf_ || (style_ == MusicStyle::Edm && !drums_)) {
+        if (!sf_ || (style_ == MusicStyle::Enhanced && !drums_)) {
             if (sf_) tsf_close(static_cast<tsf*>(sf_));
             sf_ = nullptr;
-            style_ = MusicStyle::Enhanced;
+            style_ = MusicStyle::Stereo;
         }
-        edm_ = style_ == MusicStyle::Edm;
+        edm_ = style_ == MusicStyle::Enhanced;
     }
     if (style_ == MusicStyle::Original) chip2_ = std::make_unique<Chip2>();
-    if (style_ == MusicStyle::Enhanced) chip3_ = std::make_unique<Chip3>();
+    if (style_ == MusicStyle::Stereo) chip3_ = std::make_unique<Chip3>();
     if (sf_) tsf_set_max_voices(static_cast<tsf*>(sf_), edm_ ? 160 : 96);   // no allocations on the audio thread
     if (drums_) tsf_set_max_voices(static_cast<tsf*>(drums_), 48);
 }
@@ -223,7 +223,7 @@ void FmMusic::render_chip3(int32_t* out, int frames, int rate, float gain) {
         pos_ += step;
     }
     fx_.run(buf_.data(), frames);
-    const float g = gain * ENHANCED_GAIN;
+    const float g = gain * STEREO_GAIN;
     for (int i = 0; i < 2 * frames; ++i) out[i] += clamp_out(buf_[size_t(i)] * g);
 }
 
@@ -264,7 +264,7 @@ static float note_gain(const herad::Instrument& in, uint8_t vel) {
 }
 
 namespace {
-// Edm: what plays a GM program. Up to three layers, each its own channel.
+// Enhanced: what plays a GM program. Up to three layers, each its own channel.
 struct Layer { int bank, program, shift; float tune, pan, gain; };
 
 int edm_layers(int program, Layer* out) {
@@ -386,7 +386,7 @@ void FmMusic::sf_events(bool notes) {
         }
     }
     events_.clear();
-    // Edm: four on the floor. A kick on every beat while the song's drums are
+    // Enhanced: four on the floor. A kick on every beat while the song's drums are
     // playing (within the last two measures), unless the song kicked there.
     if (edm_ && notes && sfRate_) {
         const uint32_t pos = player_->position();
@@ -401,7 +401,7 @@ void FmMusic::sf_events(bool notes) {
     }
 }
 
-// Edm: synths (in buf_) pump to the kick (kicks: the sample each lands on),
+// Enhanced: synths (in buf_) pump to the kick (kicks: the sample each lands on),
 // then delay and room; drums (in buf2_) their own EQ and room; then the two
 // together through a soft limiter.
 void FmMusic::edm_mix(int frames, const std::vector<int>& kicks) {

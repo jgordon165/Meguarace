@@ -25,12 +25,12 @@
 --   LANCE VIDEOS  1 SMOOTHER: Lance's clips one SMOOTHING level softer than
 --                 the other videos (MAX at most); or SAME.
 --   MUSIC         ORIGINAL (the OPL2 FM chip, as on a Sound Blaster),
---                 ENHANCED (the same FM in stereo, with EQ and reverb) or
+--                 STEREO FM (the same FM in stereo, with EQ and reverb),
 --                 SOUNDFONT (the notes on a General MIDI SoundFont: the
 --                 bundled GeneralUser GS, or a .sf2 of your own) or
---                 EDM (a remix on that SoundFont: layered synths, dance
---                 drums with a four-on-the-floor kick, sidechain pumping,
---                 a delay in time with the song).
+--                 ENHANCED, the default (a dance remix on that SoundFont:
+--                 layered synths, dance drums with a four-on-the-floor kick,
+--                 sidechain pumping, a delay in time with the song).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -90,7 +90,7 @@ function S:value(what)
     elseif what == "aspect" then return gfx.aspect()
     elseif what == "sides" then return gfx.ambient() and "AMBIENT" or "BLACK"
     elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
-    elseif what == "music" then return audio.music_style():upper()
+    elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
@@ -129,8 +129,8 @@ function S:change(what, dir)
         local i = 1
         for k, s in ipairs(music.STYLES) do if s == audio.music_style() then i = k end end
         st.music_style = music.set_style(music.STYLES[(i - 1 + dir) % #music.STYLES + 1])
-        if (st.music_style == "soundfont" or st.music_style == "edm") and not audio.soundfont() then
-            self.note = "NO .SF2 IN A SOUNDFONT FOLDER: PLAYING ENHANCED"
+        if (st.music_style == "soundfont" or st.music_style == "enhanced") and not audio.soundfont() then
+            self.note = "NO .SF2 IN A SOUNDFONT FOLDER: PLAYING STEREO FM"
         end
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
