@@ -738,7 +738,7 @@ test("voice filter: which clips, and the setting", function()
           "other videos are not filtered")
     check(type(audio.stream_voice_filter) == "function" and type(audio.stream_end) == "function", "audio API")
     check(require("game.save").defaults().voice_filter == true, "on by default")
-    check(require("game.save").defaults().lance_smoother == true, "Lance one level smoother by default")
+    check(require("game.save").defaults().lance_smoother == false, "Lance's clips like the others by default (SAME)")
 end)
 
 test("[data] voice filter measures a clip's hiss", function()
@@ -878,7 +878,7 @@ end)
 
 test("classic mode and track color", function()
     local display, save = require("game.display"), require("game.save")
-    check(save.defaults().track_color == "vivid", "vivid by default")
+    check(save.defaults().track_color == "intense", "intense by default")
     check(gfx.video_grade(2) == 2 and gfx.video_grade(5) == 2 and gfx.video_grade(0) == 0, "grade levels")
     local st = save.defaults()
     st.music_style, st.aspect, st.smoothing = "enhanced", "16:9", 2
@@ -893,7 +893,7 @@ end)
 
 test("track speed", function()
     local save, race = require("game.save"), require("scenes.race")
-    check(save.defaults().track_speed == "normal", "normal by default")
+    check(save.defaults().track_speed == "faster", "faster (+33%) by default")
     local st = save.defaults()
     for name, k in pairs({ fast = 1.25, faster = 1.33, fastest = 1.5 }) do
         st.track_speed = name
@@ -970,7 +970,7 @@ test("display modes without HD packs", function()
     check(gfx.aspect("4:3") == "4:3" and gfx.ambient(false) == false and gfx.ambient(true) == true, "aspect, sides")
     for _, st in ipairs({ "black", "carbon", "space", "cyberpunk", "ambient" }) do check(gfx.sides(st) == st, "sides " .. st) end
     check(gfx.ambient() == true and not pcall(gfx.sides, "plaid"), "ambient; unknown sides rejected")
-    check(require("game.save").defaults().sides == "ambient", "ambient sides by default")
+    check(require("game.save").defaults().sides == "space", "space sides by default")
     check(not pcall(gfx.aspect, "21:9"), "unknown aspect refused")
     local i = gfx.nearest(0, 0, 0)
     check(type(i) == "number" and i >= 1 and i <= 255, "nearest palette colour")

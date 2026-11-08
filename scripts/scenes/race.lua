@@ -28,10 +28,10 @@ local S = {}
 -- Options > ADVANCED > TRACK SPEED: how much faster than the original the
 -- track video scrolls (1.0; FAST 1.25, FASTER 1.33, FASTEST 1.5). Set from
 -- the settings (game/display.lua).
-S.track_speed = 1.0
+S.track_speed = 1.33
 -- Options > ADVANCED > TRACK COLOR: the grade on the track video (0 off,
 -- 1 VIVID, 2 INTENSE), on while the race is up.
-S.track_color = 1
+S.track_color = 2
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car

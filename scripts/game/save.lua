@@ -43,10 +43,10 @@ function M.defaults()
         hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
         smoothing = 2,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
-        sides = "ambient",         -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
-        lance_smoother = true,     -- Lance's clips one smoothing level softer than the other videos
-        track_speed = "normal",    -- track video speed in races: "normal", "fast" (+25%), "faster" (+33%), "fastest" (+50%)
-        track_color = "vivid",     -- track video in races: "off", "vivid" or "intense" (more colour and contrast)
+        sides = "space",           -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
+        lance_smoother = false,    -- Lance's clips one smoothing level softer than the other videos (SAME: no)
+        track_speed = "faster",    -- track video speed in races: "normal", "fast" (+25%), "faster" (+33%), "fastest" (+50%)
+        track_color = "intense",   -- track video in races: "off", "vivid" or "intense" (more colour and contrast)
         music_style = "enhanced",  -- "original" (OPL2), "stereo" (FM), "soundfont" or "enhanced" (the EDM remix; Options > ADVANCED)
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run

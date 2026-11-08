@@ -138,8 +138,9 @@ workflow. No HD video is
 ever committed or shipped, because an upscaled video is still the game's
 content. It upscales the menu graphics too. Run `hd-conversion-utility --data V:\`
 once, then use **Options > ADVANCED** (Down past QUIT). By default the game
-starts at the largest resolution that fits, in 16:9 with AMBIENT sides, LINE
-TRIPLED and SMOOTHING MORE:
+starts at the largest resolution that fits, in 16:9 with SPACE sides, LINE
+TRIPLED, SMOOTHING MORE, ENHANCED music, TRACK SPEED FASTER (+33%) and TRACK
+COLOR INTENSE:
 - RESOLUTION: 800×600, 1024×768 or 1920×1080, or 320×200 for the original
   (also `--display`)
 - ASPECT: 4:3 or 16:9 (the videos stay 4:3 in the middle; the race dashboard

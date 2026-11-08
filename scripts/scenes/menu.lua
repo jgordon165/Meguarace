@@ -74,7 +74,7 @@ local function apply_subtitles(st)
     -- here (not with --classic: the original's hiss, and nothing saved).
     local eff = require("game.display").effective(st)
     player.voice_filter = eff.voice_filter ~= false
-    player.lance_smoother = eff.lance_smoother ~= false
+    player.lance_smoother = eff.lance_smoother == true
     player.on_voice_filter = not sys.classic and function(on)
         st.voice_filter = on
         save.store(st)
