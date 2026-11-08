@@ -92,6 +92,9 @@ public:
     std::string bestMode() const;
     // HD pictures are shown: an HD mode, packs found, and not switched off (F10).
     bool hdOn() const { return hdAvailable() && hdOn_ && mode().hd; }
+    // Drawing the HUD, which can take HD sprites whatever the HD style (the
+    // dashboard packs: Options > ADVANCED > DASHBOARD).
+    bool hudHdReady() const { return hudPhase_ == 1 && hdAvailable() && hudHdTexture_ && mode().hd; }
     void setHdOn(bool on) { hdOn_ = on; }
     // blit() of a video frame shown from its original pixels (no HD picture,
     // or the LINE DOUBLED style): the same, but those pixels go to the video
@@ -219,7 +222,15 @@ private:
     SDL_Texture* hudTexture_ = nullptr;       // w_ x h_
     SDL_Texture* hudSharp_ = nullptr;         // at a whole-number scale (render target)
     SDL_Texture* postTexture_ = nullptr;      // canvas size, over the HUD
-    bool hudActive() const { return ox_ > 0 && mode().hd; }
+    // HD sprites in the HUD (e.g. the dashboard packs): the HUD's game columns
+    // at the packs' picture size, drawn under the HUD layer, stretched like it.
+    std::vector<uint32_t> hudHd_;
+    SDL_Texture* hudHdTexture_ = nullptr;
+    bool hudHdUsed_ = false;                  // something in hudHd_ this frame
+    bool spriteHudHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
+                     const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
+                     long* recoloured);
+    bool hudActive() const { return mode().hd; }   // 4:3 too: its HD sprites (the dashboard packs)
     std::vector<uint32_t> videoLayer_;        // video layer, 320x200, transparent elsewhere
     SDL_Texture* videoTexture_ = nullptr;     // video layer, 320x200
     SDL_Texture* videoScaled_ = nullptr;      // video layer at a whole-number scale (render target)

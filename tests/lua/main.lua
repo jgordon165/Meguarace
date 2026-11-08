@@ -880,6 +880,13 @@ test("classic mode and track color", function()
     local display, save = require("game.display"), require("game.save")
     check(save.defaults().track_color == "intense", "intense by default")
     check(save.defaults().messages == "enhanced", "big messages by default")
+    check(save.defaults().dashboard == "hd", "HD dashboard by default")
+    check(display.CLASSIC.dashboard == "original", "classic: the original dashboard")
+    local tset = spr.open("TJO_2")
+    if tset then
+        check(type(tset.use_hd) == "function" and type(tset:has_hd()) == "boolean", "sets can turn their HD pack off")
+        tset:use_hd(false); tset:use_hd(true)
+    end
     check(require("ui.rawfont").width("SKID") == 38, "message width")
     check(save.defaults().sharpen == "light" and gfx.sharpen(1) == 1 and gfx.sharpen(9) == 2 and gfx.sharpen(0) == 0, "sharpen levels")
     check(gfx.video_grade(2) == 2 and gfx.video_grade(5) == 2 and gfx.video_grade(0) == 0, "grade levels")

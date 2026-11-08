@@ -109,6 +109,8 @@ void Video::hudBegin() {
     if (!hudActive()) return;
     hudFb_.assign(size_t(w_) * size_t(h_), 0);
     hudMask_.assign(hudFb_.size(), 0);
+    if (hudHdUsed_) std::fill(hudHd_.begin(), hudHd_.end(), 0u);
+    hudHdUsed_ = false;
     hudPhase_ = 1;
 }
 
@@ -291,6 +293,16 @@ bool Video::enableHd(int picW, int picH) {
     SDL_SetTextureBlendMode(hdTexture_, SDL_BLENDMODE_BLEND);
     hd_.assign(size_t(hdCW_) * size_t(picH), 0u);
     hdDirty_ = true;
+    if (!hudHdTexture_ || int(hudHd_.size()) != picW * picH) {
+        if (hudHdTexture_) SDL_DestroyTexture(hudHdTexture_);
+        hudHdTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, picW, picH);
+        if (hudHdTexture_) {
+            SDL_SetTextureScaleMode(hudHdTexture_, SDL_ScaleModeLinear);
+            SDL_SetTextureBlendMode(hudHdTexture_, SDL_BLENDMODE_BLEND);
+        }
+        hudHd_.assign(size_t(picW) * size_t(picH), 0u);
+    }
+    hudHdUsed_ = false;
     return true;
 }
 
@@ -389,6 +401,10 @@ void Video::drawSides() {
 void Video::disableHd() {
     if (hdTexture_) SDL_DestroyTexture(hdTexture_);
     hdTexture_ = nullptr;
+    if (hudHdTexture_) SDL_DestroyTexture(hudHdTexture_);
+    hudHdTexture_ = nullptr;
+    hudHd_.clear();
+    hudHdUsed_ = false;
     picW_ = picH_ = hdCW_ = 0;
     hd_.clear();
     std::fill(src_.begin(), src_.end(), uint8_t(0));
@@ -704,8 +720,10 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
 bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
                      const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
                      long* recoloured) {
-    // In the HUD layer: the original pixels (stretched with it).
-    if (!hdOn() || clipOn_ || hudPhase_ == 1 || w <= 0 || h <= 0 || hdW <= 0 || hdH <= 0) return false;
+    if (clipOn_ || w <= 0 || h <= 0 || hdW <= 0 || hdH <= 0) return false;
+    // In the HUD layer: into its own HD picture (stretched with it).
+    if (hudPhase_ == 1) return hudHdReady() && spriteHudHd(px, w, h, x, y, flip, hdPx, hdW, hdH, indexed, baked, recoloured);
+    if (!hdOn()) return false;
     // Screen <-> picture: x * picW / 320, rounded down (also for negatives).
     auto fdiv = [](int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); };
     auto mx = [&](int v) { return fdiv(int64_t(v) * picW_, w_); };
@@ -761,6 +779,102 @@ bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
             if (orig && recoloured) ++*recoloured;
         }
     hdDirty_ = true;
+    return true;
+}
+
+// spriteHd's HUD version: hudHd_ is the HUD's game columns (w_ x h_) at the
+// picture size, under the HUD layer. Where the HD image goes, the HUD layer
+// turns transparent (what it showed there is copied into hudHd_ first), so
+// the low-res pixels only show where they're drawn later, or where the game
+// recoloured the image since the pack was made.
+bool Video::spriteHudHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
+                        const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
+                        long* recoloured) {
+    if (!hudHdTexture_ || hudHd_.empty()) return false;
+    auto fdiv = [](int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); };
+    auto mx = [&](int v) { return fdiv(int64_t(v) * picW_, w_); };
+    auto my = [&](int v) { return fdiv(int64_t(v) * picH_, h_); };
+    const int x0 = std::max(x, 0), x1 = std::min(x + w, w_), y0 = std::max(y, 0), y1 = std::min(y + h, h_);
+    if (x0 >= x1 || y0 >= y1) return true;
+    const size_t PW = size_t(picW_);
+    // Where the image repeats what's under it (a gauge's background over the
+    // dashboard it was cut from), the HD picture underneath stays: separately
+    // upscaled, the two wouldn't match. `keep`: 1 where the image differs
+    // (or nothing is under it), 0 where it's the same; sampled smoothly below.
+    std::vector<float> keep(size_t(w) * size_t(h), 1.0f);
+    bool anySame = false;
+    for (int sy = 0; sy < h; ++sy)
+        for (int sx = 0; sx < w; ++sx) {
+            int X = x + (flip ? w - 1 - sx : sx), Y = y + sy;
+            if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
+            uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
+            uint8_t under = hudFb_[size_t(Y) * size_t(w_) + size_t(X)];
+            if (c && c == under) { keep[size_t(sy) * size_t(w) + size_t(sx)] = 0.0f; anySame = true; }
+        }
+    auto keepAt = [&](int i, int j) {   // HD pixel (image coordinates) -> 0..1
+        float u = (float(i) + 0.5f) * float(w) / float(hdW) - 0.5f, v = (float(j) + 0.5f) * float(h) / float(hdH) - 0.5f;
+        u = std::clamp(u, 0.0f, float(w - 1)); v = std::clamp(v, 0.0f, float(h - 1));
+        int u0 = int(u), v0 = int(v), u1 = std::min(u0 + 1, w - 1), v1 = std::min(v0 + 1, h - 1);
+        float fu = u - float(u0), fv = v - float(v0);
+        auto k = [&](int a, int b) { return keep[size_t(b) * size_t(w) + size_t(a)]; };
+        float t = (k(u0, v0) * (1 - fu) + k(u1, v0) * fu) * (1 - fv) + (k(u0, v1) * (1 - fu) + k(u1, v1) * fu) * fv;
+        return std::min(1.0f, t * 2.0f);   // the ramp mostly on the same side
+    };
+    // 1. The HUD's pixels under the sprite into hudHd_ (it hides them now).
+    for (int Y = y0; Y < y1; ++Y)
+        for (int X = x0; X < x1; ++X) {
+            size_t p = size_t(Y) * size_t(w_) + size_t(X);
+            if (!hudMask_[p]) continue;
+            uint32_t c = pal_[hudFb_[p]] | 0xFF000000u;
+            for (int r = my(Y); r < my(Y + 1); ++r)
+                std::fill(&hudHd_[size_t(r) * PW + size_t(mx(X))], &hudHd_[size_t(r) * PW + size_t(mx(X + 1))], c);
+            hudMask_[p] = 0;
+        }
+    // 2. The HD image, alpha-blended (over transparent: its own alpha).
+    const int ox = mx(x), oy = my(y);
+    for (int j = 0; j < hdH; ++j) {
+        int Y = oy + j;
+        if (Y < 0 || Y >= picH_) continue;
+        for (int i = 0; i < hdW; ++i) {
+            int X = ox + i;
+            if (X < 0 || X >= picW_) continue;
+            const int si = flip ? hdW - 1 - i : i;
+            uint32_t s = hdPx[size_t(j) * size_t(hdW) + size_t(si)];
+            uint32_t a = s >> 24;
+            if (!a) continue;
+            uint32_t& d = hudHd_[size_t(Y) * PW + size_t(X)];
+            if (anySame && (d >> 24)) {
+                a = uint32_t(float(a) * keepAt(si, j) + 0.5f);
+                if (!a) continue;
+            }
+            uint32_t c = indexed ? pal_[(s >> 16) & 0xFF] : s;
+            uint32_t da = d >> 24;
+            if (a == 255 || !da) { d = (c & 0x00FFFFFFu) | a << 24; continue; }
+            // "over": out alpha a + da(1 - a), colours weighted by their alpha.
+            uint32_t oa = a * 255 + da * (255 - a);   // x255
+            auto mix = [&](int sh) {
+                uint32_t sc = (c >> sh) & 0xFF, dc = (d >> sh) & 0xFF;
+                return ((sc * a * 255 + dc * da * (255 - a) + oa / 2) / oa) << sh;
+            };
+            d = (oa + 127) / 255 << 24 | mix(16) | mix(8) | mix(0);
+        }
+    }
+    hudHdUsed_ = true;
+    // 3. The original pixels as always, then hidden in the HUD layer except
+    //    where the game has recoloured them since the pack was made.
+    sprite(px, w, h, x, y, 1.0, flip);
+    bool changed[256] = {};
+    if (!indexed) changedColours(baked, changed);
+    for (int Y = y0; Y < y1; ++Y)
+        for (int X = x0; X < x1; ++X) {
+            int sx = X - x, sy = Y - y;
+            if (flip) sx = w - 1 - sx;
+            uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
+            if (!c) continue;
+            bool orig = changed[c];
+            hudMask_[size_t(Y) * size_t(w_) + size_t(X)] = orig ? 1 : 0;
+            if (orig && recoloured) ++*recoloured;
+        }
     return true;
 }
 
@@ -873,6 +987,10 @@ void Video::render(bool showHd) {
         for (size_t i = 0; i < hudFb_.size(); ++i) {
             const uint32_t c = pal_[hudFb_[i]];
             hudLayer_[i] = hudMask_[i] ? c : (c & 0x00FFFFFFu);
+        }
+        if (hudHdUsed_ && hudHdTexture_) {   // HD sprites in the HUD, under it
+            SDL_UpdateTexture(hudHdTexture_, nullptr, hudHd_.data(), picW_ * 4);
+            SDL_RenderCopy(renderer_, hudHdTexture_, nullptr, nullptr);
         }
         SDL_UpdateTexture(hudTexture_, nullptr, hudLayer_.data(), w_ * 4);
         drawThrough(hudTexture_, hudSharp_);

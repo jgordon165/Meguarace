@@ -251,12 +251,12 @@ int main(int argc, char** argv) {
     }
     const size_t videosMade = videos.size() - size_t(skipped + failed);
 
-    // Menu sprites: small, a few seconds in all.
+    // Sprite sets (menus, dashboards): small, a few seconds in all.
     int sFailed = 0, sSkipped = 0;
-    if (!sprites.empty()) std::printf("%zu menu sprite sets -> %s\n", sprites.size(), out.c_str());
+    if (!sprites.empty()) std::printf("%zu sprite sets (menus, dashboards) -> %s\n", sprites.size(), out.c_str());
     for (const auto& sname : sprites) {
         auto d = dat.read(sname + ".HSQ");
-        if (!d) { std::fprintf(stderr, "%s: not in the archive\n", sname.c_str()); ++sFailed; continue; }
+        if (!d) { std::printf("  %-10s not in this archive, skipped\n", sname.c_str()); ++sSkipped; continue; }
         fs::path packPath = fs::path(out) / (sname + ".hds");
         if (!force) {
             hd::SpritePackData existing;
@@ -268,7 +268,9 @@ int main(int argc, char** argv) {
             }
         }
         std::string kind, err;
-        if (!hd::convertSprites(*d, packPath.string(), opt, kind, err)) {
+        hd::ConvertOptions sopt = opt;
+        sopt.strip = hd::spriteStrip(sname);
+        if (!hd::convertSprites(*d, packPath.string(), sopt, kind, err)) {
             std::fprintf(stderr, "%s: %s\n", sname.c_str(), err.c_str());
             ++sFailed;
             continue;

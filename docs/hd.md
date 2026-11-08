@@ -31,6 +31,7 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%) or **FASTEST** (+50%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 18.75), so the race goes by quicker. Menus, videos and effects are unchanged. |
 | TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
 | MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. **CLASSIC**: the original's small text on a black box. |
+| DASHBOARD | **HD** (the default): the race dashboard, gauges and scanner from their HD packs (see [Dashboard](#dashboard)), in every HD resolution. **ORIGINAL**: the original pixels. |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes
@@ -165,6 +166,23 @@ In both, the engine checks pixel by pixel: where the game has changed a
 colour since the picture was made (a fade, an index recoloured for a
 highlight), those pixels show the original, so colours are always as the
 game means them. The same check applies to the videos.
+
+## Dashboard
+
+It also upscales the race dashboards: each car's cockpit (`T<car>_2`, two
+160×48 halves), its gauge pieces (`T<car>`) and the tile scanner (`ZONES_`),
+17 sets, under 1 MB. An older pack folder gets them by running it again
+(packs already made are skipped). The two halves of a cockpit are upscaled
+together as one 320×48 picture, so there's no seam down the middle.
+
+Options > ADVANCED > DASHBOARD: **HD** (the default) draws them from the
+packs in every HD resolution, whatever HD STYLE says (the HUD has its own HD
+picture, stretched with it in 16:9); **ORIGINAL** keeps the original pixels.
+`--classic` uses ORIGINAL. Each gauge piece carries a copy of the cockpit
+behind it; where it's the same as the cockpit underneath, the HD cockpit
+stays, and the HD gauge fades in only where it differs (needles, bars,
+lamps), so separately upscaled pieces don't leave rectangles. Small text on
+the dashboard (the opponents digit) stays in the game's font.
 
 ## How it works
 

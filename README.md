@@ -164,6 +164,9 @@ FASTER (+33%) and TRACK COLOR INTENSE:
   on the track video in races (the cars, HUD and text untouched)
 - MESSAGES: ENHANCED (the race's messages as big as LAPS and the score,
   outlined, no box) or CLASSIC (small text on a black box)
+- DASHBOARD: HD (the default: the race dashboard, gauges and scanner from
+  HD packs, which `hd-conversion-utility` makes; run it again on an older
+  pack folder to add them) or ORIGINAL (the original pixels)
 - VOICE FILTER: the hiss filter on Lance's clips
 
 The game always works in 320×200 coordinates, so gameplay is the

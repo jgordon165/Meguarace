@@ -728,6 +728,7 @@ struct SprUd {
     std::unique_ptr<hd::SpritePackData> hd;
     std::string name;
     long hdDraws = 0, recoloured = 0;
+    bool useHd = true;   // s:use_hd(false): always the original pixels
     ~SprUd() {
         if (hd && std::getenv("MEGARACE_HD_STATS"))
             std::printf("HD %s: %ld sprites from the pack (%ld pixels recoloured by the game, shown original)\n",
@@ -766,7 +767,7 @@ static int spr_draw(lua_State* L) {
     Video& v = s->eng->video;
     // From the HD pack at scale 1, when the screen shows the colours it was
     // made in (colour packs) or always (indexed packs, coloured as drawn).
-    if (s->hd && scale == 1.0 && v.hdOn() && i < s->hd->images.size()) {
+    if (s->hd && s->useHd && scale == 1.0 && (v.hdOn() || v.hudHdReady()) && i < s->hd->images.size()) {
         const auto& h = s->hd->images[i];
         if (!h.px.empty() && h.w == img->w && h.h == img->h) {
             const bool indexed = s->hd->kind == 1;
@@ -780,6 +781,11 @@ static int spr_draw(lua_State* L) {
     v.sprite(img->pixels.data(), img->w, img->h, x, y, scale, flip);
     return 0;
 }
+
+// s:use_hd(on): whether draws use the set's HD pack (default on).
+// s:has_hd() -> whether it has one.
+static int spr_use_hd(lua_State* L) { checkSpr(L)->useHd = lua_toboolean(L, 2); return 0; }
+static int spr_has_hd(lua_State* L) { lua_pushboolean(L, checkSpr(L)->hd != nullptr); return 1; }
 
 static int spr_pixels(lua_State* L) {
     const auto* img = checkSpr(L)->set.image(size_t(luaL_checkinteger(L, 2)));
@@ -936,7 +942,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg sprlib[] = {{"open", spr_open}, {nullptr, nullptr}};
     static const luaL_Reg sprMethods[] = {
         {"count", spr_count}, {"size", spr_size}, {"apply_palette", spr_apply_palette},
-        {"draw", spr_draw}, {"pixels", spr_pixels}, {nullptr, nullptr}};
+        {"draw", spr_draw}, {"pixels", spr_pixels}, {"use_hd", spr_use_hd}, {"has_hd", spr_has_hd},
+        {nullptr, nullptr}};
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
         {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
