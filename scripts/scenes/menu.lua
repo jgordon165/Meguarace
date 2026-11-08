@@ -91,6 +91,7 @@ function S:enter()
     end
     self.bg = assert(hnm.open("PANEL1.HNM"))
     self.panel = assert(spr.open("PANEL2"))
+    self.font = require("ui.font").open("FONTOPT", 8)
     self.focus = self.focus or 0
     self.t = 0
     self:rebuild()
@@ -284,6 +285,49 @@ local function centred(set, i)
     if w and c then set:draw(i, c[1] - w // 2, c[2] - h // 2) end
 end
 
+-- This port's: level, round, track and score under the globe, on a plate
+-- in the console's style: a bevelled metal frame round a dark readout, the
+-- text in the options' font (FONTOPT, HD with the packs), the fields
+-- apart with red lamps like the monitors' bars.
+-- In the palette's own nearest colours: changing an entry would also
+-- recolour the artwork's pixels that use it.
+function S:draw_status()
+    local st = self.state
+    local names = data.track_names()
+    local fields = { st.level, "ROUND " .. st.round, names[st.round] or "", "SCORE " .. st.total }
+    if fields[3] == "" then table.remove(fields, 3) end
+    local f, adv, gap = self.font, 7, 9
+    local w = -gap
+    for _, t in ipairs(fields) do w = w + #t * adv + gap end
+    local x0, y0, h = 160 - w // 2 - 6, 134, 13
+    local hi, mid, lo, well = gfx.nearest(150, 150, 158), gfx.nearest(92, 92, 100), gfx.nearest(38, 38, 44),
+                              gfx.nearest(8, 10, 12)
+    local W = w + 12
+    gfx.fill(x0 - 1, y0 - 1, W + 2, h + 2, lo)          -- shadow round the plate
+    gfx.fill(x0, y0, W, h, mid)                          -- metal
+    gfx.fill(x0, y0, W, 1, hi)                           -- lit top and left edges
+    gfx.fill(x0, y0, 1, h, hi)
+    gfx.fill(x0 + 2, y0 + 2, W - 4, h - 4, lo)           -- the readout's recess
+    gfx.fill(x0 + 3, y0 + 3, W - 6, h - 6, well)
+    local lamp = gfx.nearest(200, 20, 16)
+    local x = x0 + 6
+    for i, t in ipairs(fields) do
+        if f then
+            for k = 1, #t do
+                local ch = t:sub(k, k)
+                if ch ~= " " then f.set:draw(string.byte(ch:upper()), x + (k - 1) * adv, y0 + 2) end
+            end
+        else
+            gfx.text(x, y0 + 4, t, gfx.nearest(120, 230, 120))
+        end
+        x = x + #t * adv
+        if i < #fields then
+            gfx.fill(x + gap // 2 - 1, y0 + 5, 2, 3, lamp)
+            x = x + gap
+        end
+    end
+end
+
 function S:draw()
     gfx.clear(0)
     self.bg:draw(0, 0)
@@ -297,14 +341,7 @@ function S:draw()
     for b = 0, 2 do
         centred(p, (self.focus == 8 + b and BUTTON_LIT or BUTTON_OFF) + b)
     end
-    -- This port's: level, round and score on the globe's strip.
-    -- In the palette's own nearest colours: changing an entry would also
-    -- recolour the artwork's pixels that use it.
-    local white, yellow = gfx.nearest(235, 235, 240), gfx.nearest(255, 210, 60)
-    local names = data.track_names()
-    local line = string.format("%s  ROUND %d  %s  SCORE %d", st.level, st.round, names[st.round] or "", st.total)
-    gfx.fill(160 - #line * 2 - 3, 136, #line * 4 + 6, 8, 0)
-    gfx.text(160 - #line * 2, 137, line, white)
+    self:draw_status()
     if self.note then
         gfx.fill(160 - #self.note * 2 - 3, 126, #self.note * 4 + 6, 8, 0)
         gfx.text(160 - #self.note * 2, 127, self.note, yellow)
