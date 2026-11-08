@@ -173,7 +173,9 @@ It also upscales the race dashboards: each car's cockpit (`T<car>_2`, two
 160×48 halves), its gauge pieces (`T<car>`) and the tile scanner (`ZONES_`),
 17 sets, under 1 MB. An older pack folder gets them by running it again
 (packs already made are skipped). The two halves of a cockpit are upscaled
-together as one 320×48 picture, so there's no seam down the middle.
+together as one 320×48 picture, so there's no seam down the middle. Then they're sharpened (an unsharp mask, amount 2 over a 1.5-pixel
+radius), since the dashboard is seen close up and stretched; packs made
+before that are remade the next time the utility runs.
 
 Options > ADVANCED > DASHBOARD: **HD** (the default) draws them from the
 packs in every HD resolution, whatever HD STYLE says (the HUD has its own HD

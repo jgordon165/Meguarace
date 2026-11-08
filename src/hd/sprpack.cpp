@@ -60,7 +60,7 @@ bool writeSpritePack(const std::string& path, const SpritePackData& p, int quali
     std::vector<uint8_t> b = {'M', 'R', 'H', 'S'};
     put(b, kSpritePackVersion, 2);
     b.push_back(uint8_t(p.kind));
-    b.push_back(uint8_t(p.upscaler & 3));
+    b.push_back(uint8_t((p.upscaler & 3) | (p.sharpened ? 4 : 0)));   // bit 2: sharpened
     put(b, uint32_t(p.pictureW), 2); put(b, uint32_t(p.pictureH), 2);
     put(b, uint32_t(p.width), 2);    put(b, uint32_t(p.height), 2);
     put(b, uint32_t(p.images.size()), 4);
@@ -95,6 +95,7 @@ bool readSpritePack(const std::string& path, uint32_t sourceCrc, SpritePackData&
     if (get(&d[4], 2) != kSpritePackVersion) { err = "made by another version: run hd-conversion-utility again"; return false; }
     p.kind = d[6];
     p.upscaler = d[7] & 3u;
+    p.sharpened = (d[7] & 4u) != 0;
     p.pictureW = int(get(&d[8], 2)); p.pictureH = int(get(&d[10], 2));
     p.width = int(get(&d[12], 2));   p.height = int(get(&d[14], 2));
     uint32_t count = get(&d[16], 4);
