@@ -42,6 +42,9 @@
 --                 by quicker; the rest is unchanged).
 --   TRACK COLOR   OFF, VIVID or INTENSE: more colour and contrast on the
 --                 track video in races (the cars, HUD and text untouched).
+--   MESSAGES      ENHANCED (the race's messages, SKID, ENERGY + and so on, as
+--                 big as LAPS and the score, outlined, without the box) or
+--                 CLASSIC (the original's small text on a black box).
 --   VOICE FILTER  the hiss filter on Lance's clips (V while one plays).
 --
 -- ESC goes back to the OPTIONS panel. Everything is saved as it changes.
@@ -53,14 +56,14 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "color", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "color", "messages", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", messages = "MESSAGES", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
 local TOP, H = 22, 166
-local TITLE_Y, FIRST_Y, STEP = 28, 41, 11
+local TITLE_Y, FIRST_Y, STEP = 28, 40, 10
 
 -- The box: as wide as the screen allows (16:9 adds the wings).
 local function box()
@@ -104,6 +107,7 @@ function S:value(what)
     elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
+    elseif what == "messages" then return display.effective(self.state).messages == "classic" and "CLASSIC" or "ENHANCED"
     elseif what == "sharpen" then return (display.effective(self.state).sharpen or "off"):upper()
     elseif what == "color" then return (display.effective(self.state).track_color or "intense"):upper()
     elseif what == "voice" then return display.effective(self.state).voice_filter == false and "OFF" or "ON"
@@ -159,6 +163,9 @@ function S:change(what, dir)
         for k, v in ipairs(order) do if v == st.track_speed then i = k end end
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
+    elseif what == "messages" then
+        st.messages = st.messages == "classic" and "enhanced" or "classic"
+        require("scenes.race").big_messages = st.messages ~= "classic"
     elseif what == "sharpen" then
         local order, i = display.SHARPEN_ORDER, 1
         for k, v in ipairs(order) do if v == st.sharpen then i = k end end

@@ -49,6 +49,7 @@ function M.defaults()
         track_speed = "faster",    -- track video speed in races: "normal", "fast" (+25%), "faster" (+33%), "fastest" (+50%)
         track_color = "intense",   -- track video in races: "off", "vivid" or "intense" (more colour and contrast)
         music_style = "enhanced",  -- "original" (OPL2), "stereo" (FM), "soundfont" or "enhanced" (the EDM remix; Options > ADVANCED)
+        messages = "enhanced",     -- race messages (SKID...): "enhanced" (big, outlined, no box) or "classic"
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run
     }

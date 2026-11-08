@@ -67,6 +67,51 @@ function M.draw(x, y, text, white)
     end
 end
 
+-- '+' and '-' (not in the fonts), drawn in their style: 8 x 12, 2-pixel strokes.
+local function sign(ch, white)
+    local px = {}
+    for y = 0, 11 do
+        for x = 0, 7 do
+            local h = (y == 5 or y == 6) and x >= 1 and x <= 6
+            local v = ch == "+" and (x == 3 or x == 4) and y >= 2 and y <= 9
+            px[#px + 1] = string.char((h or v) and white or 0)
+        end
+    end
+    return table.concat(px)
+end
+
+-- The glyph for one character in the 8 x 12 fonts (nil: none, e.g. space).
+local function big_glyph(ch, white)
+    local b = ch:byte()
+    if b == 32 then return nil end
+    if ch == "+" or ch == "-" then return sign(ch, white) end
+    if b >= 48 and b < 58 then return glyph("FONTE1.RAW", b - 48, 8, 12, big, white) end
+    return glyph("FONTE2.RAW", math.max(0, b - 58), 8, 12, big, white)
+end
+
+-- Text in the 8 x 12 fonts with a 1-pixel `outline` (a palette index) all
+-- round, readable over any picture; transparent otherwise. M.width(text)
+-- is its width.
+function M.width(text) return #text * 10 - 2 end
+function M.draw_outlined(x, y, text, white, outline)
+    white = white or 15
+    local shapes = {}
+    for i = 1, #text do
+        local g = big_glyph(text:sub(i, i), white)
+        if g then
+            shapes[#shapes + 1] = { x + (i - 1) * 10, g, (g:gsub("[^%z]", string.char(outline))) }
+        end
+    end
+    for _, s in ipairs(shapes) do
+        for dy = -1, 1 do
+            for dx = -1, 1 do
+                if dx ~= 0 or dy ~= 0 then gfx.blit(s[1] + dx, y + dy, 8, 12, s[3], 0) end
+            end
+        end
+    end
+    for _, s in ipairs(shapes) do gfx.blit(s[1], y, 8, 12, s[2], 0) end
+end
+
 -- Small digits, 6 pixels apart (RACEPRG 0x159C with the 6 x 6 font).
 function M.draw_small(x, y, digits, white)
     white = white or 15
