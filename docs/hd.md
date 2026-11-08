@@ -30,7 +30,7 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%) or **FASTEST** (+50%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 18.75), so the race goes by quicker. Menus, videos and effects are unchanged. |
 | TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
-| MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. **CLASSIC**: the original's small text on a black box. |
+| MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. GET READY, GO and the end-of-race result (ALL OPPONENTS DESTROYED, QUALIFIED, PRESS ENTER) are drawn the same way. **CLASSIC**: the original's small text on black boxes. |
 | MENUS | **HD** (the default): the menu screens (main menu, options, Hall of Fame, the key and save panels) from their HD packs whatever HD STYLE says, and never smoothed. **ORIGINAL**: they follow HD STYLE. |
 | DASHBOARD | **HD** (the default): the race dashboard, gauges and scanner from their HD packs (see [Dashboard](#dashboard)), in every HD resolution. **ORIGINAL**: the original pixels. |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
@@ -170,9 +170,12 @@ game means them. The same check applies to the videos.
 
 ## Sharpening
 
-The menu screens' videos (PANEL1, HALL1) and every colour sprite set (the
-menus' panels and cars, the dashboards) are sharpened after upscaling: an
-unsharp mask, amount 2 over a 1.5-pixel radius, at the picture size. Packs
+The dashboards are sharpened after upscaling: an unsharp mask, amount 2
+over a 1.5-pixel radius, at the picture size. The menu screens' videos
+(PANEL1, HALL1) and colour sprite sets (panels, car pictures, buttons) are
+sharpened less (amount 1), then half the original pixels, line doubled, are
+mixed back in, so the original's pixel grain shows inside the cleaned-up
+shapes. Packs
 record it, so packs made before are remade the next time the utility runs
 (only those: a few seconds). The track and story videos aren't sharpened
 (SHARPEN does that on the GPU, adjustable).

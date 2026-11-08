@@ -96,6 +96,10 @@ static std::string userDir() {
     return r;
 }
 
+// The menu screens: sharpened a little, and half the original pixels mixed
+// back in, so the pixel grain shows inside the cleaned-up shapes.
+static constexpr float kMenuSharpen = 1.0f, kMenuGrain = 0.5f;
+
 int main(int argc, char** argv) {
     std::string data, only, upscaler, realesrgan;
     hd::ConvertOptions opt;
@@ -231,7 +235,7 @@ int main(int argc, char** argv) {
             hd::Pack existing;
             if (existing.open(packPath.string(), hd::crc32(d->data(), d->size())) &&
                 existing.header().pictureW == opt.pictureW && existing.header().pictureH == opt.pictureH &&
-                (existing.header().sharpened || !hd::menuVideo(v.stem))) {   // menu videos: remade sharpened
+                (!hd::menuVideo(v.stem) || (existing.header().sharpened && existing.header().grained))) {   // menu videos made the old way: remade
                 ++skipped;
                 continue;
             }
@@ -242,8 +246,9 @@ int main(int argc, char** argv) {
             std::fflush(stdout);
         };
         std::string err;
-        opt.sharpen = hd::menuVideo(v.stem) ? 2.0f : 0.0f;
+        opt.sharpen = hd::menuVideo(v.stem) ? kMenuSharpen : 0.0f;
         opt.sharpenRadius = 1.5f;
+        opt.grain = hd::menuVideo(v.stem) ? kMenuGrain : 0.0f;
         if (!hd::convertVideo(*d, packPath.string(), opt, err)) {
             std::fprintf(stderr, "\n%s: %s\n", v.name.c_str(), err.c_str());
             ++failed;
@@ -267,7 +272,8 @@ int main(int argc, char** argv) {
             if (hd::readSpritePack(packPath.string(), hd::crc32(d->data(), d->size()), existing, e) &&
                 existing.pictureW == opt.pictureW && existing.pictureH == opt.pictureH &&
                 // dashboards made before they were sharpened: remade
-                (existing.sharpened || existing.kind != 0)) {   // colour sets made before sharpening: remade
+                (existing.kind != 0 || (existing.sharpened &&
+                                        existing.grained == !hd::dashboardSprite(sname)))) {   // made the old way: remade
                 ++sSkipped;
                 continue;
             }
@@ -275,8 +281,13 @@ int main(int argc, char** argv) {
         std::string kind, err;
         hd::ConvertOptions sopt = opt;
         sopt.strip = hd::spriteStrip(sname);
-        sopt.sharpen = 2.0f;   // (colour sets; indexed ones are traced sharp already)
+        // Colour sets (indexed ones are traced sharp already): the dashboards
+        // sharpened; the menus sharpened less, with half the original pixels'
+        // grain mixed back in.
+        const bool dash = hd::dashboardSprite(sname);
+        sopt.sharpen = dash ? 2.0f : kMenuSharpen;
         sopt.sharpenRadius = 1.5f;
+        sopt.grain = dash ? 0.0f : kMenuGrain;
         if (!hd::convertSprites(*d, packPath.string(), sopt, kind, err)) {
             std::fprintf(stderr, "%s: %s\n", sname.c_str(), err.c_str());
             ++sFailed;

@@ -712,13 +712,23 @@ function S:draw()
     if self.demo and (s.tick // 50) % 2 == 0 then               -- 0x14B8: blinks every 50 ticks
         font.draw(60, 32, "PRESS BUTTON TO START", C_TEXT)
     end
-    if self.clock < 0 then
+    -- The race's notices (GET READY, GO, the result): ENHANCED messages draw
+    -- them like the messages, big and outlined without a box.
+    local function big(t, y, colour)
+        font.draw_outlined(160 - font.width(t) // 2, y, t, colour, gfx.nearest(0, 0, 0))
+    end
+    if self.clock < 0 and not self.finished then
         local t = "GET READY"
-        gfx.fill(100, 70, 120, 13 + (self.title and 10 or 0), 0)
-        gfx.text(160 - #t * 2, 74, t, C_TEXT)
-        if self.title then gfx.text(160 - #self.title * 2, 84, self.title, C_GOOD) end
-    elseif self.clock < 1 then
-        gfx.text(156, 74, "GO", C_GOOD)
+        if S.big_messages then
+            big(t, 70, C_TEXT)
+            if self.title then big(self.title, 88, C_GOOD) end
+        else
+            gfx.fill(100, 70, 120, 13 + (self.title and 10 or 0), 0)
+            gfx.text(160 - #t * 2, 74, t, C_TEXT)
+            if self.title then gfx.text(160 - #self.title * 2, 84, self.title, C_GOOD) end
+        end
+    elseif self.clock < 1 and not self.finished then
+        if S.big_messages then big("GO", 70, C_GOOD) else gfx.text(156, 74, "GO", C_GOOD) end
     end
     if self.finished then
         local res = self.result
@@ -726,10 +736,17 @@ function S:draw()
         local t2 = res.qualified and "QUALIFIED" or
             (res.outcome == "laps" and string.format("%d OPPONENTS LEFT - NOT QUALIFIED", res.left) or "NOT QUALIFIED")
         local t3 = "PRESS ENTER"
-        gfx.fill(60, 64, 200, 38, 0)
-        gfx.text(160 - #t1 * 2, 68, t1, C_TEXT)
-        gfx.text(160 - #t2 * 2, 80, t2, res.qualified and C_GOOD or C_WARN)
-        gfx.text(160 - #t3 * 2, 92, t3, C_TEXT)
+        local c2 = res.qualified and C_GOOD or C_WARN
+        if S.big_messages then
+            big(t1, 62, C_TEXT)
+            big(t2, 80, c2)
+            big(t3, 98, C_TEXT)
+        else
+            gfx.fill(60, 64, 200, 38, 0)
+            gfx.text(160 - #t1 * 2, 68, t1, C_TEXT)
+            gfx.text(160 - #t2 * 2, 80, t2, c2)
+            gfx.text(160 - #t3 * 2, 92, t3, C_TEXT)
+        end
     end
 end
 

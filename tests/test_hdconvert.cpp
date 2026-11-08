@@ -108,6 +108,17 @@ static void testSprites() {
     hd::SpritePackData sp;
     CHECK(hd::readSpritePack(p3, hd::crc32(strip.data(), strip.size()), sp, err));
     CHECK(sp.sharpened && sp.images.size() == 2 && sp.images[1].hdW == sp.images[0].hdW);
+    // Grain: the original pixels mixed back in, recorded.
+    hd::ConvertOptions go;
+    go.grain = 1.0f;
+    std::string p4 = scratch("grain.hds").string();
+    CHECK(hd::convertSprites(own, p4, go, kind, err));
+    hd::SpritePackData gp;
+    CHECK(hd::readSpritePack(p4, hd::crc32(own.data(), own.size()), gp, err) && gp.grained && !gp.sharpened);
+    // All grain: the middle of the top row is the original red exactly.
+    const auto& gi = gp.images[0];
+    uint32_t gm = gi.px[size_t(gi.hdH / 4) * size_t(gi.hdW) + size_t(gi.hdW / 2)];
+    CHECK(((gm >> 16) & 0xFF) == 255 && ((gm >> 8) & 0xFF) == 0);
 }
 
 static void testResample() {
