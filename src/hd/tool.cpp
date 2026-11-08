@@ -262,7 +262,9 @@ int main(int argc, char** argv) {
             hd::SpritePackData existing;
             std::string e;
             if (hd::readSpritePack(packPath.string(), hd::crc32(d->data(), d->size()), existing, e) &&
-                existing.pictureW == opt.pictureW && existing.pictureH == opt.pictureH) {
+                existing.pictureW == opt.pictureW && existing.pictureH == opt.pictureH &&
+                // dashboards made before they were sharpened: remade
+                (existing.sharpened || existing.kind != 0 || !hd::dashboardSprite(sname))) {
                 ++sSkipped;
                 continue;
             }
@@ -270,6 +272,7 @@ int main(int argc, char** argv) {
         std::string kind, err;
         hd::ConvertOptions sopt = opt;
         sopt.strip = hd::spriteStrip(sname);
+        if (hd::dashboardSprite(sname)) { sopt.sharpen = 2.0f; sopt.sharpenRadius = 1.5f; }
         if (!hd::convertSprites(*d, packPath.string(), sopt, kind, err)) {
             std::fprintf(stderr, "%s: %s\n", sname.c_str(), err.c_str());
             ++sFailed;

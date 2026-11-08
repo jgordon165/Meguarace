@@ -447,6 +447,54 @@ const char* const kMenuSprites[] = {"PANEL2", "KONTROL", "KONTROL6", "CONTROL2",
                                     "TJO_2", "TRA_2", "TOU_2", "TPA_2", "TLU_2", "TOM_2", "THO_2", "TMA_2",
                                     "TJO", "TRA", "TOU", "TPA", "TLU", "TOM", "THO", "TMA", "ZONES_", nullptr};
 
+// Unsharp mask on the colours (alpha kept): c + amount * (c - blur(c)),
+// the blur weighted by alpha so transparent pixels don't darken edges.
+static void unsharp(std::vector<uint32_t>& px, int W, int H, float radius, float amount) {
+    if (amount <= 0 || W <= 0 || H <= 0) return;
+    const int R = std::max(1, int(std::ceil(radius * 3)));
+    std::vector<float> k(size_t(2 * R + 1));
+    for (int i = -R; i <= R; ++i) k[size_t(i + R)] = std::exp(-0.5f * float(i * i) / (radius * radius));
+    const size_t n = size_t(W) * size_t(H);
+    std::vector<float> c(n * 4), t(n * 4);   // premultiplied r, g, b, a
+    for (size_t i = 0; i < n; ++i) {
+        float al = float(px[i] >> 24) / 255.0f;
+        c[i * 4] = al * float((px[i] >> 16) & 0xFF); c[i * 4 + 1] = al * float((px[i] >> 8) & 0xFF);
+        c[i * 4 + 2] = al * float(px[i] & 0xFF); c[i * 4 + 3] = al;
+    }
+    for (int pass = 0; pass < 2; ++pass) {
+        const auto& from = pass ? t : c;
+        std::vector<float> out(n * 4, 0.0f);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                float acc[4] = {0, 0, 0, 0};
+                for (int d = -R; d <= R; ++d) {
+                    int X = pass ? x : std::clamp(x + d, 0, W - 1), Y = pass ? std::clamp(y + d, 0, H - 1) : y;
+                    const float* f = &from[(size_t(Y) * size_t(W) + size_t(X)) * 4];
+                    float wgt = k[size_t(d + R)];
+                    for (int ch = 0; ch < 4; ++ch) acc[ch] += wgt * f[ch];
+                }
+                for (int ch = 0; ch < 4; ++ch) out[(size_t(y) * size_t(W) + size_t(x)) * 4 + size_t(ch)] = acc[ch];
+            }
+        if (pass) c.swap(out); else t.swap(out);
+    }
+    // c now holds the blur (premultiplied); t is free.
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t al = px[i] >> 24;
+        if (!al || c[i * 4 + 3] <= 0) continue;
+        uint32_t o = px[i] & 0xFF000000u;
+        for (int ch = 0; ch < 3; ++ch) {
+            float v = float((px[i] >> (16 - 8 * ch)) & 0xFF), b = c[i * 4 + size_t(ch)] / c[i * 4 + 3];
+            float r = v + amount * (v - b);
+            o |= uint32_t(std::clamp(int(r + 0.5f), 0, 255)) << (16 - 8 * ch);
+        }
+        px[i] = o;
+    }
+}
+
+bool dashboardSprite(const std::string& name) {
+    return (name.size() == 3 || spriteStrip(name)) && name[0] == 'T';
+}
+
 bool spriteStrip(const std::string& name) {   // T<car>_2: the dashboard's two halves
     return name.size() == 5 && name[0] == 'T' && name.compare(3, 2, "_2") == 0;
 }
@@ -621,6 +669,7 @@ bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPa
         } else {
             up = upscale(opt, joined, stripW, stripH, stripHdW, stripHdH);
         }
+        unsharp(up, stripHdW, stripHdH, opt.sharpenRadius, opt.sharpen);   // across the join too
         for (size_t i = 0, X0 = 0; i < set.count(); X0 += size_t(pack.images[i].hdW), ++i) {
             auto& out = pack.images[i];
             for (int y = 0; y < out.hdH; ++y)
@@ -642,6 +691,10 @@ bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPa
             for (size_t k = 0; k < out.px.size(); ++k) out.px[k] |= up[k] & 0xFFFFFF;
         }
     }
+    pack.sharpened = opt.sharpen > 0 && own;
+    if (opt.sharpen > 0 && own && !strip)
+        for (auto& im : pack.images)
+            if (!im.px.empty()) unsharp(im.px, im.hdW, im.hdH, opt.sharpenRadius, opt.sharpen);
     return writeSpritePack(outPath, pack, opt.quality, err);
 }
 

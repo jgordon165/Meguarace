@@ -93,6 +93,21 @@ static void testSprites() {
     CHECK(i.kind == 1 && ((imid >> 16) & 0xFF) == 5 && (imid >> 24) > 200);
     uint32_t ibot = ii.px[size_t(ii.hdH * 3 / 4) * size_t(ii.hdW) + size_t(ii.hdW / 2)];   // bottom-middle: colour 6
     CHECK(((ibot >> 16) & 0xFF) == 6);
+    CHECK(!c.sharpened);
+    // Dashboards: a strip (two halves upscaled as one) and sharpened, which
+    // the pack records.
+    CHECK(hd::spriteStrip("TJO_2") && !hd::spriteStrip("TJO") && !hd::spriteStrip("PANEL2"));
+    CHECK(hd::dashboardSprite("TJO_2") && hd::dashboardSprite("TMA") && !hd::dashboardSprite("ZONES_") &&
+          !hd::dashboardSprite("PANEL2") && !hd::dashboardSprite("FONTOPT"));
+    Bytes b = {3, 0, 2, 0xFF, 5, 5, 6, 6, 6, 5};
+    Bytes strip = spriteSet({5, 2, 63, 0, 0, 0, 63, 0, 0xFF, 0xFF}, {b, b});
+    hd::ConvertOptions so;
+    so.strip = true; so.sharpen = 2.0f;
+    std::string p3 = scratch("strip.hds").string();
+    CHECK(hd::convertSprites(strip, p3, so, kind, err) && kind == "colour");
+    hd::SpritePackData sp;
+    CHECK(hd::readSpritePack(p3, hd::crc32(strip.data(), strip.size()), sp, err));
+    CHECK(sp.sharpened && sp.images.size() == 2 && sp.images[1].hdW == sp.images[0].hdW);
 }
 
 static void testResample() {

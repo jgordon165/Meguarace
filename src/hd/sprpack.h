@@ -49,6 +49,7 @@ struct SpritePackData {
     int pictureW = 1440, pictureH = 1080, width = 320, height = 200;
     uint32_t sourceCrc = 0;
     uint32_t upscaler = 0;                       // hd::kUpscaler*
+    bool sharpened = false;                      // an unsharp mask after the upscale (dashboards)
     std::vector<uint8_t> palette = std::vector<uint8_t>(768, 0);
     std::vector<SpriteImage> images;             // one per set entry; px empty = none
 };

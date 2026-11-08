@@ -33,6 +33,9 @@ struct ConvertOptions {
     // Sprite sets: the images side by side are one picture (the dashboards'
     // two halves), upscaled together so there's no seam where they meet.
     bool strip = false;
+    // Sprite sets: an unsharp mask on the finished pictures (0 = none):
+    // amount, over a Gaussian of sharpenRadius picture pixels.
+    float sharpen = 0, sharpenRadius = 1.5f;
     std::function<void(int done, int total)> progress;
 };
 
@@ -62,6 +65,9 @@ std::vector<uint32_t> upscale(const struct ConvertOptions& opt, const std::vecto
 extern const char* const kMenuSprites[];
 // Whether a set from kMenuSprites is a strip (ConvertOptions::strip).
 bool spriteStrip(const std::string& name);
+// Whether it's one of the race dashboard sets (sharpened after upscaling:
+// they're seen stretched, and close up).
+bool dashboardSprite(const std::string& name);
 
 // Converts one sprite set (its bytes as stored in the archive) into an HD
 // sprite pack at outPath (see sprpack.h). `kind` gets "colour" or "indexed".
