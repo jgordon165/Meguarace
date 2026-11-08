@@ -220,6 +220,10 @@ function S:change(what, dir)
         st.voice_filter = st.voice_filter == false
         require("scenes.player").voice_filter = st.voice_filter
     elseif what == "folder" then
+        if (sys.hd_arg or "") ~= "" then
+            self.note = "SET BY --HD FOR THIS SESSION"
+            return
+        end
         self.editing = (sys.hd_folder())
         input.text_start()
         return

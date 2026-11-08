@@ -41,7 +41,7 @@ static const char* kUsage =
     "of the game. Run it once; the game picks the packs up by itself.\n"
     "\n"
     "  The packs go to the HD folder set in the game (Options > HD FOLDER),\n"
-    "  by default your Meguarace user folder /hd.\n"
+    "  by default your Meguarace user folder /hd, or to --out.\n"
     "  (pictures are 1440x1080, the 4:3 picture of 1080p; smaller display modes\n"
     "   are scaled down from them by the game)\n"
     "  --quality Q           WebP quality 1..100, or 'lossless' (default 90)\n"
@@ -56,7 +56,9 @@ static const char* kUsage =
     "                        or 'PANEL2' (case-insensitive)\n"
     "  --jobs N              worker threads (default: all cores)\n"
     "  --force               remake packs that are already up to date\n"
-    "  --list                list the videos and exit\n";
+    "  --list                list the videos and exit\n"
+    "  --out FOLDER          make the packs there (then start the game with\n"
+    "                        --hd FOLDER, or set it as its HD FOLDER)\n";
 
 static bool globMatch(const char* p, const char* s) {
     for (; *p; ++p, ++s) {
@@ -101,7 +103,7 @@ static std::string userDir() {
 static constexpr float kMenuSharpen = 1.0f, kMenuGrain = 0.5f;
 
 int main(int argc, char** argv) {
-    std::string data, only, upscaler, realesrgan;
+    std::string data, only, upscaler, realesrgan, outArg;
     hd::ConvertOptions opt;
     bool force = false, list = false;
 
@@ -120,6 +122,7 @@ int main(int argc, char** argv) {
         else if (a == "--jobs")       opt.jobs = std::atoi(next().c_str());
         else if (a == "--force")      force = true;
         else if (a == "--list")       list = true;
+        else if (a == "--out" || a == "--hd") outArg = next();
         else { std::fputs(kUsage, a == "--help" || a == "-h" ? stdout : stderr); return a == "--help" || a == "-h" ? 0 : 2; }
     }
     if (data.empty()) { std::fputs(kUsage, stderr); return 2; }
@@ -200,9 +203,9 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    const std::string user = userDir();
-    if (user.empty()) { std::fprintf(stderr, "no user folder: %s\n", SDL_GetError()); return 1; }
-    const std::string out = hd::packFolder(user);
+    const std::string user = outArg.empty() ? userDir() : std::string();
+    if (outArg.empty() && user.empty()) { std::fprintf(stderr, "no user folder: %s\n", SDL_GetError()); return 1; }
+    const std::string out = outArg.empty() ? hd::packFolder(user) : outArg;
     std::error_code ec;
     fs::create_directories(out, ec);
     if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", out.c_str(), ec.message().c_str()); return 1; }

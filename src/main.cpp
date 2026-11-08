@@ -60,17 +60,20 @@ int main(int argc, char** argv) {
         else if (a == "--frames")     maxFrames = std::atol(next().c_str());
         else if (a == "--screenshot") shot = next();
         else if (a == "--no-hd")      noHd = true;
+        else if (a == "--hd")         eng.hdArg = next();
         else if (a == "--display")    eng.displayArg = next();
         else if (a == "--classic")    eng.classic = true;
         else if (a == "--help" || a == "-h") {
             std::printf("megarace --data <your MegaRace CD or install folder> "
                         "[--music <folder with track02.wav...>] [--scale N]"
-                        " [--no-hd]"
+                        " [--hd <folder>] [--no-hd]"
                         " [--display native|800x600|1024x768|1920x1080]"
                         " [--classic]"
                         "\n"
                         "  --classic  play as the original for this session: 320x200, 4:3,\n"
-                        "             the FM music and sounds, no smoothing (settings untouched)\n");
+                        "             the FM music and sounds, no smoothing (settings untouched)\n"
+                        "  --hd       the HD packs' folder for this session, instead of\n"
+                        "             Options > ADVANCED > HD FOLDER (not saved)\n");
             return 0;
         }
     }
@@ -113,7 +116,7 @@ int main(int argc, char** argv) {
     // SDL starts with text input on; the game only wants it while a text
     // line is being edited (input.text_start).
     SDL_StopTextInput();
-    // HD packs from the folder set in Options > HD FOLDER (hd.cfg).
+    // HD packs from --hd, else the folder set in Options > HD FOLDER (hd.cfg).
     if (loadHd(eng))
         std::printf("HD videos (%dx%d) from %s (F10 turns them off and on)\n", eng.video.hdPictureW(),
                     eng.video.hdPictureH(), eng.hdDir.c_str());
