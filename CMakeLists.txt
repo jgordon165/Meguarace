@@ -164,7 +164,8 @@ add_library(megarace_formats STATIC
     src/formats/gm_map.cpp
     src/fm.cpp
     src/tsf_impl.cpp
-    src/voice_filter.cpp)
+    src/voice_filter.cpp
+    src/sides.cpp)
 target_include_directories(megarace_formats PUBLIC src)
 target_include_directories(megarace_formats SYSTEM PRIVATE ${tinysoundfont_SOURCE_DIR})
 # TinySoundFont's implementation is third-party code.

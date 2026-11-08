@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 
 // Tiny 3x5 debug font, original to this project (not taken from the game).
@@ -82,6 +83,7 @@ void Video::shutdown() {
     destroyModeTextures();
     if (ambientTexture_) SDL_DestroyTexture(ambientTexture_);
     ambientTexture_ = nullptr;
+    freeSides();
     if (hdTexture_) SDL_DestroyTexture(hdTexture_);
     hdTexture_ = nullptr;
     if (texture_)  SDL_DestroyTexture(texture_);
@@ -334,6 +336,52 @@ void Video::drawAmbient() {
         }
     SDL_UpdateTexture(ambientTexture_, nullptr, ambientPx_.data(), AW * 4);
     SDL_RenderCopy(renderer_, ambientTexture_, nullptr, nullptr);
+}
+
+void Video::freeSides() {
+    for (SDL_Texture** t : {&sideTex_[0], &sideTex_[1], &sideOver_[0], &sideOver_[1]})
+        if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
+    sideKey_[0] = -1;
+}
+
+// The SIDES background in both wings: the left picture, and the right one
+// mirrored (so the picture edge faces the game). Overlays (near stars, rain)
+// scroll down, by the clock.
+void Video::drawSides() {
+    const int wl = (ox_ * picCurW_ + cw_ / 2) / cw_, H = picCurH_;
+    if (wl <= 0 || H <= 0) return;
+    if (sideKey_[0] != int(sides_) || sideKey_[1] != wl || sideKey_[2] != H) {
+        freeSides();
+        const sides::Picture p = sides::make(sides_, wl, H);
+        auto upload = [&](const std::vector<uint32_t>& px, bool blend) -> SDL_Texture* {
+            if (px.empty()) return nullptr;
+            SDL_Texture* t = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, wl, H);
+            if (!t) return nullptr;
+            SDL_UpdateTexture(t, nullptr, px.data(), wl * 4);
+            SDL_SetTextureBlendMode(t, blend ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
+            return t;
+        };
+        sideTex_[0] = upload(p.base, false);
+        sideTex_[1] = upload(p.right, false);
+        sideOver_[0] = upload(p.overlay, true);
+        sideOver_[1] = upload(p.rightOverlay, true);
+        sideKey_[0] = int(sides_); sideKey_[1] = wl; sideKey_[2] = H;
+    }
+    // Space drifts slowly; rain falls.
+    const double speed = sides_ == sides::Cyberpunk ? 0.9 : 0.02;   // picture heights per second
+    const int off = int(std::fmod(double(SDL_GetTicks()) / 1000.0 * speed, 1.0) * H);
+    for (int side = 0; side < 2; ++side) {
+        const SDL_Rect dst{side ? picCurW_ - wl : 0, 0, wl, H};
+        const SDL_RendererFlip flip = side ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        SDL_Texture* base = sideTex_[side] ? sideTex_[side] : sideTex_[0];
+        if (base) SDL_RenderCopyEx(renderer_, base, nullptr, &dst, 0.0, nullptr, flip);
+        SDL_Texture* over = sideOver_[side] ? sideOver_[side] : sideOver_[0];
+        if (over) {
+            const SDL_Rect a{dst.x, off - H, wl, H}, b{dst.x, off, wl, H};
+            SDL_RenderCopyEx(renderer_, over, nullptr, &a, 0.0, nullptr, flip);
+            SDL_RenderCopyEx(renderer_, over, nullptr, &b, 0.0, nullptr, flip);
+        }
+    }
 }
 
 void Video::disableHd() {
@@ -670,7 +718,8 @@ void Video::render(bool showHd) {
         return;
     }
     // 16:9: the ambient fill first, under everything (it shows in the empty wings).
-    if (ox_ > 0 && ambient_) drawAmbient();
+    if (ox_ > 0 && sides_ == sides::Ambient) drawAmbient();
+    else if (ox_ > 0 && sides_ >= sides::Carbon) drawSides();
     // Three layers, bottom up. All the scaling and smoothing is the GPU's.
     // 1. HD layer: the packs' pictures (smoothed through a smaller copy).
     if (showHd) {

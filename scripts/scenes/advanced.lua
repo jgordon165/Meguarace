@@ -9,7 +9,9 @@
 --                 race dashboard stretches across the whole width, and LAPS
 --                 and score move out to the edges). HD resolutions only.
 --   SIDES         16:9's wings where nothing is drawn: AMBIENT (a blurred,
---                 darkened stretch of the picture) or BLACK.
+--                 darkened stretch of the picture), BLACK, CARBON (woven
+--                 carbon fibre), SPACE (a nebula, a ringed planet, drifting
+--                 stars) or CYBERPUNK (a neon city over a grid, in the rain).
 --   HD STYLE      what the HD modes show:
 --                   the packs' upscale (REAL-ESRGAN when hd-conversion-utility
 --                   used it), made from your own CD; or
@@ -45,6 +47,7 @@ local S = { overlay = true }
 local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "lance", "folder", "music", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
                  smoothing = "SMOOTHING", lance = "LANCE VIDEOS", music = "MUSIC", folder = "HD FOLDER", voice = "VOICE FILTER" }
+local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
 local TOP, H = 30, 152
@@ -88,7 +91,7 @@ function S:value(what)
     elseif what == "style" then return style_label()
     elseif what == "smoothing" then return SMOOTHING[gfx.smoothing()]
     elseif what == "aspect" then return gfx.aspect()
-    elseif what == "sides" then return gfx.ambient() and "AMBIENT" or "BLACK"
+    elseif what == "sides" then return gfx.sides():upper()
     elseif what == "lance" then return self.state.lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
@@ -116,7 +119,10 @@ function S:change(what, dir)
         st.aspect = gfx.aspect(gfx.aspect() == "16:9" and "4:3" or "16:9")
         if (gfx.display()) == "native" then self.note = "16:9 SHOWS IN THE HD RESOLUTIONS" end
     elseif what == "sides" then
-        st.ambient = gfx.ambient(not gfx.ambient())
+        local i = 1
+        for k, s in ipairs(SIDES) do if s == gfx.sides() then i = k end end
+        st.sides = gfx.sides(SIDES[(i - 1 + dir) % #SIDES + 1])
+        st.ambient = nil
         if gfx.wing() == 0 then self.note = "THE SIDES SHOW IN 16:9" end
     elseif what == "smoothing" then
         st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 4)

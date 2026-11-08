@@ -43,7 +43,7 @@ function M.defaults()
         hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
         smoothing = 2,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
-        ambient = true,            -- 16:9 wings: blurred picture (true) or black
+        sides = "ambient",         -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
         lance_smoother = true,     -- Lance's clips one smoothing level softer than the other videos
         music_style = "enhanced",  -- "original" (OPL2), "stereo" (FM), "soundfont" or "enhanced" (the EDM remix; Options > ADVANCED)
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
