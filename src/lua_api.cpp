@@ -203,6 +203,12 @@ static int gfx_video_repeat(lua_State* L) {
     return 1;
 }
 
+// gfx.hud_begin() / gfx.hud_end(): what's drawn between goes to the HUD
+// layer, stretched across the whole screen in 16:9 (nothing changes in
+// 4:3); what's drawn after it stays on top. gfx.clear() ends it.
+static int gfx_hud_begin(lua_State* L) { E(L).video.hudBegin(); return 0; }
+static int gfx_hud_end(lua_State* L) { E(L).video.hudEnd(); return 0; }
+
 // gfx.nearest(r, g, b) -> the palette index closest to that colour (1..255).
 static int gfx_nearest(lua_State* L) {
     lua_pushinteger(L, E(L).video.nearest(int(luaL_checkinteger(L, 1)), int(luaL_checkinteger(L, 2)),
@@ -877,6 +883,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
         {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
+        {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end},
         {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {

@@ -98,14 +98,34 @@ void Video::clear(uint8_t idx) {
         std::memset(row, 3, size_t(cw_));
         std::memset(row + ox_, 0, size_t(w_));
     }
+    hudPhase_ = 0;
+}
+
+void Video::hudBegin() {
+    if (!hudActive()) return;
+    hudFb_.assign(size_t(w_) * size_t(h_), 0);
+    hudMask_.assign(hudFb_.size(), 0);
+    hudPhase_ = 1;
+}
+
+void Video::hudEnd() {
+    if (hudPhase_ == 1) hudPhase_ = 2;
 }
 
 void Video::pset(int x, int y, uint8_t idx) {
+    if (hudPhase_ == 1) {                    // into the HUD (game columns only)
+        if (x >= 0 && y >= 0 && x < w_ && y < h_) {
+            const size_t i = size_t(y) * size_t(w_) + size_t(x);
+            hudFb_[i] = idx;
+            hudMask_[i] = 1;
+        }
+        return;
+    }
     int X = x + ox_;
     if (X >= 0 && y >= 0 && X < cw_ && y < h_) {
         size_t i = static_cast<size_t>(y) * cw_ + X;
         fb_[i] = idx;
-        src_[i] = 0;
+        src_[i] = hudPhase_ == 2 ? 4 : 0;   // 4: game pixels over the HUD
     }
 }
 
@@ -222,8 +242,15 @@ void Video::sprite(const uint8_t* px, int w, int h, int x, int y, double scale, 
             if (flip) sx = w - 1 - sx;
             uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
             if (c && visible(X, Y)) {
+                if (hudPhase_ == 1) {
+                    if (X >= 0 && X < w_) {
+                        hudFb_[size_t(Y) * size_t(w_) + size_t(X)] = c;
+                        hudMask_[size_t(Y) * size_t(w_) + size_t(X)] = 1;
+                    }
+                    continue;
+                }
                 fb_[size_t(Y) * cw_ + X + ox_] = c;
-                src_[size_t(Y) * cw_ + X + ox_] = 0;
+                src_[size_t(Y) * cw_ + X + ox_] = hudPhase_ == 2 ? 4 : 0;
             }
         }
     }
@@ -269,6 +296,7 @@ void Video::resizeCanvas() {
     rgba_.assign(fb_.size(), 0);
     layer_.assign(fb_.size(), 0);
     videoLayer_.assign(fb_.size(), 0);
+    postLayer_.assign(fb_.size(), 0);
     clear(0);
     if (picW_ > 0) enableHd(picW_, picH_);   // the HD layer follows the canvas
 }
@@ -328,7 +356,8 @@ std::string Video::bestMode() const {
 }
 
 void Video::destroyModeTextures() {
-    for (SDL_Texture** t : {&gameTexture_, &sharpTexture_, &videoTexture_, &videoScaled_, &hdSmall_})
+    for (SDL_Texture** t : {&gameTexture_, &sharpTexture_, &videoTexture_, &videoScaled_, &hdSmall_,
+                            &hudTexture_, &hudSharp_, &postTexture_})
         if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
 }
 
@@ -460,6 +489,22 @@ bool Video::setMode(const std::string& name) {
         if (videoTexture_) SDL_SetTextureBlendMode(videoTexture_, SDL_BLENDMODE_BLEND);
         videoLayer_.assign(fb_.size(), 0);
         createSmoothingTextures();
+        // The HUD layer (16:9 stretches it): its pixels, then the same sharp
+        // scaling as the game layer; and the game pixels drawn over it.
+        postTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, cw_, h_);
+        if (postTexture_) SDL_SetTextureBlendMode(postTexture_, SDL_BLENDMODE_BLEND);
+        postLayer_.assign(fb_.size(), 0);
+        hudTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        if (hudTexture_) SDL_SetTextureBlendMode(hudTexture_, SDL_BLENDMODE_BLEND);
+        hudLayer_.assign(size_t(w_) * size_t(h_), 0);
+        if (SDL_RenderTargetSupported(renderer_)) {
+            const int kx = (picCurW_ + w_ - 1) / w_, ky = (picCurH_ + h_ - 1) / h_;
+            hudSharp_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, w_ * kx, h_ * ky);
+            if (hudSharp_) {
+                SDL_SetTextureScaleMode(hudSharp_, SDL_ScaleModeLinear);
+                SDL_SetTextureBlendMode(hudSharp_, SDL_BLENDMODE_BLEND);
+            }
+        }
     }
     // Window: the mode's size, or the whole screen when it doesn't fit in a
     // window (1080p on a 1080p monitor). Native keeps the --scale size.
@@ -527,7 +572,8 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
 bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
                      const uint32_t* hdPx, int hdW, int hdH, bool indexed, const uint8_t* baked,
                      long* recoloured) {
-    if (!hdOn() || clipOn_ || w <= 0 || h <= 0 || hdW <= 0 || hdH <= 0) return false;
+    // In the HUD layer: the original pixels (stretched with it).
+    if (!hdOn() || clipOn_ || hudPhase_ == 1 || w <= 0 || h <= 0 || hdW <= 0 || hdH <= 0) return false;
     // Screen <-> picture: x * picW / 320, rounded down (also for negatives).
     auto fdiv = [](int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); };
     auto mx = [&](int v) { return fdiv(int64_t(v) * picW_, w_); };
@@ -637,13 +683,17 @@ void Video::render(bool showHd) {
     // HD pictures are off (their original pixels are in fb_ all the same).
     // Hidden pixels keep their colour with alpha 0, so the linear filter
     // blends edges toward the neighbouring layer, not toward black.
-    bool anyVideo = false;
+    bool anyVideo = false, anyPost = false;
+    const bool hud = hudPhase_ != 0 && hudTexture_;
     for (size_t i = 0; i < fb_.size(); ++i) {
         uint8_t l = src_[i] == 1 && !showHd ? 2 : src_[i];   // 3: empty wing, in no layer
         uint32_t c = pal_[fb_[i]];
+        if (l == 4 && !hud) l = 0;                           // nothing to be over
         layer_[i] = l == 0 ? c : (c & 0x00FFFFFFu);
         videoLayer_[i] = l == 2 ? c : (c & 0x00FFFFFFu);
+        if (hud) postLayer_[i] = l == 4 ? c : (c & 0x00FFFFFFu);
         anyVideo |= l == 2;
+        anyPost |= l == 4;
     }
     // 2. Video layer: the original video pixels, line doubled (smoothing:
     //    a smaller whole-number size first, so the seams blend wider).
@@ -654,6 +704,20 @@ void Video::render(bool showHd) {
     // 3. Game layer: everything else the game draws, always sharp.
     SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), cw_ * 4);
     drawThrough(gameTexture_, sharpTexture_);
+    // 4. The HUD, across the whole canvas (stretched in 16:9), then the game
+    //    pixels drawn after it.
+    if (hud) {
+        for (size_t i = 0; i < hudFb_.size(); ++i) {
+            const uint32_t c = pal_[hudFb_[i]];
+            hudLayer_[i] = hudMask_[i] ? c : (c & 0x00FFFFFFu);
+        }
+        SDL_UpdateTexture(hudTexture_, nullptr, hudLayer_.data(), w_ * 4);
+        drawThrough(hudTexture_, hudSharp_);
+        if (anyPost) {
+            SDL_UpdateTexture(postTexture_, nullptr, postLayer_.data(), cw_ * 4);
+            drawThrough(postTexture_, sharpTexture_);
+        }
+    }
 }
 
 void Video::present() {

@@ -131,8 +131,8 @@ starts at the largest resolution that fits, in 16:9 with AMBIENT sides, LINE
 TRIPLED and SMOOTHING MORE:
 - RESOLUTION: 800×600, 1024×768 or 1920×1080, or 320×200 for the original
   (also `--display`)
-- ASPECT: 4:3 or 16:9 (the videos and dashboard stay 4:3 in the middle; the
-  race's LAPS and score move to the edges) and SIDES: the wings blurred
+- ASPECT: 4:3 or 16:9 (the videos stay 4:3 in the middle; the race dashboard
+  stretches across the whole width, and LAPS and score move to the edges) and SIDES: the wings blurred
   (AMBIENT) or BLACK
 - HD STYLE: the packs (Real-ESRGAN), or LINE DOUBLED: the originals with each
   pixel repeated and the seams interpolated, or LINE TRIPLED: each pixel 3×3,
@@ -226,7 +226,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 | Table | Functions |
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
-| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on]) smoothing([level]) video_repeat([n])`, 16:9 `aspect([a]) wing() ambient([on])` (drawing stays 320×200 in every mode) |
+| `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on]) smoothing([level]) video_repeat([n])`, 16:9 `aspect([a]) wing() ambient([on]) hud_begin() hud_end()` (drawing stays 320×200 in every mode) |
 | `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop[,gm]]) stop_song() fade_song([s]) song_playing() song_volume(v)`, styles `music_style([s]) soundfont()` (original, stereo, soundfont, enhanced), optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
