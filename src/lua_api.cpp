@@ -159,6 +159,15 @@ static int gfx_hd_pictures(lua_State* L) {
     return 1;
 }
 
+// gfx.smoothing([level]) -> the video smoothing (0 off, 1 subtle, 2 more),
+// after setting it if a level is given. HD resolutions only; GPU only.
+static int gfx_smoothing(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setSmoothing(int(luaL_checkinteger(L, 1)));
+    lua_pushinteger(L, v.smoothing());
+    return 1;
+}
+
 // gfx.nearest(r, g, b) -> the palette index closest to that colour (1..255).
 static int gfx_nearest(lua_State* L) {
     lua_pushinteger(L, E(L).video.nearest(int(luaL_checkinteger(L, 1)), int(luaL_checkinteger(L, 2)),
@@ -508,7 +517,7 @@ static void drawFrame(HnmUd* h, int index, int ox, int oy, int fx, int fy, int w
         }
         ++h->pictureMisses;
     }
-    v.blit(ox + fx, oy + fy, w, ht, px, len, key);
+    v.blitVideo(ox + fx, oy + fy, w, ht, px, len, key);
 }
 
 static int hnm_draw(lua_State* L) {
@@ -799,7 +808,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
-        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures},
+        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},
