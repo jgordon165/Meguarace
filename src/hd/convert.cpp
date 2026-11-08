@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <atomic>
 #include <cstdio>
 #include <filesystem>
@@ -440,7 +441,15 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
 // ---- menu sprites ------------------------------------------------------------
 
 const char* const kMenuSprites[] = {"PANEL2", "KONTROL", "KONTROL6", "CONTROL2", "CONTROL4",
-                                    "FONTOPT", "FONTOPT2", "FONTOPT3", "FONTHALL", nullptr};
+                                    "FONTOPT", "FONTOPT2", "FONTOPT3", "FONTHALL",
+                                    // The race dashboards (the cars' cockpits and gauges) and the
+                                    // tile scanner.
+                                    "TJO_2", "TRA_2", "TOU_2", "TPA_2", "TLU_2", "TOM_2", "THO_2", "TMA_2",
+                                    "TJO", "TRA", "TOU", "TPA", "TLU", "TOM", "THO", "TMA", "ZONES_", nullptr};
+
+bool spriteStrip(const std::string& name) {   // T<car>_2: the dashboard's two halves
+    return name.size() == 5 && name[0] == 'T' && name.compare(3, 2, "_2") == 0;
+}
 
 // The set's own palette (8-bit), as Video::applyPaletteBlocks applies it at
 // shift 0, and which indices it defines. Index 0 stays black (transparent).
@@ -586,6 +595,41 @@ bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPa
                     out.px[k] = (alpha[k] & 0xFF) << 24 | uint32_t(idx) << 16;
                 }
         }
+    }
+    // A strip: the images' colours upscaled as one picture, then cut apart
+    // (the alpha above stays per image).
+    bool strip = opt.strip && own && set.count() > 1;
+    int stripW = 0, stripHdW = 0, stripH = -1, stripHdH = -1;
+    for (size_t i = 0; strip && i < set.count(); ++i) {
+        const auto& out = pack.images[i];
+        if (colours[i].empty() || (stripH >= 0 && (out.h != stripH || out.hdH != stripHdH))) { strip = false; break; }
+        stripH = out.h; stripHdH = out.hdH;
+        stripW += out.w; stripHdW += out.hdW;
+    }
+    if (strip) {
+        std::vector<uint32_t> joined(size_t(stripW) * size_t(stripH));
+        for (int y = 0, x0 = 0; y < stripH; ++y, x0 = 0)
+            for (size_t i = 0; i < set.count(); x0 += pack.images[i].w, ++i)
+                std::memcpy(&joined[size_t(y) * size_t(stripW) + size_t(x0)],
+                            &colours[i][size_t(y) * size_t(pack.images[i].w)], size_t(pack.images[i].w) * 4);
+        std::vector<uint32_t> up;
+        if (opt.upscaler == ConvertOptions::Upscaler::RealEsrgan) {
+            std::vector<std::vector<uint32_t>> pics{joined};
+            std::vector<std::pair<int, int>> sizes{{stripW, stripH}};
+            if (!upscaleRealEsrgan(pics, sizes, opt, err)) return false;
+            up = resample(pics[0], stripW * kEsrganScale, stripH * kEsrganScale, stripHdW, stripHdH);
+        } else {
+            up = upscale(opt, joined, stripW, stripH, stripHdW, stripHdH);
+        }
+        for (size_t i = 0, X0 = 0; i < set.count(); X0 += size_t(pack.images[i].hdW), ++i) {
+            auto& out = pack.images[i];
+            for (int y = 0; y < out.hdH; ++y)
+                for (int x = 0; x < out.hdW; ++x) {
+                    uint32_t& d = out.px[size_t(y) * size_t(out.hdW) + size_t(x)];
+                    d = (d & 0xFF000000u) | (up[size_t(y) * size_t(stripHdW) + X0 + size_t(x)] & 0xFFFFFF);
+                }
+        }
+        forEsrgan.clear();
     }
     if (!forEsrgan.empty()) {
         std::vector<std::vector<uint32_t>> pics;

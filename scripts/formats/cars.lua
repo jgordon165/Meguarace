@@ -95,8 +95,20 @@ function M:draw(angle, x, y, scale, spin)
     return left, top, w * scale, h * scale
 end
 
+-- DASHBOARD (Options > ADVANCED): HD draws the dashboard sets from their HD
+-- packs (made by hd-conversion-utility) when there are some; ORIGINAL (or
+-- no packs) the original pixels.
+M.hd_dashboard = true
+
+-- Points a set's draws at its HD pack, or not, as DASHBOARD says.
+function M.dashboard_hd(set)
+    if set and set.use_hd then set:use_hd(M.hd_dashboard) end
+end
+
 function M:draw_dashboard()
+    M.dashboard_hd(self.gauges)   -- (drawn after this, by the race)
     if not self.dash then return end
+    M.dashboard_hd(self.dash)
     local w0 = self.dash:size(0)
     self.dash:draw(0, 0, 152)
     if w0 then self.dash:draw(1, w0, 152) end

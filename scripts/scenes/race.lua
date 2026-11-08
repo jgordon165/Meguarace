@@ -493,6 +493,7 @@ end
 -- ZONES_ panel, at the car's place on its dashboard (RACEPRG 0x0EA2, 0x10A6).
 function S:draw_scanner(base)
     if not self.zones then return end
+    cars.dashboard_hd(self.zones)
     local at = hud.SCANNER_AT[self.car.code]
     if not at then return end
     local x0, y0 = at[1], at[2] + hud.DASH_Y

@@ -30,6 +30,9 @@ struct ConvertOptions {
     std::string tempDir;        // scratch folder for Real-ESRGAN batches
     int jobs = 0;               // worker threads for resize/encode; 0 = all cores
     int batch = 240;            // frames per upscaling batch (bounds memory and scratch space)
+    // Sprite sets: the images side by side are one picture (the dashboards'
+    // two halves), upscaled together so there's no seam where they meet.
+    bool strip = false;
     std::function<void(int done, int total)> progress;
 };
 
@@ -55,8 +58,10 @@ std::vector<uint32_t> upscale(const struct ConvertOptions& opt, const std::vecto
 
 // The menu sprite sets hd-conversion-utility upscales (names in the archive,
 // without .HSQ): the main menu, the options panels and messages, the Hall of
-// Fame / key setup / save panels, and the menu fonts.
+// Fame / key setup / save panels, the menu fonts, and the race dashboards.
 extern const char* const kMenuSprites[];
+// Whether a set from kMenuSprites is a strip (ConvertOptions::strip).
+bool spriteStrip(const std::string& name);
 
 // Converts one sprite set (its bytes as stored in the archive) into an HD
 // sprite pack at outPath (see sprpack.h). `kind` gets "colour" or "indexed".
