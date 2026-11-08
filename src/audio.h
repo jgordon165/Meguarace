@@ -20,8 +20,17 @@ public:
     void shutdown();
 
     // FM music: an unpacked HERAD song from MEGARACE.DAT. Replaces any
-    // song already playing. stopAll() leaves it alone.
-    bool playSong(const uint8_t* data, size_t len, bool loop);
+    // song already playing. stopAll() leaves it alone. `gm`: the SoundFont
+    // style's instrument overrides (FmMusic::load).
+    bool playSong(const uint8_t* data, size_t len, bool loop, const std::vector<int>& gm = {});
+    // The music style (fm.h). Switching carries on the song that's playing
+    // from where it is. SoundFont loads the first .sf2 found in the folders
+    // given to setSoundFontDirs (once); so does Enhanced (a remix on the
+    // same SoundFont). Without one they play Stereo.
+    void setMusicStyle(MusicStyle s);
+    MusicStyle musicStyle() const { return style_; }
+    void setSoundFontDirs(std::vector<std::string> dirs) { sfDirs_ = std::move(dirs); }
+    std::string soundFontPath();     // the .sf2 the SoundFont style uses, or ""
     void stopSong();
     void fadeSong(double seconds);   // fades out, then stops (the driver's fade)
     bool songPlaying();
@@ -72,6 +81,14 @@ private:
     std::mutex mtx_;
     Source music_;
     std::unique_ptr<FmMusic> song_;
+    MusicStyle style_ = MusicStyle::Original;
+    std::shared_ptr<SoundFontBank> bank_;
+    bool bankTried_ = false;
+    std::vector<std::string> sfDirs_;
+    std::vector<uint8_t> songBytes_;     // the song playing, to switch styles
+    bool songLoop_ = true;
+    std::vector<int> songGm_;
+    std::shared_ptr<SoundFontBank> bank();
     float songVol_ = 0.6f;
     int songFade_ = 0, songFadeTotal_ = 0;   // frames left / length of a fade-out
     Source stream_;

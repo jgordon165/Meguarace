@@ -62,7 +62,15 @@ Boyle) straight from `MEGARACE.DAT`, then the **main menu**:
 songs inside `MEGARACE.DAT`, written for the AdLib / Sound Blaster chip. The
 port plays them on an emulated OPL2 chip ([ymfm](https://github.com/aaronsgiles/ymfm)),
 each race with the song the original gives that track, and SkyHolder in the
-menus. To use a recording instead (say, from a real Sound Blaster), put
+menus. Options > ADVANCED > MUSIC picks the style: ORIGINAL (the OPL2 as on a
+Sound Blaster), STEREO FM (the same FM on an emulated OPL3, its tracks
+spread across the stereo field, with EQ and a small room reverb),
+SOUNDFONT (the songs' notes on a General MIDI SoundFont via
+[TinySoundFont](https://github.com/schellingb/TinySoundFont); the game comes
+with [GeneralUser GS](https://www.schristiancollins.com/generaluser.php)) or
+ENHANCED, the default (a dance remix on that SoundFont: supersaw leads, acid and sub bass, a
+four-on-the-floor kick, sidechain pumping and a delay in time with the song).
+Details: [docs/music.md](docs/music.md). To use a recording instead (say, from a real Sound Blaster), put
 `NEWSAN.wav`, `MAEVA.wav`, `DETRITUS.wav`, `LENNY.wav`, `ALARME.wav` or
 `PAGA.wav` in a folder and pass it with `--music <folder>`.
 
@@ -134,7 +142,10 @@ TRIPLED and SMOOTHING MORE:
 - LANCE VIDEOS: Lance's clips one SMOOTHING level softer than the rest
   (the default), or SAME
 - HD FOLDER: where the packs go (the default is your user folder)
-- VOICE FILTER: the hiss filter on Lance's clips The game always works in 320×200 coordinates, so gameplay is the
+- MUSIC: ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default, a dance remix) ([docs/music.md](docs/music.md))
+- VOICE FILTER: the hiss filter on Lance's clips
+
+The game always works in 320×200 coordinates, so gameplay is the
 same in every mode. Details: [docs/hd.md](docs/hd.md).
 
 ## Tests and CI
@@ -216,7 +227,7 @@ re/             Ghidra headless pipeline (output stays local, git-ignored)
 |---|---|
 | `fs` | `mounted() root() exists(p) size(p) read(p) read_range(p, off, n) list(dir)`: paths relative to your game folder, case-insensitive |
 | `gfx` | 320×200 indexed framebuffer: `width() height() clear(i) pset(x,y,i) pget(x,y) fill(x,y,w,h,i) line(x0,y0,x1,y1,i) clip(lines[,yoff]) unclip() blit(x,y,w,h,pixels[,key]) text(x,y,s[,i]) palette(rgb[,first[,sixbit]]) setcolor(i,r,g,b) screenshot(path)`; `nearest(r,g,b)` (closest palette colour); display modes `displays() display() set_display(name) to_display(x,y) hd_pictures([on]) smoothing([level]) video_repeat([n])`, 16:9 `aspect([a]) wing() ambient([on])` (drawing stays 320×200 in every mode) |
-| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop]) stop_song() fade_song([s]) song_playing() song_volume(v)`, optional `music(name)` for WAV recordings |
+| `audio` | `pcm(bytes,rate[,bits,ch,vol,loop]) stop(id) stop_all()`, streaming `stream_reset() stream_push(bytes,rate) stream_queued() stream_played() stream_end()`, the hiss filter `stream_voice_filter(video) stream_voice_bypass(b)`, FM songs `song(bytes[,loop[,gm]]) stop_song() fade_song([s]) song_playing() song_volume(v)`, styles `music_style([s]) soundfont()` (original, stereo, soundfont, enhanced), optional `music(name)` for WAV recordings |
 | `dat` | `open([path]) list() exists(name) size(name) read(name[,unpack=true]) read_range(name,off,n)`: files inside `MEGARACE.DAT` |
 | `spr` | `open(name)` → sprite set with `:count() :size(i) :apply_palette([shift]) :draw(i,x,y[,scale[,flip]]) :pixels(i)` (index 0 transparent) |
 | `hnm` | `open(name)` → video with `:frames() :sound_rate() :decode(i) :chunks(i) :draw([x,y]) :apply_palette() :pixels() :sound() :hd() :blit(i,x,y,w,h,pixels[,key])`; `decode` returns `{w,h,x,y,overlay,video,palette_changed,sound_bytes,pt,kl}` |

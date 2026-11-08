@@ -54,6 +54,43 @@ FetchContent_Declare(ymfm
     GIT_TAG        81aec25ccbb98f4873a255f7551ac4dadac59b4a
     SOURCE_SUBDIR  sources-only)
 FetchContent_MakeAvailable(ymfm)
+# ---- TinySoundFont (SoundFont synth, MIT; header-only) -----------------------
+# The SOUNDFONT music style. Pinned to a commit (no release tags).
+FetchContent_Declare(tinysoundfont
+    GIT_REPOSITORY https://github.com/schellingb/TinySoundFont.git
+    GIT_TAG        853a0a171759f1ddba0de1442133a75912bbeffa)
+FetchContent_GetProperties(tinysoundfont)
+if(NOT tinysoundfont_POPULATED)
+    FetchContent_Populate(tinysoundfont)
+endif()
+
+# ---- GeneralUser GS (the bundled SoundFont) ---------------------------------
+# S. Christian Collins' General MIDI bank (free to use and redistribute, see
+# its LICENSE.txt), copied next to the game as soundfont/. Pinned to a commit
+# and checked by hash. Off: no SoundFont unless you add one (docs/music.md).
+option(MEGARACE_FETCH_SOUNDFONT "Download the GeneralUser GS SoundFont next to the game" ON)
+if(MEGARACE_FETCH_SOUNDFONT)
+    set(gugs_commit 684543d5e5efaef08d02be50dcda8d552478fa60)
+    set(gugs_dir ${CMAKE_BINARY_DIR}/_soundfont)
+    if(NOT EXISTS ${gugs_dir}/GeneralUser-GS.sf2)
+        message(STATUS "Downloading the GeneralUser GS SoundFont (32 MB)")
+        file(DOWNLOAD https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/${gugs_commit}/GeneralUser-GS.sf2
+             ${gugs_dir}/GeneralUser-GS.sf2.part
+             EXPECTED_HASH SHA256=9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cfe
+             STATUS gugs_status)
+        list(GET gugs_status 0 gugs_code)
+        if(gugs_code EQUAL 0)
+            file(RENAME ${gugs_dir}/GeneralUser-GS.sf2.part ${gugs_dir}/GeneralUser-GS.sf2)
+        else()
+            message(WARNING "GeneralUser GS download failed (${gugs_status}); the SOUNDFONT music style needs a .sf2 added by hand")
+        endif()
+    endif()
+    if(NOT EXISTS ${gugs_dir}/LICENSE.txt)
+        file(DOWNLOAD https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/${gugs_commit}/documentation/LICENSE.txt
+             ${gugs_dir}/LICENSE.txt STATUS gugs_status)
+    endif()
+endif()
+
 add_library(ymfm_opl STATIC
     ${ymfm_SOURCE_DIR}/src/ymfm_opl.cpp
     ${ymfm_SOURCE_DIR}/src/ymfm_adpcm.cpp
@@ -124,9 +161,15 @@ add_library(megarace_formats STATIC
     src/formats/binreader.cpp
     src/formats/cryo.cpp
     src/formats/herad.cpp
+    src/formats/gm_map.cpp
     src/fm.cpp
+    src/tsf_impl.cpp
     src/voice_filter.cpp)
 target_include_directories(megarace_formats PUBLIC src)
+target_include_directories(megarace_formats SYSTEM PRIVATE ${tinysoundfont_SOURCE_DIR})
+# TinySoundFont's implementation is third-party code.
+set_source_files_properties(src/tsf_impl.cpp PROPERTIES
+    COMPILE_OPTIONS $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)
 target_link_libraries(megarace_formats PUBLIC ymfm_opl)
 megarace_warnings(megarace_formats)
 
@@ -193,6 +236,17 @@ add_custom_target(copy_scripts ALL
     COMMENT "Copying Lua scripts")
 add_dependencies(copy_scripts megarace)
 
+# The bundled SoundFont next to the binary, as the package has it.
+if(MEGARACE_FETCH_SOUNDFONT AND EXISTS ${gugs_dir}/GeneralUser-GS.sf2)
+    add_custom_target(copy_soundfont ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:megarace>/soundfont
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${gugs_dir}/GeneralUser-GS.sf2 ${gugs_dir}/LICENSE.txt
+                $<TARGET_FILE_DIR:megarace>/soundfont
+        COMMENT "GeneralUser GS next to the game")
+    add_dependencies(copy_soundfont megarace)
+    install(FILES ${gugs_dir}/GeneralUser-GS.sf2 ${gugs_dir}/LICENSE.txt DESTINATION soundfont COMPONENT game)
+endif()
+
 # ---- Tests -------------------------------------------------------------------
 # No game data is in the repository, so CI runs only the data-free tests.
 # Configure with MEGARACE_DATA=<your CD> in the environment to also run the
@@ -236,7 +290,7 @@ endif()
 # ---- Install / packaging -----------------------------------------------------
 # Two packages, each its own install component, so the install rules of
 # fetched libraries (libwebp's headers and .a files) stay out of both:
-#   game       megarace(.exe), scripts/, README.md, docs/, the icon
+#   game       megarace(.exe), scripts/, README.md, docs/, the icon, soundfont/ (GeneralUser GS)
 #   converter  hd-conversion-utility(.exe) and docs/hd.md (its package adds Real-ESRGAN)
 # No game data, ever, and never HD packs (they are derived game content).
 install(TARGETS megarace RUNTIME DESTINATION . COMPONENT game)

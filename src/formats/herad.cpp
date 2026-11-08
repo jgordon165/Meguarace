@@ -182,6 +182,7 @@ void Player::tick() {
             --c.slide;
             c.bend = uint8_t(c.bend + s_.instruments[c.playprog].slide_range);
             if (c.note & 0x7F) play(int(t), c.note, UPDATE);
+            if (ev_) ev_->push_back(Event{Event::Bend, uint8_t(t), c.note, 0, c.playprog, c.bend});
         }
         if (tr.pos >= d.size()) continue;
         all_done = false;
@@ -237,7 +238,11 @@ void Player::command(int t) {
 void Player::note_on(int c, uint8_t note, uint8_t vel) {
     auto& ch = ch_[size_t(c)];
     const auto& I = s_.instruments;
-    if (ch.keyon) { ch.keyon = false; play(c, ch.note, OFF); }
+    if (ch.keyon) {
+        ch.keyon = false;
+        play(c, ch.note, OFF);
+        if (ev_) ev_->push_back(Event{Event::NoteOff, uint8_t(c), ch.note, 0, ch.playprog, ch.bend});
+    }
     if (s_.v2 && I[ch.program].mode == -1) {        // keymap: instrument per note
         const int8_t k = int8_t(note - (I[ch.program].keymap_offset + 24));
         if (k < 0 || k >= 36) return;
@@ -251,6 +256,7 @@ void Player::note_on(int c, uint8_t note, uint8_t vel) {
     const Instrument& in = I[ch.playprog];
     if (s_.v2 && in.mode == -1) return;
     play(c, note, ON);
+    if (ev_) ev_->push_back(Event{Event::NoteOn, uint8_t(c), note, vel, ch.playprog, 0x40});
     if (in.mod_out_vel) level(c, ch.playprog, in.mod_out_vel, vel, false);
     if (in.car_out_vel) level(c, ch.playprog, in.car_out_vel, vel, true);
     if (in.fb_vel) feedback(c, ch.playprog, in.fb_vel, vel);
@@ -261,6 +267,7 @@ void Player::note_off(int c, uint8_t note) {
     if (note != ch.note || !ch.keyon) return;
     ch.keyon = false;
     play(c, note, OFF);
+    if (ev_) ev_->push_back(Event{Event::NoteOff, uint8_t(c), note, 0, ch.playprog, ch.bend});
 }
 
 void Player::program(int c, uint8_t prog) {
@@ -282,6 +289,7 @@ void Player::bend(int c, uint8_t b) {
     auto& ch = ch_[size_t(c)];
     ch.bend = b;
     if (ch.keyon) play(c, ch.note, UPDATE);
+    if (ev_) ev_->push_back(Event{Event::Bend, uint8_t(c), ch.note, 0, ch.playprog, b});
 }
 
 void Player::play(int c, uint8_t note, State st) {

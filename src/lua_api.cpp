@@ -250,13 +250,46 @@ static int audio_pcm(lua_State* L) {
     return 1;
 }
 
-// audio.song(data [, loop=true]): plays an unpacked HERAD song (dat.read
-// of NEWSAN.HSQ etc.) on the emulated FM chip. Returns false if it won't parse.
+// audio.song(data [, loop=true [, gm]]): plays an unpacked HERAD song
+// (dat.read of NEWSAN.HSQ etc.) in the music style. `gm`, for the SoundFont
+// style: { [instrument] = GM program 0..127, or 128 + a GM drum key }, the
+// song's instruments counted from 0. Returns false if it won't parse.
 static int audio_song(lua_State* L) {
     size_t len = 0;
     const char* d = luaL_checklstring(L, 1, &len);
     bool loop = lua_isnoneornil(L, 2) ? true : lua_toboolean(L, 2) != 0;
-    lua_pushboolean(L, E(L).audio.playSong(reinterpret_cast<const uint8_t*>(d), len, loop));
+    std::vector<int> gm;
+    if (lua_istable(L, 3)) {
+        lua_pushnil(L);
+        while (lua_next(L, 3)) {
+            if (lua_isinteger(L, -2) && lua_isinteger(L, -1)) {
+                const lua_Integer i = lua_tointeger(L, -2), v = lua_tointeger(L, -1);
+                if (i >= 0 && i < 256 && v >= 0 && v < 256) {
+                    if (gm.size() <= size_t(i)) gm.resize(size_t(i) + 1, -1);
+                    gm[size_t(i)] = int(v);
+                }
+            }
+            lua_pop(L, 1);
+        }
+    }
+    lua_pushboolean(L, E(L).audio.playSong(reinterpret_cast<const uint8_t*>(d), len, loop, gm));
+    return 1;
+}
+
+// audio.music_style([style]) -> "original", "stereo", "soundfont" or "enhanced", after
+// setting it if given (the song playing carries on in the new style).
+static int audio_music_style(lua_State* L) {
+    static const char* const NAMES[] = {"original", "stereo", "soundfont", "enhanced", nullptr};
+    Audio& a = E(L).audio;
+    if (!lua_isnoneornil(L, 1)) a.setMusicStyle(MusicStyle(luaL_checkoption(L, 1, nullptr, NAMES)));
+    lua_pushstring(L, NAMES[int(a.musicStyle())]);
+    return 1;
+}
+
+// audio.soundfont() -> the .sf2 the SoundFont style plays, or nil if none.
+static int audio_soundfont(lua_State* L) {
+    const std::string p = E(L).audio.soundFontPath();
+    if (p.empty()) lua_pushnil(L); else lua_pushstring(L, p.c_str());
     return 1;
 }
 static int audio_stop_song(lua_State* L) { E(L).audio.stopSong(); return 0; }
@@ -857,6 +890,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"available", audio_available},
         {"song", audio_song}, {"stop_song", audio_stop_song}, {"fade_song", audio_fade_song},
         {"song_playing", audio_song_playing}, {"song_volume", audio_song_volume},
+        {"music_style", audio_music_style}, {"soundfont", audio_soundfont},
         {nullptr, nullptr}};
     static const luaL_Reg dat[] = {
         {"open", dat_open}, {"list", dat_list}, {"exists", dat_exists}, {"size", dat_size},

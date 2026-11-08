@@ -9,6 +9,12 @@
 --
 -- A recording can replace any song: put <NAME>.wav (e.g. NEWSAN.wav) in the
 -- --music folder.
+--
+-- Styles (Options > ADVANCED > MUSIC, audio.music_style): ORIGINAL, the OPL2
+-- as on a Sound Blaster; STEREO FM, the same FM in stereo with EQ and reverb;
+-- SOUNDFONT, the notes played by a General MIDI SoundFont; ENHANCED (the
+-- default), a dance remix on that SoundFont (layered synths, dance drums,
+-- sidechain, a delay in time with the song).
 
 local M = {}
 
@@ -27,6 +33,18 @@ M.ROUND_SONG = { 1, 2, 3, 4, 5, 1, 2, 4, 3, 5, 2, 3, 1, 4, 6, 6 }
 
 M.AFTER_RACE = 6
 M.FADE = 1.5
+
+-- SOUNDFONT: the engine picks a GM instrument for each FM instrument from
+-- its sound (src/formats/gm_map.cpp). To change one, list it here by the
+-- song's instrument number (from 0): a GM program 0..127 (e.g. 81 = saw
+-- lead), or M.DRUM + a GM drum key (e.g. M.DRUM + 38 = snare).
+M.DRUM = 128
+M.GM = {
+    -- NEWSAN = { [4] = 81, [13] = M.DRUM + 36 },
+}
+
+M.STYLES = { "original", "stereo", "soundfont", "enhanced" }
+M.LABELS = { original = "ORIGINAL", stereo = "STEREO FM", soundfont = "SOUNDFONT", enhanced = "ENHANCED" }
 
 M.enabled = true
 local current = nil          -- song id playing, or nil
@@ -54,7 +72,7 @@ function M.play(id)
     current = nil
     if audio.music(song.file) then current = id; return true end      -- recorded override
     local bytes = dat.exists(song.file .. ".HSQ") and dat.read(song.file .. ".HSQ")
-    if bytes and audio.song(bytes) then current = id; return true end
+    if bytes and audio.song(bytes, true, M.GM[song.file]) then current = id; return true end
     return false
 end
 
@@ -65,6 +83,15 @@ function M.stop(fade)
 end
 
 function M.playing() return current end
+
+-- The music style: "original", "stereo", "soundfont" or "enhanced" (others,
+-- and "edm", its name for a while: enhanced).
+function M.set_style(style)
+    if style == "edm" then style = "enhanced" end
+    local ok = false
+    for _, s in ipairs(M.STYLES) do ok = ok or s == style end
+    return audio.music_style(ok and style or "enhanced")
+end
 
 function M.set_enabled(on)
     M.enabled = on

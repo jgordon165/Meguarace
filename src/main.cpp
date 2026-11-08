@@ -80,6 +80,18 @@ int main(int argc, char** argv) {
     if (eng.musicArg.empty()) eng.musicArg = (fs::path(eng.dataArg) / "music").string();
     eng.data.mount(eng.dataArg);
     eng.music.mount(eng.musicArg);
+    {
+        // The SoundFont music style's .sf2: next to the game (the bundled
+        // GeneralUser GS), the user folder's soundfont/, or the --music folder.
+        char* base = SDL_GetBasePath();
+        char* pref = SDL_GetPrefPath("Meguarace", "Meguarace");
+        eng.audio.setSoundFontDirs({
+            (fs::path(base ? base : "./") / "soundfont").string(),
+            pref ? (fs::path(pref) / "soundfont").string() : std::string(),
+            eng.musicArg});
+        SDL_free(base);
+        SDL_free(pref);
+    }
 
     const bool headless = maxFrames >= 0;
     // Audio is optional: without a working sound device the game runs silent
