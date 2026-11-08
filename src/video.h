@@ -94,13 +94,19 @@ public:
     // or the LINE DOUBLED style): the same, but those pixels go to the video
     // layer, which smoothing() applies to.
     void blitVideo(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent);
-    // Video smoothing in the HD resolutions: 0 off, 1 subtle, 2 more. All on
+    // Video smoothing in the HD resolutions: 0 off, 1 subtle, 2 more, 3 max
+    // (the original pixels interpolated straight to the screen). All on
     // the GPU (render-target passes), so it costs no frame time. The original
     // video pixels are repeated to a smaller whole-number size before the
     // linear step, so the seams blend wider; the HD pictures pass through a
     // smaller copy. Everything else the game draws stays sharp.
     void setSmoothing(int level);
     int smoothing() const { return smoothing_; }
+    // How many times the video layer repeats each original pixel before the
+    // interpolation to the screen: 0 as many as fit (LINE DOUBLED), or 3
+    // (LINE TRIPLED: 3x3 at most, softer). Smoothing can make it fewer.
+    void setVideoRepeat(int n);
+    int videoRepeat() const { return videoRepeat_; }
     bool hdPicturesOn() const { return hdOn_; }   // the setting, whatever the mode
     // blit() of a video frame drawn with its top-left at (ox, oy) on screen,
     // its pixels at (fx, fy) in the video, also taking that part of `pic`, the
@@ -160,6 +166,7 @@ private:
     SDL_Texture* gameTexture_ = nullptr;    // game layer, 320x200
     SDL_Texture* sharpTexture_ = nullptr;   // game layer at a whole-number scale (render target)
     int smoothing_ = 0;
+    int videoRepeat_ = 0;
     int cw_ = 320, ox_ = 0;                   // canvas width, wing (game x 0 is canvas x ox_)
     bool wide_ = false, ambient_ = true;
     int picCurW_ = 320, picCurH_ = 240;       // the current mode's picture

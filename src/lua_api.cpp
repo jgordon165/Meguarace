@@ -184,12 +184,22 @@ static int gfx_hd_pictures(lua_State* L) {
     return 1;
 }
 
-// gfx.smoothing([level]) -> the video smoothing (0 off, 1 subtle, 2 more),
+// gfx.smoothing([level]) -> the video smoothing (0 off, 1 subtle, 2 more, 3 max),
 // after setting it if a level is given. HD resolutions only; GPU only.
 static int gfx_smoothing(lua_State* L) {
     Video& v = E(L).video;
     if (!lua_isnoneornil(L, 1)) v.setSmoothing(int(luaL_checkinteger(L, 1)));
     lua_pushinteger(L, v.smoothing());
+    return 1;
+}
+
+// gfx.video_repeat([n]) -> how many times the video layer repeats each
+// original pixel before interpolating: 0 as many as fit (line doubled) or 3
+// (line tripled), after setting it if `n` is given.
+static int gfx_video_repeat(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setVideoRepeat(int(luaL_checkinteger(L, 1)));
+    lua_pushinteger(L, v.videoRepeat());
     return 1;
 }
 
@@ -833,7 +843,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"clip", gfx_clip}, {"unclip", gfx_unclip}, {"text", gfx_text}, {"blit", gfx_blit},
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
-        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing},
+        {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
         {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
