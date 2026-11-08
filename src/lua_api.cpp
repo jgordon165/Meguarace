@@ -130,10 +130,10 @@ static int gfx_displays(lua_State* L) {
     return 1;
 }
 static int gfx_display(lua_State* L) {
-    const auto& m = E(L).video.mode();
-    lua_pushstring(L, m.name);
-    lua_pushinteger(L, m.picW);
-    lua_pushinteger(L, m.picH);
+    const Video& v = E(L).video;
+    lua_pushstring(L, v.mode().name);
+    lua_pushinteger(L, v.pictureW());
+    lua_pushinteger(L, v.pictureH());
     lua_pushboolean(L, E(L).video.hdOn());
     return 4;
 }
@@ -142,11 +142,36 @@ static int gfx_set_display(lua_State* L) {
     return 1;
 }
 static int gfx_to_display(lua_State* L) {
-    const auto& m = E(L).video.mode();
+    const Video& v = E(L).video;
     double x = luaL_checknumber(L, 1), y = luaL_checknumber(L, 2);
-    lua_pushnumber(L, x * m.picW / E(L).video.width());
-    lua_pushnumber(L, y * m.picH / E(L).video.height());
+    lua_pushnumber(L, (x + v.wing()) * v.pictureW() / v.canvasWidth());
+    lua_pushnumber(L, y * v.pictureH() / v.height());
     return 2;
+}
+
+// ---- 16:9 ----
+// gfx.aspect([a]) -> "4:3" or "16:9", after setting it if given. 16:9 is for
+// the HD resolutions: the canvas gets a wing on each side of the game's
+// 320x200 screen (gfx.wing() pixels, 53). The game keeps drawing in its own
+// coordinates; x = -gfx.wing() is the left edge, 320 + gfx.wing() the right.
+// gfx.ambient([on]) -> the wings' fill where nothing is drawn: a blurred,
+// darkened stretch of the picture (on), or black.
+static int gfx_aspect(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) {
+        std::string a = luaL_checkstring(L, 1);
+        if (a != "4:3" && a != "16:9") return luaL_argerror(L, 1, "\"4:3\" or \"16:9\"");
+        v.setWide(a == "16:9");
+    }
+    lua_pushstring(L, v.wide() ? "16:9" : "4:3");
+    return 1;
+}
+static int gfx_wing(lua_State* L) { lua_pushinteger(L, E(L).video.wing()); return 1; }
+static int gfx_ambient(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setAmbient(lua_toboolean(L, 1) != 0);
+    lua_pushboolean(L, v.ambient());
+    return 1;
 }
 
 // gfx.hd_pictures([on]) -> whether the HD pictures (packs) are shown, after
@@ -809,6 +834,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
         {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing},
+        {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},
