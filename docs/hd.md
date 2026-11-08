@@ -12,8 +12,8 @@ In the main menu's OPTIONS panel, press Down past QUIT to reach ADVANCED and
 press Enter. Everything there is saved as it changes, and Esc goes back.
 
 The defaults: the largest resolution that fits the desktop (1920×1080 on a
-1080p screen), 16:9 with SPACE sides, LINE TRIPLED, SMOOTHING MORE (Lance's
-clips the SAME), the default HD folder, ENHANCED music, TRACK SPEED FASTER
+1080p screen), 16:9 with SPACE sides, LINE TRIPLED, SMOOTHING SUBTLE with
+SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, TRACK SPEED FASTER
 (+33%), TRACK COLOR INTENSE and the voice filter on. Without packs the game starts in
 320×200, where only the voice filter applies.
 

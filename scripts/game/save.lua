@@ -41,8 +41,8 @@ function M.defaults()
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
         display = nil,             -- display mode (options); nil: the largest that fits
         hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
-        smoothing = 2,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
-        sharpen = "off",           -- after the smoothing: "off", "light" or "strong" (an unsharp mask, GPU)
+        smoothing = 1,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
+        sharpen = "light",         -- after the smoothing: "off", "light" or "strong" (an unsharp mask, GPU)
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         sides = "space",           -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
         lance_smoother = false,    -- Lance's clips one smoothing level softer than the other videos (SAME: no)
