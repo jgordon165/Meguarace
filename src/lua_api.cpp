@@ -213,6 +213,17 @@ static int gfx_video_repeat(lua_State* L) {
     return 1;
 }
 
+// gfx.sharpen([level]) -> the sharpening after the smoothing (0 off,
+// 1 light, 2 strong), after setting it if given; and whether this renderer
+// can do it.
+static int gfx_sharpen(lua_State* L) {
+    Video& v = E(L).video;
+    if (!lua_isnoneornil(L, 1)) v.setSharpen(int(luaL_checkinteger(L, 1)));
+    lua_pushinteger(L, v.sharpen());
+    lua_pushboolean(L, v.sharpenSupported() || !v.mode().hd);
+    return 2;
+}
+
 // gfx.video_grade([level]) -> the colour grade on video pixels (0 off,
 // 1 vivid, 2 intense), after setting it if given. The race sets it.
 static int gfx_video_grade(lua_State* L) {
@@ -902,7 +913,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"palette", gfx_palette}, {"setcolor", gfx_setcolor}, {"screenshot", gfx_screenshot},
         {"displays", gfx_displays}, {"display", gfx_display}, {"set_display", gfx_set_display},
         {"to_display", gfx_to_display}, {"nearest", gfx_nearest}, {"hd_pictures", gfx_hd_pictures}, {"smoothing", gfx_smoothing}, {"video_repeat", gfx_video_repeat},
-        {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end}, {"video_grade", gfx_video_grade},
+        {"hud_begin", gfx_hud_begin}, {"hud_end", gfx_hud_end}, {"video_grade", gfx_video_grade}, {"sharpen", gfx_sharpen},
         {"aspect", gfx_aspect}, {"wing", gfx_wing}, {"ambient", gfx_ambient}, {"sides", gfx_sides},
         {nullptr, nullptr}};
     static const luaL_Reg audio[] = {
