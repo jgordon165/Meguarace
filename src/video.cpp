@@ -345,15 +345,23 @@ void Video::blitVideo(int x, int y, int w, int h, const uint8_t* src, size_t len
 }
 
 void Video::setSmoothing(int level) {
-    level = std::clamp(level, 0, 2);
+    level = std::clamp(level, 0, 3);
     if (level == smoothing_) return;
     smoothing_ = level;
     if (mode().hd) createSmoothingTextures();
 }
 
+void Video::setVideoRepeat(int n) {
+    n = n == 3 ? 3 : 0;
+    if (n == videoRepeat_) return;
+    videoRepeat_ = n;
+    if (mode().hd) createSmoothingTextures();
+}
+
 // The video layer's whole-number scale and the HD layer's smaller copy, for
 // the current mode and smoothing. Off: the same sharp scale as the game
-// layer. Subtle: about 3/5 of it (1080p: 3x4 instead of 5x6), more: one less.
+// layer (or 3 at most, LINE TRIPLED). Subtle: about 3/5 of the sharp scale
+// (1080p: 3x4 instead of 5x6), more: one less, max: 1 (straight to linear).
 void Video::createSmoothingTextures() {
     for (SDL_Texture** t : {&videoScaled_, &hdSmall_})
         if (*t) { SDL_DestroyTexture(*t); *t = nullptr; }
@@ -361,8 +369,10 @@ void Video::createSmoothingTextures() {
     const Mode& m = mode();
     auto factor = [&](int pic, int canvas) {
         int sharp = (pic + canvas - 1) / canvas;
+        int base = videoRepeat_ > 0 ? std::min(sharp, videoRepeat_) : sharp;
         int subtle = std::max(1, (sharp * 3 + 2) / 5);
-        return smoothing_ == 0 ? sharp : smoothing_ == 1 ? subtle : std::max(1, subtle - 1);
+        int k = smoothing_ == 0 ? base : smoothing_ == 1 ? subtle : smoothing_ == 2 ? std::max(1, subtle - 1) : 1;
+        return std::min(k, base);
     };
     (void)m;
     videoScaled_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
@@ -372,7 +382,7 @@ void Video::createSmoothingTextures() {
         SDL_SetTextureBlendMode(videoScaled_, SDL_BLENDMODE_BLEND);
     }
     if (smoothing_ > 0 && picW_ > 0) {
-        float f = smoothing_ == 1 ? 0.75f : 0.55f;
+        float f = smoothing_ == 1 ? 0.75f : smoothing_ == 2 ? 0.55f : 0.4f;
         hdSmall_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
                                      std::max(1, int(float(picCurW_) * f)), std::max(1, int(float(picCurH_) * f)));
         if (hdSmall_) {

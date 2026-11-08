@@ -15,9 +15,12 @@ end
 
 -- Applies the saved HD style and mode at start (the mode unless --display
 -- was given). HD style "line_doubled": the HD modes show the original
--- videos and menus line doubled and interpolated instead of the packs.
+-- videos and menus line doubled and interpolated instead of the packs;
+-- "line_tripled": the same with each pixel repeated 3x3, softer.
 function M.apply_saved(state)
-    gfx.hd_pictures(state.hd_style ~= "line_doubled")
+    local original = state.hd_style == "line_doubled" or state.hd_style == "line_tripled"
+    gfx.hd_pictures(not original)
+    gfx.video_repeat(state.hd_style == "line_tripled" and 3 or 0)
     gfx.smoothing(tonumber(state.smoothing) or 0)
     gfx.ambient(state.ambient ~= false)
     gfx.aspect(state.aspect == "16:9" and "16:9" or "4:3")

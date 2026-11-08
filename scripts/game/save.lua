@@ -40,7 +40,7 @@ function M.defaults()
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
         display = nil,             -- display mode (options); nil: the largest that fits
-        hd_style = "upscaled",     -- HD modes: "upscaled" (the packs) or "line_doubled" (Options > ADVANCED)
+        hd_style = "upscaled",     -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
         smoothing = 0,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more
         aspect = "4:3",            -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         ambient = true,            -- 16:9 wings: blurred picture (true) or black

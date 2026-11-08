@@ -16,8 +16,8 @@ press Enter. Everything there is saved as it changes, and Esc goes back.
 | RESOLUTION | 320×200 (the original), 800×600, 1024×768 or 1920×1080; see below |
 | ASPECT | 4:3, or 16:9 (HD resolutions): the screen gets a wing either side of the game's 320×200 (53 game pixels each). The videos and the race dashboard stay 4:3 in the middle, since their pictures and cockpit art have nothing at the sides. The race's LAPS and score move out to the screen's edges, and the ADVANCED box uses the full width. 1920×1080 fills the screen; 1024×768 and 800×600 show a letterboxed 1024×576 / 800×450. |
 | SIDES | 16:9's wings where nothing is drawn: AMBIENT, a blurred and darkened stretch of the picture (its 32×20 average, stretched by the GPU), or BLACK. |
-| HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. LINE DOUBLED needs no packs. F10 switches between them while playing. |
-| SMOOTHING | OFF, SUBTLE or MORE: softens every video a little in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
+| HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. **LINE TRIPLED** is the same with each pixel repeated 3×3 at most before the interpolation, so the seams blend wider: softer than LINE DOUBLED, sharper than the smoothing. Neither needs packs. F10 switches between them while playing. |
+| SMOOTHING | OFF, SUBTLE, MORE or MAX: softens every video in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; MAX interpolates the original pixels straight to the screen, the softest. HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
@@ -132,7 +132,7 @@ megarace --data V:\ --display 1024x768     # this mode, this time
 megarace --data V:\ --no-hd                # original videos, native mode
 ```
 
-**F10** switches between the HD packs and LINE DOUBLED within a display
+**F10** switches between the HD packs and LINE DOUBLED (or TRIPLED) within a display
 mode, to compare them; the saved choice is Options > ADVANCED > HD STYLE.
 
 ## Menu graphics

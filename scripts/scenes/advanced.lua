@@ -36,7 +36,8 @@ local S = { overlay = true }
 local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "folder", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
                  smoothing = "SMOOTHING", folder = "HD FOLDER", voice = "VOICE FILTER" }
-local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE" }
+local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
+local STYLES = { "upscaled", "line_doubled", "line_tripled" }
 local TOP, H = 30, 126
 local TITLE_Y, FIRST_Y, STEP = 36, 52, 13
 
@@ -66,7 +67,7 @@ end
 -- What HD STYLE shows now.
 local function style_label()
     if not sys.hd then return "LINE DOUBLED" end
-    if not gfx.hd_pictures() then return "LINE DOUBLED" end
+    if not gfx.hd_pictures() then return gfx.video_repeat() == 3 and "LINE TRIPLED" or "LINE DOUBLED" end
     local by = sys.hd_upscaler
     if by == "" or by == nil then return "HD PACKS" end
     if by == "REAL-ESRGAN" then return by end
@@ -95,9 +96,11 @@ function S:change(what, dir)
         st.display = display.cycle(dir)
     elseif what == "style" then
         if not sys.hd then self.note = "NO HD VIDEOS YET: RUN HD-CONVERSION-UTILITY"; return end
-        local packs = not gfx.hd_pictures()
-        gfx.hd_pictures(packs)
-        st.hd_style = packs and "upscaled" or "line_doubled"
+        local now = not gfx.hd_pictures() and (gfx.video_repeat() == 3 and 3 or 2) or 1
+        local style = STYLES[(now - 1 + dir) % #STYLES + 1]
+        gfx.hd_pictures(style == "upscaled")
+        gfx.video_repeat(style == "line_tripled" and 3 or 0)
+        st.hd_style = style
     elseif what == "aspect" then
         st.aspect = gfx.aspect(gfx.aspect() == "16:9" and "4:3" or "16:9")
         if (gfx.display()) == "native" then self.note = "16:9 SHOWS IN THE HD RESOLUTIONS" end
@@ -105,7 +108,7 @@ function S:change(what, dir)
         st.ambient = gfx.ambient(not gfx.ambient())
         if gfx.wing() == 0 then self.note = "THE SIDES SHOW IN 16:9" end
     elseif what == "smoothing" then
-        st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 3)
+        st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 4)
         if (gfx.display()) == "native" then self.note = "SMOOTHING SHOWS IN THE HD RESOLUTIONS" end
     elseif what == "voice" then
         st.voice_filter = st.voice_filter == false
