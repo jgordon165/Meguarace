@@ -118,7 +118,9 @@ make them on your own machine, from your own CD, with
 workflow. No HD video is
 ever committed or shipped, because an upscaled video is still the game's
 content. It upscales the menu graphics too. Run `hd-conversion-utility --data V:\`
-once, then use **Options > ADVANCED** (Down past QUIT):
+once, then use **Options > ADVANCED** (Down past QUIT). By default the game
+starts at the largest resolution that fits, in 16:9 with AMBIENT sides, LINE
+TRIPLED and SMOOTHING MORE:
 - RESOLUTION: 800×600, 1024×768 or 1920×1080, or 320×200 for the original
   (also `--display`)
 - ASPECT: 4:3 or 16:9 (the videos and dashboard stay 4:3 in the middle; the

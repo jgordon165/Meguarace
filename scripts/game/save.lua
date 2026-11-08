@@ -40,9 +40,9 @@ function M.defaults()
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
         display = nil,             -- display mode (options); nil: the largest that fits
-        hd_style = "upscaled",     -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
-        smoothing = 0,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more
-        aspect = "4:3",            -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
+        hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
+        smoothing = 2,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
+        aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         ambient = true,            -- 16:9 wings: blurred picture (true) or black
         voice_filter = true,       -- hiss filter on Lance's clips (V while one plays)
         hall = nil,                -- filled from the EXE's defaults on first run
