@@ -14,6 +14,8 @@ press Enter. Everything there is saved as it changes, and Esc goes back.
 | Setting | |
 |---|---|
 | RESOLUTION | 320×200 (the original), 800×600, 1024×768 or 1920×1080; see below |
+| ASPECT | 4:3, or 16:9 (HD resolutions): the screen gets a wing either side of the game's 320×200 (53 game pixels each). The videos and the race dashboard stay 4:3 in the middle, since their pictures and cockpit art have nothing at the sides. The race's LAPS and score move out to the screen's edges, and the ADVANCED box uses the full width. 1920×1080 fills the screen; 1024×768 and 800×600 show a letterboxed 1024×576 / 800×450. |
+| SIDES | 16:9's wings where nothing is drawn: AMBIENT, a blurred and darkened stretch of the picture (its 32×20 average, stretched by the GPU), or BLACK. |
 | HD STYLE | what the HD resolutions show: the packs' upscale (**REAL-ESRGAN** when `hd-conversion-utility` used it), or **LINE DOUBLED**: the original videos and menus with each pixel repeated and only the seams interpolated. LINE DOUBLED needs no packs. F10 switches between them while playing. |
 | SMOOTHING | OFF, SUBTLE or MORE: softens every video a little in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
@@ -42,6 +44,13 @@ that screen is shown. Anything that does need display pixels asks the
 engine: `gfx.display()` returns the mode and its picture size, and
 `gfx.to_display(x, y)` maps a game point to display pixels. In `native`
 those are the original 320×200 shown at 4:3.
+
+In 16:9 the canvas is 426×200: the game's 320×200 in the middle and a wing
+of `gfx.wing()` (53) pixels each side. Drawing still uses game coordinates,
+so x = `-gfx.wing()` is the left edge and `320 + gfx.wing()` the right; code
+that never looks at `gfx.wing()` draws exactly where it did. The 16:9
+pixels keep the original's shape: 426 game pixels span 16:9 of 200 rows,
+just as 320 span 4:3.
 
 ## Two programs
 

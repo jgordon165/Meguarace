@@ -523,10 +523,12 @@ end
 
 -- Status line and the opponents digit (RACEPRG 0x150A): LAPS: n at the top
 -- left, the score in six digits at the top right.
+-- In 16:9 they move out to the screen's edges (gfx.wing() each side).
 function S:draw_status(lap)
-    font.draw(2, 6, "LAPS:", C_TEXT)
-    font.draw(50, 6, tostring(math.max(0, self.laps - (lap - 1))), C_TEXT)
-    font.draw(250, 6, string.format("%06d", math.min(999999, self.total + self.rules.points)), C_TEXT)
+    local wing = gfx.wing()
+    font.draw(2 - wing, 6, "LAPS:", C_TEXT)
+    font.draw(50 - wing, 6, tostring(math.max(0, self.laps - (lap - 1))), C_TEXT)
+    font.draw(250 + wing, 6, string.format("%06d", math.min(999999, self.total + self.rules.points)), C_TEXT)
     local at = hud.OPPONENTS_AT[self.car.code]
     if at and at[1] ~= 0 and not self.last_round then
         font.draw_small(at[1], at[2] + hud.DASH_Y, tostring(math.min(9, self.left)), C_TEXT)

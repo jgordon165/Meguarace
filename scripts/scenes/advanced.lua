@@ -4,6 +4,12 @@
 --
 --   RESOLUTION    the display mode: 320x200, or 800x600 / 1024x768 / 1920x1080
 --                 with the HD videos (game/display.lua). LEFT/RIGHT or ENTER.
+--   ASPECT        4:3, or 16:9: the screen gets a wing either side of the
+--                 game's 320x200 (the videos and the dashboard stay 4:3 in
+--                 the middle; the race's LAPS and score move out to the
+--                 edges). HD resolutions only.
+--   SIDES         16:9's wings where nothing is drawn: AMBIENT (a blurred,
+--                 darkened stretch of the picture) or BLACK.
 --   HD STYLE      what the HD modes show:
 --                   the packs' upscale (REAL-ESRGAN when hd-conversion-utility
 --                   used it), made from your own CD; or
@@ -27,14 +33,21 @@ local display = require("game.display")
 
 local S = { overlay = true }
 
-local ITEMS = { "resolution", "style", "smoothing", "folder", "voice" }
-local LABELS = { resolution = "RESOLUTION", style = "HD STYLE", smoothing = "SMOOTHING", folder = "HD FOLDER",
-                 voice = "VOICE FILTER" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "folder", "voice" }
+local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
+                 smoothing = "SMOOTHING", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE" }
-local BOX = { x = 20, y = 44, w = 280, h = 120 }
-local TITLE_Y, FIRST_Y, STEP = 50, 68, 14
-local VALUE_X = BOX.x + 14 + 13 * 8         -- after the longest label
-local VALUE_CHARS = (BOX.x + BOX.w - 8 - VALUE_X) // 8
+local TOP, H = 30, 126
+local TITLE_Y, FIRST_Y, STEP = 36, 52, 13
+
+-- The box: as wide as the screen allows (16:9 adds the wings).
+local function box()
+    local wing = gfx.wing()
+    local b = { x = 20 - wing, y = TOP, w = 280 + 2 * wing, h = H }
+    b.value_x = b.x + 14 + 13 * 8            -- after the longest label
+    b.value_chars = (b.x + b.w - 8 - b.value_x) // 8
+    return b
+end
 local NOTE_Y = 191
 
 -- st: the saved state (the menu's); back(): reopens the OPTIONS panel.
@@ -64,11 +77,14 @@ function S:value(what)
     if what == "resolution" then return display.label(gfx.display())
     elseif what == "style" then return style_label()
     elseif what == "smoothing" then return SMOOTHING[gfx.smoothing()]
+    elseif what == "aspect" then return gfx.aspect()
+    elseif what == "sides" then return gfx.ambient() and "AMBIENT" or "BLACK"
     elseif what == "voice" then return self.state.voice_filter == false and "OFF" or "ON"
     end
     local v = self.editing and (self.editing .. "_") or (sys.hd_folder())
     if v == "" then v = "DEFAULT" end
-    if #v > VALUE_CHARS then v = ".." .. v:sub(-(VALUE_CHARS - 2)) end   -- the end of a long path
+    local room = box().value_chars
+    if #v > room then v = ".." .. v:sub(-(room - 2)) end   -- the end of a long path
     return v
 end
 
@@ -82,6 +98,12 @@ function S:change(what, dir)
         local packs = not gfx.hd_pictures()
         gfx.hd_pictures(packs)
         st.hd_style = packs and "upscaled" or "line_doubled"
+    elseif what == "aspect" then
+        st.aspect = gfx.aspect(gfx.aspect() == "16:9" and "4:3" or "16:9")
+        if (gfx.display()) == "native" then self.note = "16:9 SHOWS IN THE HD RESOLUTIONS" end
+    elseif what == "sides" then
+        st.ambient = gfx.ambient(not gfx.ambient())
+        if gfx.wing() == 0 then self.note = "THE SIDES SHOW IN 16:9" end
     elseif what == "smoothing" then
         st.smoothing = gfx.smoothing((gfx.smoothing() + dir) % 3)
         if (gfx.display()) == "native" then self.note = "SMOOTHING SHOWS IN THE HD RESOLUTIONS" end
@@ -145,7 +167,7 @@ end
 
 function S:draw()
     local black, yellow, grey = 0, gfx.nearest(255, 210, 60), gfx.nearest(150, 150, 160)
-    local b = BOX
+    local b = box()
     gfx.fill(b.x, b.y, b.w, b.h, black)
     gfx.line(b.x, b.y, b.x + b.w - 1, b.y, grey)
     gfx.line(b.x, b.y + b.h - 1, b.x + b.w - 1, b.y + b.h - 1, grey)
@@ -159,7 +181,7 @@ function S:draw()
         local y = FIRST_Y + (i - 1) * STEP
         if i == self.sel then gfx.fill(b.x + 6, y + 3, 3, 3, yellow) end   -- cursor
         text(b.x + 14, y, LABELS[what])
-        text(VALUE_X, y, self:value(what))
+        text(b.value_x, y, self:value(what))
     end
     local hint = self.editing and "TYPE OR CTRL+V   ENTER KEEP   ESC CANCEL"
                               or "LEFT/RIGHT CHANGE   ENTER EDIT   ESC BACK"

@@ -41,6 +41,8 @@ static const char* glyphFor(char c) {
 
 bool Video::init(int width, int height, int scale, bool hidden) {
     w_ = width; h_ = height;
+    cw_ = width; ox_ = 0;
+    picCurW_ = w_; picCurH_ = w_ * 3 / 4;
     fb_.assign(static_cast<size_t>(w_) * h_, 0);
     src_.assign(fb_.size(), 0);
     rgba_.assign(fb_.size(), 0);
@@ -78,6 +80,8 @@ bool Video::init(int width, int height, int scale, bool hidden) {
 
 void Video::shutdown() {
     destroyModeTextures();
+    if (ambientTexture_) SDL_DestroyTexture(ambientTexture_);
+    ambientTexture_ = nullptr;
     if (hdTexture_) SDL_DestroyTexture(hdTexture_);
     hdTexture_ = nullptr;
     if (texture_)  SDL_DestroyTexture(texture_);
@@ -88,19 +92,26 @@ void Video::shutdown() {
 
 void Video::clear(uint8_t idx) {
     std::memset(fb_.data(), idx, fb_.size());
-    std::memset(src_.data(), 0, src_.size());
+    // src_: 0 in the game's screen; 3 (empty, the ambient fill) in the wings.
+    for (int y = 0; y < h_; ++y) {
+        uint8_t* row = &src_[size_t(y) * size_t(cw_)];
+        std::memset(row, 3, size_t(cw_));
+        std::memset(row + ox_, 0, size_t(w_));
+    }
 }
 
 void Video::pset(int x, int y, uint8_t idx) {
-    if (x >= 0 && y >= 0 && x < w_ && y < h_) {
-        size_t i = static_cast<size_t>(y) * w_ + x;
+    int X = x + ox_;
+    if (X >= 0 && y >= 0 && X < cw_ && y < h_) {
+        size_t i = static_cast<size_t>(y) * cw_ + X;
         fb_[i] = idx;
         src_[i] = 0;
     }
 }
 
 uint8_t Video::pget(int x, int y) const {
-    if (x >= 0 && y >= 0 && x < w_ && y < h_) return fb_[static_cast<size_t>(y) * w_ + x];
+    int X = x + ox_;
+    if (X >= 0 && y >= 0 && X < cw_ && y < h_) return fb_[static_cast<size_t>(y) * cw_ + X];
     return 0;
 }
 
@@ -206,13 +217,13 @@ void Video::sprite(const uint8_t* px, int w, int h, int x, int y, double scale, 
         int sy = dy * h / dh;
         for (int dx = 0; dx < dw; ++dx) {
             int X = x + dx;
-            if (X < 0 || X >= w_) continue;
+            if (X + ox_ < 0 || X + ox_ >= cw_) continue;
             int sx = dx * w / dw;
             if (flip) sx = w - 1 - sx;
             uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
             if (c && visible(X, Y)) {
-                fb_[size_t(Y) * w_ + X] = c;
-                src_[size_t(Y) * w_ + X] = 0;
+                fb_[size_t(Y) * cw_ + X + ox_] = c;
+                src_[size_t(Y) * cw_ + X + ox_] = 0;
             }
         }
     }
@@ -234,22 +245,73 @@ const std::vector<Video::Mode>& Video::modes() {
 
 bool Video::enableHd(int picW, int picH) {
     if (picW < 1 || picH < 1 || !renderer_) return false;
-    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
-    hdTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, picW, picH);
-    if (!hdTexture_) { std::fprintf(stderr, "HD texture: %s\n", SDL_GetError()); picW_ = picH_ = 0; return false; }
-    // Smaller modes show the picture smaller than it is: filter it.
-    SDL_SetTextureScaleMode(hdTexture_, SDL_ScaleModeLinear);
     picW_ = picW;
     picH_ = picH;
-    hd_.assign(size_t(picW) * size_t(picH), 0xFF000000u);
+    // The HD layer covers the whole canvas at the packs' scale (1440 per 320
+    // game pixels): 1440 wide in 4:3, about 1920 in 16:9.
+    hdCW_ = int(int64_t(cw_) * picW / w_);
+    if (hdTexture_) SDL_DestroyTexture(hdTexture_);
+    hdTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, hdCW_, picH);
+    if (!hdTexture_) { std::fprintf(stderr, "HD texture: %s\n", SDL_GetError()); picW_ = picH_ = hdCW_ = 0; return false; }
+    // Smaller modes show the picture smaller than it is: filter it.
+    SDL_SetTextureScaleMode(hdTexture_, SDL_ScaleModeLinear);
+    // Transparent until something is drawn into it: 16:9's empty wings then
+    // show the ambient fill underneath (pictures and sprites are opaque).
+    SDL_SetTextureBlendMode(hdTexture_, SDL_BLENDMODE_BLEND);
+    hd_.assign(size_t(hdCW_) * size_t(picH), 0u);
     hdDirty_ = true;
     return true;
+}
+
+void Video::resizeCanvas() {
+    fb_.assign(size_t(cw_) * size_t(h_), 0);
+    src_.assign(fb_.size(), 0);
+    rgba_.assign(fb_.size(), 0);
+    layer_.assign(fb_.size(), 0);
+    videoLayer_.assign(fb_.size(), 0);
+    clear(0);
+    if (picW_ > 0) enableHd(picW_, picH_);   // the HD layer follows the canvas
+}
+
+void Video::setWide(bool wide) {
+    if (wide == wide_) return;
+    wide_ = wide;
+    if (mode().hd) setMode(mode().name);   // rebuild the canvas and the picture
+}
+
+// The wings' ambient fill: the game's screen averaged down to 32x20 on the
+// CPU (64,000 pixels: trivial), stretched over the whole picture by the GPU,
+// linear, darkened. The layers on top cover it except in the empty wings.
+void Video::drawAmbient() {
+    constexpr int AW = 32, AH = 20;
+    if (!ambientTexture_) {
+        ambientTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, AW, AH);
+        if (!ambientTexture_) return;
+        SDL_SetTextureScaleMode(ambientTexture_, SDL_ScaleModeLinear);
+        SDL_SetTextureColorMod(ambientTexture_, 110, 110, 110);
+    }
+    ambientPx_.assign(AW * AH, 0);
+    for (int ay = 0; ay < AH; ++ay)
+        for (int ax = 0; ax < AW; ++ax) {
+            uint32_t r = 0, g = 0, b = 0, n = 0;
+            for (int y = ay * h_ / AH; y < (ay + 1) * h_ / AH; ++y)
+                for (int x = ax * w_ / AW; x < (ax + 1) * w_ / AW; ++x) {
+                    size_t i = size_t(y) * size_t(cw_) + size_t(x + ox_);
+                    // HD pixels: their colour lives in the HD layer; the
+                    // original pixel underneath is close enough for a blur.
+                    uint32_t c = pal_[fb_[i]];
+                    r += (c >> 16) & 0xFF; g += (c >> 8) & 0xFF; b += c & 0xFF; ++n;
+                }
+            if (n) ambientPx_[size_t(ay * AW + ax)] = 0xFF000000u | (r / n) << 16 | (g / n) << 8 | (b / n);
+        }
+    SDL_UpdateTexture(ambientTexture_, nullptr, ambientPx_.data(), AW * 4);
+    SDL_RenderCopy(renderer_, ambientTexture_, nullptr, nullptr);
 }
 
 void Video::disableHd() {
     if (hdTexture_) SDL_DestroyTexture(hdTexture_);
     hdTexture_ = nullptr;
-    picW_ = picH_ = 0;
+    picW_ = picH_ = hdCW_ = 0;
     hd_.clear();
     std::fill(src_.begin(), src_.end(), uint8_t(0));
     if (mode().hd) setMode("native");
@@ -277,7 +339,8 @@ void Video::blitVideo(int x, int y, int w, int h, const uint8_t* src, size_t len
             size_t i = static_cast<size_t>(yy) * w + xx;
             if (i >= len) return;
             int X = x + xx, Y = y + yy;
-            if (src[i] != transparent && visible(X, Y)) src_[size_t(Y) * w_ + X] = 2;
+            if (src[i] != transparent && visible(X, Y) && X + ox_ >= 0 && X + ox_ < cw_ && Y >= 0 && Y < h_)
+                src_[size_t(Y) * cw_ + X + ox_] = 2;
         }
 }
 
@@ -301,8 +364,9 @@ void Video::createSmoothingTextures() {
         int subtle = std::max(1, (sharp * 3 + 2) / 5);
         return smoothing_ == 0 ? sharp : smoothing_ == 1 ? subtle : std::max(1, subtle - 1);
     };
+    (void)m;
     videoScaled_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
-                                     w_ * factor(m.picW, w_), h_ * factor(m.picH, h_));
+                                     cw_ * factor(picCurW_, cw_), h_ * factor(picCurH_, h_));
     if (videoScaled_) {
         SDL_SetTextureScaleMode(videoScaled_, SDL_ScaleModeLinear);
         SDL_SetTextureBlendMode(videoScaled_, SDL_BLENDMODE_BLEND);
@@ -310,8 +374,11 @@ void Video::createSmoothingTextures() {
     if (smoothing_ > 0 && picW_ > 0) {
         float f = smoothing_ == 1 ? 0.75f : 0.55f;
         hdSmall_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
-                                     std::max(1, int(float(m.picW) * f)), std::max(1, int(float(m.picH) * f)));
-        if (hdSmall_) SDL_SetTextureScaleMode(hdSmall_, SDL_ScaleModeLinear);
+                                     std::max(1, int(float(picCurW_) * f)), std::max(1, int(float(picCurH_) * f)));
+        if (hdSmall_) {
+            SDL_SetTextureScaleMode(hdSmall_, SDL_ScaleModeLinear);
+            SDL_SetTextureBlendMode(hdSmall_, SDL_BLENDMODE_BLEND);
+        }
     }
 }
 
@@ -338,17 +405,33 @@ bool Video::setMode(const std::string& name) {
     if (i == int(all.size()) || !modeAvailable(all[size_t(i)]) || !renderer_) return false;
     const Mode& m = all[size_t(i)];
     destroyModeTextures();
+    // The picture, and the canvas: 16:9 widens the canvas by the wings so its
+    // pixels keep the original's shape (320 game pixels span 4:3 of 200 rows).
+    const bool wideNow = m.hd && wide_;
+    if (wideNow) {
+        picCurH_ = std::min(m.winH, m.winW * 9 / 16);
+        picCurW_ = picCurH_ * 16 / 9;
+    } else {
+        picCurW_ = m.picW;
+        picCurH_ = m.picH;
+    }
+    int cw = wideNow ? (w_ * 4 / 3) & ~1 : w_;   // 426: wings of 53
+    if (cw != cw_) {
+        cw_ = cw;
+        ox_ = (cw_ - w_) / 2;
+        resizeCanvas();
+    }
     if (m.hd) {
-        gameTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        gameTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, cw_, h_);
         if (!gameTexture_) { std::fprintf(stderr, "game layer: %s\n", SDL_GetError()); return false; }
         SDL_SetTextureBlendMode(gameTexture_, SDL_BLENDMODE_BLEND);
         // Sharp scaling: nearest to whole multiples of 320x200 at least the
         // picture size, then linear down to it, so every original pixel
         // comes out the same size instead of alternating 4 and 5 wide.
         if (SDL_RenderTargetSupported(renderer_)) {
-            int kx = (m.picW + w_ - 1) / w_, ky = (m.picH + h_ - 1) / h_;
+            int kx = (picCurW_ + cw_ - 1) / cw_, ky = (picCurH_ + h_ - 1) / h_;
             sharpTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
-                                              w_ * kx, h_ * ky);
+                                              cw_ * kx, h_ * ky);
             if (sharpTexture_) {
                 SDL_SetTextureScaleMode(sharpTexture_, SDL_ScaleModeLinear);
                 SDL_SetTextureBlendMode(sharpTexture_, SDL_BLENDMODE_BLEND);
@@ -357,7 +440,7 @@ bool Video::setMode(const std::string& name) {
     }
     mode_ = i;
     if (m.hd) {
-        videoTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
+        videoTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, cw_, h_);
         if (videoTexture_) SDL_SetTextureBlendMode(videoTexture_, SDL_BLENDMODE_BLEND);
         videoLayer_.assign(fb_.size(), 0);
         createSmoothingTextures();
@@ -377,7 +460,7 @@ bool Video::setMode(const std::string& name) {
     } else {
         SDL_SetWindowSize(window_, m.hd ? m.winW : w_ * nativeScale_, m.hd ? m.winH : h_ * nativeScale_);
     }
-    SDL_RenderSetLogicalSize(renderer_, m.picW, m.picH);
+    SDL_RenderSetLogicalSize(renderer_, picCurW_, picCurH_);
     hdDirty_ = true;
     return true;
 }
@@ -394,9 +477,9 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
             size_t i = static_cast<size_t>(yy) * w + xx;
             if (i >= len) break;
             if (src[i] == transparent) continue;
-            int X = ox + fx + xx, Y = oy + fy + yy;
-            if (X < 0 || Y < 0 || X >= w_ || Y >= h_) continue;
-            size_t p = size_t(Y) * w_ + X;
+            int X = ox + fx + xx + ox_, Y = oy + fy + yy;   // canvas
+            if (X < 0 || Y < 0 || X >= cw_ || Y >= h_) continue;
+            size_t p = size_t(Y) * cw_ + X;
             fb_[p] = src[i];
             src_[p] = changed[src[i]] ? 2 : 1;   // recoloured: its original pixel, in the video layer
             recoloured += changed[src[i]];
@@ -410,15 +493,15 @@ long Video::blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* 
     int x0 = std::max(fx, 0), x1 = std::min(fx + w, w_), y0 = std::max(fy, 0), y1 = std::min(fy + h, h_);
     if (x0 >= x1 || y0 >= y1) return recoloured;
     int sx0 = mx(x0), sx1 = mx(x1), sy0 = my(y0), sy1 = my(y1);
-    int dx0 = mx(ox + x0), dy0 = my(oy + y0);
+    int dx0 = mx(ox + x0 + ox_), dy0 = my(oy + y0);   // canvas
     for (int r = sy0; r < sy1; ++r) {
         int dy = dy0 + (r - sy0);
         if (dy < 0 || dy >= picH_) continue;
         int a = sx0, b = sx1, d = dx0;
         if (d < 0) { a -= d; d = 0; }
-        if (d + (b - a) > picW_) b = a + (picW_ - d);
+        if (d + (b - a) > hdCW_) b = a + (hdCW_ - d);
         if (a >= b) continue;
-        std::memcpy(&hd_[size_t(dy) * size_t(picW_) + size_t(d)], &pic[size_t(r) * size_t(picW) + size_t(a)],
+        std::memcpy(&hd_[size_t(dy) * size_t(hdCW_) + size_t(d)], &pic[size_t(r) * size_t(picW) + size_t(a)],
                     size_t(b - a) * 4);
     }
     hdDirty_ = true;
@@ -433,27 +516,29 @@ bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
     auto fdiv = [](int64_t a, int64_t b) { return int(a >= 0 ? a / b : -((-a + b - 1) / b)); };
     auto mx = [&](int v) { return fdiv(int64_t(v) * picW_, w_); };
     auto my = [&](int v) { return fdiv(int64_t(v) * picH_, h_); };
-    const int x0 = std::max(x, 0), x1 = std::min(x + w, w_), y0 = std::max(y, 0), y1 = std::min(y + h, h_);
+    // Canvas coordinates (game x + the wing) from here on.
+    const int cx = x + ox_;
+    const int x0 = std::max(cx, 0), x1 = std::min(cx + w, cw_), y0 = std::max(y, 0), y1 = std::min(y + h, h_);
     if (x0 >= x1 || y0 >= y1) return true;   // off screen: nothing to draw either way
-    const size_t PW = size_t(picW_);
+    const size_t PW = size_t(hdCW_);
     // 1. Under the sprite, where the HD layer doesn't already show something
     //    (an HD video, an HD sprite), put the screen's own pixels into it.
     for (int Y = y0; Y < y1; ++Y)
         for (int X = x0; X < x1; ++X) {
-            size_t p = size_t(Y) * w_ + X;
+            size_t p = size_t(Y) * cw_ + X;
             if (src_[p] == 1) continue;   // already in the HD layer (video pixels, 2, are not)
             uint32_t c = pal_[fb_[p]] | 0xFF000000u;
             for (int r = my(Y); r < my(Y + 1); ++r)
                 std::fill(&hd_[size_t(r) * PW + size_t(mx(X))], &hd_[size_t(r) * PW + size_t(mx(X + 1))], c);
         }
     // 2. The HD image over it, alpha-blended.
-    const int ox = mx(x), oy = my(y);
+    const int ox = mx(cx), oy = my(y);
     for (int j = 0; j < hdH; ++j) {
         int Y = oy + j;
         if (Y < 0 || Y >= picH_) continue;
         for (int i = 0; i < hdW; ++i) {
             int X = ox + i;
-            if (X < 0 || X >= picW_) continue;
+            if (X < 0 || X >= hdCW_) continue;
             uint32_t s = hdPx[size_t(j) * size_t(hdW) + size_t(flip ? hdW - 1 - i : i)];
             uint32_t a = s >> 24;
             if (!a) continue;
@@ -474,11 +559,11 @@ bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
     if (!indexed) changedColours(baked, changed);
     for (int Y = y0; Y < y1; ++Y)
         for (int X = x0; X < x1; ++X) {
-            int sx = X - x, sy = Y - y;
+            int sx = X - cx, sy = Y - y;
             if (flip) sx = w - 1 - sx;
             uint8_t c = px[size_t(sy) * size_t(w) + size_t(sx)];
             bool orig = c && changed[c];   // recoloured since the image was made: the original pixel
-            src_[size_t(Y) * w_ + size_t(X)] = orig ? 0 : 1;
+            src_[size_t(Y) * cw_ + size_t(X)] = orig ? 0 : 1;
             if (orig && recoloured) ++*recoloured;
         }
     hdDirty_ = true;
@@ -522,18 +607,15 @@ void Video::render(bool showHd) {
         SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
         return;
     }
+    // 16:9: the ambient fill first, under everything (it shows in the empty wings).
+    if (ox_ > 0 && ambient_) drawAmbient();
     // Three layers, bottom up. All the scaling and smoothing is the GPU's.
     // 1. HD layer: the packs' pictures (smoothed through a smaller copy).
     if (showHd) {
-        if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), picW_ * 4);
+        if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), hdCW_ * 4);
         hdDirty_ = false;
-        if (smoothing_ > 0 && hdSmall_ && SDL_SetRenderTarget(renderer_, hdSmall_) == 0) {
-            SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
-            SDL_SetRenderTarget(renderer_, nullptr);
-            SDL_RenderCopy(renderer_, hdSmall_, nullptr, nullptr);
-        } else {
-            SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
-        }
+        if (smoothing_ > 0 && hdSmall_) drawThrough(hdTexture_, hdSmall_);   // alpha kept: wings stay clear
+        else SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
     }
     // Which layer shows each pixel: HD pixels show the video layer when the
     // HD pictures are off (their original pixels are in fb_ all the same).
@@ -541,7 +623,7 @@ void Video::render(bool showHd) {
     // blends edges toward the neighbouring layer, not toward black.
     bool anyVideo = false;
     for (size_t i = 0; i < fb_.size(); ++i) {
-        uint8_t l = src_[i] == 1 && !showHd ? 2 : src_[i];
+        uint8_t l = src_[i] == 1 && !showHd ? 2 : src_[i];   // 3: empty wing, in no layer
         uint32_t c = pal_[fb_[i]];
         layer_[i] = l == 0 ? c : (c & 0x00FFFFFFu);
         videoLayer_[i] = l == 2 ? c : (c & 0x00FFFFFFu);
@@ -550,11 +632,11 @@ void Video::render(bool showHd) {
     // 2. Video layer: the original video pixels, line doubled (smoothing:
     //    a smaller whole-number size first, so the seams blend wider).
     if (anyVideo && videoTexture_) {
-        SDL_UpdateTexture(videoTexture_, nullptr, videoLayer_.data(), w_ * 4);
+        SDL_UpdateTexture(videoTexture_, nullptr, videoLayer_.data(), cw_ * 4);
         drawThrough(videoTexture_, videoScaled_);
     }
     // 3. Game layer: everything else the game draws, always sharp.
-    SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), w_ * 4);
+    SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), cw_ * 4);
     drawThrough(gameTexture_, sharpTexture_);
 }
 
@@ -579,12 +661,12 @@ bool Video::saveBmp(const std::string& path, bool asShown) {
         SDL_RenderSetViewport(renderer_, nullptr);
         SDL_Rect all{0, 0, ow, oh};
         int rc = SDL_RenderReadPixels(renderer_, &all, SDL_PIXELFORMAT_ARGB8888, px.data(), ow * 4);
-        SDL_RenderSetLogicalSize(renderer_, mode().picW, mode().picH);
+        SDL_RenderSetLogicalSize(renderer_, picCurW_, picCurH_);
         if (rc != 0) return false;
         s = SDL_CreateRGBSurfaceWithFormatFrom(px.data(), ow, oh, 32, ow * 4, SDL_PIXELFORMAT_ARGB8888);
     } else {
         convert();
-        s = SDL_CreateRGBSurfaceWithFormatFrom(rgba_.data(), w_, h_, 32, w_ * 4, SDL_PIXELFORMAT_ARGB8888);
+        s = SDL_CreateRGBSurfaceWithFormatFrom(rgba_.data(), cw_, h_, 32, cw_ * 4, SDL_PIXELFORMAT_ARGB8888);
     }
     if (!s) return false;
     bool ok = SDL_SaveBMP(s, path.c_str()) == 0;

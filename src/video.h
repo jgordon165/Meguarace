@@ -14,8 +14,20 @@ public:
     bool init(int width, int height, int scale, bool hidden);
     void shutdown();
 
-    int width()  const { return w_; }
+    int width()  const { return w_; }    // the game's screen: 320 in every mode
     int height() const { return h_; }
+    // 16:9 (HD resolutions): the canvas is wider than the game's screen, by
+    // wing() pixels on each side (53), with the 320x200 screen in the middle.
+    // Every drawing call takes game coordinates, so x = -wing() is the left
+    // edge of the canvas and 320 + wing() the right. Wings nothing drew on
+    // show the ambient fill (a blurred, darkened stretch of the picture) or
+    // black.
+    int wing() const { return ox_; }
+    int canvasWidth() const { return cw_; }
+    void setWide(bool wide);
+    bool wide() const { return wide_; }
+    void setAmbient(bool on) { ambient_ = on; }
+    bool ambient() const { return ambient_; }
 
     void clear(uint8_t idx);
     void pset(int x, int y, uint8_t idx);
@@ -68,6 +80,10 @@ public:
     int  hdPictureH() const { return picH_; }
     bool setMode(const std::string& name);          // false: unknown or not available
     const Mode& mode() const { return modes()[size_t(mode_)]; }
+    // The current mode's picture: its 4:3 picture, or in 16:9 the widest
+    // 16:9 picture that fits its window (1920x1080, 1024x576, 800x450).
+    int pictureW() const { return picCurW_; }
+    int pictureH() const { return picCurH_; }
     bool modeAvailable(const Mode& m) const { return !m.hd || hdAvailable(); }
     // The best mode that fits the desktop (HD modes only when available).
     std::string bestMode() const;
@@ -144,6 +160,14 @@ private:
     SDL_Texture* gameTexture_ = nullptr;    // game layer, 320x200
     SDL_Texture* sharpTexture_ = nullptr;   // game layer at a whole-number scale (render target)
     int smoothing_ = 0;
+    int cw_ = 320, ox_ = 0;                   // canvas width, wing (game x 0 is canvas x ox_)
+    bool wide_ = false, ambient_ = true;
+    int picCurW_ = 320, picCurH_ = 240;       // the current mode's picture
+    int hdCW_ = 0;                            // HD layer width: the canvas at the packs' scale
+    SDL_Texture* ambientTexture_ = nullptr;   // 32x20 average of the picture (wings)
+    std::vector<uint32_t> ambientPx_;
+    void resizeCanvas();                      // after cw_ changed
+    void drawAmbient();
     std::vector<uint32_t> videoLayer_;        // video layer, 320x200, transparent elsewhere
     SDL_Texture* videoTexture_ = nullptr;     // video layer, 320x200
     SDL_Texture* videoScaled_ = nullptr;      // video layer at a whole-number scale (render target)
