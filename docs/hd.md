@@ -11,6 +11,11 @@ drawn sharp on top, and gameplay doesn't change at all.
 In the main menu's OPTIONS panel, press Down past QUIT to reach ADVANCED and
 press Enter. Everything there is saved as it changes, and Esc goes back.
 
+The defaults: the largest resolution that fits the desktop (1920×1080 on a
+1080p screen), 16:9 with AMBIENT sides, LINE TRIPLED, SMOOTHING MORE, the
+default HD folder and the voice filter on. Without packs the game starts in
+320×200, where only the voice filter applies.
+
 | Setting | |
 |---|---|
 | RESOLUTION | 320×200 (the original), 800×600, 1024×768 or 1920×1080; see below |
