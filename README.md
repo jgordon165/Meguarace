@@ -33,8 +33,9 @@ build\Release\megarace.exe --data V:\
 ```
 
 It opens on the port's own title screen: MEGARACE in chrome over a synthwave
-night, all drawn by code, with the music playing. ENTER goes on, and ESC
-skips the boot videos too. Then it plays the original boot sequence
+night, all drawn by code, with the music playing. It stays for a minute
+and fades out to what comes next; ENTER goes on sooner, and ESC skips the
+boot videos too. Then it plays the original boot sequence
 (Mindscape, Cryo, the intro with Lance Boyle) straight from `MEGARACE.DAT`,
 then the **main menu**:
 

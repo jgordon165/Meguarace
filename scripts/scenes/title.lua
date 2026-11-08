@@ -7,7 +7,9 @@
 --   scenes.push(require("scenes.title"), { on_done = function(skip_all) ... end })
 --
 -- ENTER/SPACE go on to the boot videos (on_done(false)); ESC skips those
--- too (on_done(true)). It goes on by itself after a while.
+-- too (on_done(true)). Left alone it goes on by itself after a minute.
+-- It fades in from black, and out to black (the music too) before what
+-- comes next.
 
 local scenes = require("core.scenes")
 local music  = require("game.music")
@@ -15,7 +17,8 @@ local music  = require("game.music")
 local S = {}
 
 local HORIZON = 112
-local SECONDS = 14            -- then on to the videos by itself
+local SECONDS = 60            -- then on to the videos by itself
+local FADE_IN, FADE_OUT, FADE_SKIP = 0.8, 1.4, 0.6   -- seconds (ESC: quicker)
 
 -- Palette ranges.
 local SKY, SKY_N = 1, 48
@@ -42,7 +45,9 @@ local function ramp(stops, t)            -- stops: { {t, r, g, b}, ... }
     return z[2], z[3], z[4]
 end
 
-local function make_palette()
+-- k: brightness 0..1 (the fades).
+local function make_palette(k)
+    k = k or 1
     local pal = {}
     for i = 0, 255 do pal[i] = { 0, 0, 0 } end
     local function fill(first, n, stops)
@@ -66,7 +71,7 @@ local function make_palette()
     local bytes = {}
     for i = 0, 255 do
         local c = pal[i]
-        bytes[#bytes + 1] = string.char(math.floor(c[1] + 0.5), math.floor(c[2] + 0.5), math.floor(c[3] + 0.5))
+        bytes[#bytes + 1] = string.char(math.floor(c[1] * k + 0.5), math.floor(c[2] * k + 0.5), math.floor(c[3] * k + 0.5))
     end
     gfx.palette(table.concat(bytes), 0, false)
 end
@@ -200,7 +205,9 @@ function S:enter(opts)
     self.opts = opts or {}
     self.t = 0
     self.glitch = 0
-    make_palette()
+    self.fade, self.done = nil, false
+    self.bright = 0
+    make_palette(0)
     self.wing = gfx.wing()
     self.W = 320 + 2 * self.wing
     self.bg = make_background(self.W, -self.wing)
@@ -212,25 +219,47 @@ function S:enter(opts)
     music.play(1)
 end
 
-function S:resume() make_palette() end
+function S:resume() make_palette(self.bright) end
+
+-- Starts the fade out; finish() runs at its end.
+function S:leave_by(skip_all)
+    if self.fade then return end
+    self.fade = { t = 0, len = skip_all and FADE_SKIP or FADE_OUT, skip = skip_all }
+    music.stop(true)                       -- the driver's fade, alongside
+end
 
 function S:finish(skip_all)
     if self.done then return end
     self.done = true
-    music.stop(true)
+    music.stop()
     scenes.pop()
     if self.opts.on_done then self.opts.on_done(skip_all) end
 end
 
 function S:update(dt)
     self.t = self.t + dt
-    if input.pressed("Escape") then return self:finish(true) end
-    if input.pressed("Return") or input.pressed("Space") or self.t > SECONDS then return self:finish(false) end
+    -- Brightness: up from black at the start, down to black at the end.
+    local k = math.min(1, self.t / FADE_IN)
+    if self.fade then
+        self.fade.t = self.fade.t + dt
+        k = math.min(k, math.max(0, 1 - self.fade.t / self.fade.len))
+        if self.fade.t >= self.fade.len then
+            self.bright = 0
+            make_palette(0)
+            return self:finish(self.fade.skip)
+        end
+    elseif input.pressed("Escape") then self:leave_by(true)
+    elseif input.pressed("Return") or input.pressed("Space") or self.t > SECONDS then self:leave_by(false) end
+    -- Ease the fades (smoothstep), and set the palette when it changes.
+    k = k * k * (3 - 2 * k)
+    if k ~= self.bright then self.bright = k; make_palette(k) end
     -- Glitch: now and then, a few frames of torn title.
     if self.glitch > 0 then self.glitch = self.glitch - dt
     elseif math.random() < dt * 0.35 then self.glitch = 0.12 + math.random() * 0.1 end
     -- The neon sign flickers.
-    if math.random() < dt * 2 then gfx.setcolor(NEON, 120, 30, 100) else gfx.setcolor(NEON, 255, 60, 200) end
+    local b = self.bright
+    if math.random() < dt * 2 then gfx.setcolor(NEON, math.floor(120 * b), math.floor(30 * b), math.floor(100 * b))
+    else gfx.setcolor(NEON, math.floor(255 * b), math.floor(60 * b), math.floor(200 * b)) end
     for _, d in ipairs(self.drops) do
         d.y = d.y + d.v * dt
         d.x = d.x - d.v * dt * 0.2

@@ -53,6 +53,12 @@ The synths pump to the kick (sidechain: down 70%, back over 60% of a beat),
 and go through a stereo ping-pong delay on the dotted eighth of the song's
 own tempo and a bigger room. The drums have their own bus: more low end
 and only a touch of room. A soft limiter over the mix catches the peaks.
+In ENHANCED the shots change too: instead of the game's LASER sample, a
+plasma zap synthesized by `scripts/game/sfx.lua`. It's an FM sweep down
+from 2.4 kHz on an inharmonic ratio, doubled and detuned across the stereo
+field, with a click, a sub thump, a metallic ring-mod zing and ping-pong
+echoes. Three pitches take turns.
+
 The kicks follow the song's measures (96 ticks, a beat every 24), so they
 land on the beat. Drum-free intros and breaks stay without them.
 
