@@ -105,6 +105,17 @@ foreach(opt WEBP_BUILD_ANIM_UTILS WEBP_BUILD_CWEBP WEBP_BUILD_DWEBP WEBP_BUILD_G
                 WEBP_BUILD_EXTRAS WEBP_BUILD_LIBWEBPMUX WEBP_BUILD_FUZZTEST)
     set(${opt} OFF CACHE BOOL "" FORCE)
 endforeach()
+# Universal macOS builds (more than one -arch): libwebp's SIMD checks fail
+# (each flag is wrong for one of the archs), and it then adds -mno-sse2 and
+# friends to every file, which the SDK's math.h can't take for x86_64
+# ("_Float16 is not supported on this target"). Mark those flags as
+# unusable, so it builds without SIMD and without them.
+list(LENGTH CMAKE_OSX_ARCHITECTURES _megarace_archs)
+if(APPLE AND _megarace_archs GREATER 1)
+    foreach(flag -mno-avx2 -mno-sse4.1 -mno-sse2 -mno-dspr2 -mno-msa)
+        set(FLAG_${flag} 0 CACHE INTERNAL "")
+    endforeach()
+endif()
 FetchContent_Declare(libwebp
     GIT_REPOSITORY https://github.com/webmproject/libwebp.git
     GIT_TAG        v1.6.0
