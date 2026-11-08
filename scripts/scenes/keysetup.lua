@@ -11,7 +11,7 @@ local scenes = require("core.scenes")
 local save   = require("game.save")
 local keys   = require("game.keys")
 local font   = require("ui.font")
-local S = { overlay = true }
+local S = { overlay = true, hd_menu = true }
 
 S.X, S.Y, S.STEP, S.ROW = 125, 80, 6, 10
 

@@ -164,6 +164,9 @@ FASTER (+33%) and TRACK COLOR INTENSE:
   on the track video in races (the cars, HUD and text untouched)
 - MESSAGES: ENHANCED (the race's messages as big as LAPS and the score,
   outlined, no box) or CLASSIC (small text on a black box)
+- MENUS: HD (the default: the main menu, options, Hall of Fame and their
+  panels from the HD packs, sharpened, even when HD STYLE is LINE DOUBLED or
+  TRIPLED, and never smoothed) or ORIGINAL (as HD STYLE says)
 - DASHBOARD: HD (the default: the race dashboard, gauges and scanner from
   HD packs, which `hd-conversion-utility` makes; run it again on an older
   pack folder to add them) or ORIGINAL (the original pixels)

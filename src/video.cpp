@@ -952,7 +952,7 @@ void Video::render(bool showHd) {
     if (showHd) {
         if (hdDirty_) SDL_UpdateTexture(hdTexture_, nullptr, hd_.data(), hdCW_ * 4);
         hdDirty_ = false;
-        if (smoothing_ > 0 && hdSmall_) drawThrough(hdTexture_, hdSmall_, true);   // alpha kept: wings stay clear
+        if (smoothing_ > 0 && hdSmall_ && !menuFrame_) drawThrough(hdTexture_, hdSmall_, true);   // menus stay sharp   // alpha kept: wings stay clear
         else SDL_RenderCopy(renderer_, hdTexture_, nullptr, nullptr);
     }
     // Which layer shows each pixel: HD pixels show the video layer when the

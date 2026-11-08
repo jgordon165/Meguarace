@@ -91,7 +91,12 @@ public:
     // The best mode that fits the desktop (HD modes only when available).
     std::string bestMode() const;
     // HD pictures are shown: an HD mode, packs found, and not switched off (F10).
-    bool hdOn() const { return hdAvailable() && hdOn_ && mode().hd; }
+    // HD pictures shown now: the HD STYLE setting, or on the menu screens
+    // with MENUS set to HD (whatever HD STYLE says).
+    bool hdOn() const { return hdAvailable() && (hdOn_ || (hdMenus_ && menuFrame_)) && mode().hd; }
+    void setHdMenus(bool on) { hdMenus_ = on; }
+    bool hdMenus() const { return hdMenus_; }
+    void setMenuFrame(bool on) { menuFrame_ = on; }   // this frame is a menu screen
     // Drawing the HUD, which can take HD sprites whatever the HD style (the
     // dashboard packs: Options > ADVANCED > DASHBOARD).
     bool hudHdReady() const { return hudPhase_ == 1 && hdAvailable() && hudHdTexture_ && mode().hd; }
@@ -182,6 +187,7 @@ private:
     int mode_ = 0;                   // index in modes()
     int picW_ = 0, picH_ = 0;        // HD picture size, 0 = no packs
     bool hdOn_ = true;
+    bool hdMenus_ = true, menuFrame_ = false;
     bool hdDirty_ = false;
     // Per original pixel, which layer shows it: 0 the game layer (sprites,
     // text, everything drawn sharp), 1 the HD layer, 2 the video layer (a

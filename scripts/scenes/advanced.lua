@@ -45,6 +45,10 @@
 --   MESSAGES      ENHANCED (the race's messages, SKID, ENERGY + and so on, as
 --                 big as LAPS and the score, outlined, without the box) or
 --                 CLASSIC (the original's small text on a black box).
+--   MENUS         HD (the menu screens, the main menu, options, Hall of
+--                 Fame and their panels, from the HD packs, sharpened, even
+--                 when HD STYLE shows the videos line doubled or tripled;
+--                 never smoothed) or ORIGINAL (as HD STYLE says).
 --   DASHBOARD     HD (the race dashboard, gauges and scanner from the HD
 --                 packs, upscaled like the menus; hd-conversion-utility makes
 --                 them, and an older pack folder gets them by running it
@@ -58,11 +62,11 @@ local save    = require("game.save")
 local font    = require("ui.font")
 local display = require("game.display")
 
-local S = { overlay = true }
+local S = { overlay = true, hd_menu = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "color", "messages", "dashboard", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "color", "messages", "menus", "dashboard", "voice" }
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", menus = "MENUS", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
@@ -118,6 +122,7 @@ function S:value(what)
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
     elseif what == "messages" then return display.effective(self.state).messages == "classic" and "CLASSIC" or "ENHANCED"
+    elseif what == "menus" then return gfx.hd_menus() and "HD" or "ORIGINAL"
     elseif what == "dashboard" then return display.effective(self.state).dashboard == "original" and "ORIGINAL" or "HD"
     elseif what == "sharpen" then return (display.effective(self.state).sharpen or "off"):upper()
     elseif what == "color" then return (display.effective(self.state).track_color or "intense"):upper()
@@ -177,6 +182,12 @@ function S:change(what, dir)
     elseif what == "messages" then
         st.messages = st.messages == "classic" and "enhanced" or "classic"
         require("scenes.race").big_messages = st.messages ~= "classic"
+    elseif what == "menus" then
+        st.menus = gfx.hd_menus(not gfx.hd_menus()) and "hd" or "original"
+        if st.menus == "hd" then
+            if not sys.hd then self.note = "HD MENUS NEED HD-CONVERSION-UTILITY'S PACKS"
+            elseif (gfx.display()) == "native" then self.note = "THE HD MENUS SHOW IN THE HD RESOLUTIONS" end
+        end
     elseif what == "dashboard" then
         st.dashboard = st.dashboard == "original" and "hd" or "original"
         require("formats.cars").hd_dashboard = st.dashboard ~= "original"

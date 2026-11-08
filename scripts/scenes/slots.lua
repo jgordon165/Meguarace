@@ -11,7 +11,7 @@
 local scenes = require("core.scenes")
 local slots  = require("game.slots")
 local font   = require("ui.font")
-local S = { overlay = true }
+local S = { overlay = true, hd_menu = true }
 
 S.ROWS = 6
 

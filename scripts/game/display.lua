@@ -31,7 +31,7 @@ M.TRACK_COLORS = { off = 0, vivid = 1, intense = 2 }
 M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
     music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off", messages = "classic",
-    dashboard = "original",
+    dashboard = "original", menus = "original",
     voice_filter = false, lance_smoother = false,
 }
 
@@ -65,6 +65,7 @@ function M.apply_saved(state)
     require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 2
     require("scenes.race").big_messages = state.messages ~= "classic"
     require("formats.cars").hd_dashboard = state.dashboard ~= "original"
+    gfx.hd_menus(state.menus ~= "original")
     if sys.display_arg ~= "" or not state.display then return end
     if not gfx.set_display(state.display) then
         sys.log("display mode " .. tostring(state.display) .. " not available; using " .. (gfx.display()))

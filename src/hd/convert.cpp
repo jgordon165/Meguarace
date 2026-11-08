@@ -368,6 +368,8 @@ static bool upscaleRealEsrgan(std::vector<std::vector<uint32_t>>& pics, const st
     return true;
 }
 
+static void unsharp(std::vector<uint32_t>& px, int W, int H, float radius, float amount);   // below
+
 bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
                   const ConvertOptions& opt, std::string& err) {
     HnmVideo probe;
@@ -380,6 +382,7 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
     h.upscaler = opt.upscaler == ConvertOptions::Upscaler::RealEsrgan ? kUpscalerRealEsrgan
                      : opt.upscaler == ConvertOptions::Upscaler::Smooth ? kUpscalerSmooth : kUpscalerSharp;
     h.frames = uint32_t(total);
+    h.sharpened = opt.sharpen > 0;
     h.sourceCrc = crc32(hnm.data(), hnm.size());
     const std::string part = outPath + ".part";
     PackWriter w;
@@ -407,6 +410,7 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
             // Built-in: the chosen upscaler straight from 320x200.
             if (srcW != kW) p = resample(p, srcW, srcH, opt.pictureW, opt.pictureH);
             else p = upscale(opt, p, srcW, srcH, opt.pictureW, opt.pictureH);
+            unsharp(p, opt.pictureW, opt.pictureH, opt.sharpenRadius, opt.sharpen);
             webp[size_t(i)] = encodeWebp(p.data(), opt.pictureW, opt.pictureH, opt.quality);
             p = {};
         });
@@ -490,6 +494,8 @@ static void unsharp(std::vector<uint32_t>& px, int W, int H, float radius, float
         px[i] = o;
     }
 }
+
+bool menuVideo(const std::string& stem) { return stem == "PANEL1" || stem == "HALL1"; }
 
 bool dashboardSprite(const std::string& name) {
     return (name.size() == 3 || spriteStrip(name)) && name[0] == 'T';
