@@ -69,7 +69,8 @@ function S:enter(kind, state, on_pick)
     self.msgs = spr.open("KONTROL6")
     self.at = S.layout(kind)
     -- Options panel: its items, then the DISPLAY line.
-    self.n = self.k.count + (kind == "options" and #EXTRA or 0)
+    -- (No ADVANCED in classic mode: the original's panel.)
+    self.n = self.k.count + (kind == "options" and not sys.classic and #EXTRA or 0)
     self.font = kind == "options" and font.open("FONTOPT", 8) or nil
     self.msg, self.note = nil, nil
     if kind == "level" then

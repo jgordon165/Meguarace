@@ -107,6 +107,11 @@ function S:rebuild()
     if not st.unlocked[st.car or 1] then st.car = career.START_CARS[1] end
 end
 
+-- After CLASSIC RACE on the title screen: the settings that apply here.
+function S:apply_settings()
+    if self.state then apply_subtitles(self.state) end
+end
+
 -- Redraws backdrop palette + overlays (after returning from another scene).
 function S:restore()
     self.idle = 0

@@ -36,13 +36,15 @@ build\Release\megarace.exe --data V:\
 4:3, the FM music and the game's own sound effects, Lance's clips with
 their hiss, no smoothing or colour grade, the normal track speed, and
 straight into the original boot videos (no title screen). Your settings
-are left exactly as they were: nothing classic is saved, and Options >
-ADVANCED is locked for the session. Run without it and everything is back.
+are left exactly as they were: nothing classic is saved, and Options has
+no ADVANCED line for the session. Run without it and everything is back.
+CLASSIC RACE on the title screen does the same for that session.
 
 It opens on the port's own title screen: MEGARACE in chrome over a synthwave
-night, all drawn by code, with the music playing. It stays for a minute
-and fades out to what comes next; ENTER goes on sooner, and ESC skips the
-boot videos too. Then it plays the original boot sequence
+night, all drawn by code, with the music playing, and two choices (UP/DOWN,
+ENTER): **LET'S RACE**, the game with your settings, or **CLASSIC RACE**,
+classic mode for this session (as `--classic`). Left alone it stays for a
+minute and goes on with LET'S RACE; ESC skips the boot videos too. Then it plays the original boot sequence
 (Mindscape, Cryo, the intro with Lance Boyle) straight from `MEGARACE.DAT`,
 then the **main menu**:
 
