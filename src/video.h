@@ -188,6 +188,7 @@ private:
     int picW_ = 0, picH_ = 0;        // HD picture size, 0 = no packs
     bool hdOn_ = true;
     bool hdMenus_ = true, menuFrame_ = false;
+    bool hdInWings_ = false;   // an HD sprite went into 16:9's wings (cleared with the next frame)
     bool hdDirty_ = false;
     // Per original pixel, which layer shows it: 0 the game layer (sprites,
     // text, everything drawn sharp), 1 the HD layer, 2 the video layer (a

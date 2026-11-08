@@ -103,6 +103,18 @@ void Video::clear(uint8_t idx) {
         std::memset(row + ox_, 0, size_t(w_));
     }
     hudPhase_ = 0;
+    // The HD layer's wings: what an HD sprite left there (a box drawn across
+    // the screen) would show through the empty wings once it's gone.
+    if (hdInWings_ && !hd_.empty() && ox_ > 0) {
+        const int wingHd = int(int64_t(ox_) * picW_ / w_) + 1;   // a pixel over, for the rounding
+        for (int r = 0; r < picH_; ++r) {
+            uint32_t* row = &hd_[size_t(r) * size_t(hdCW_)];
+            std::fill(row, row + std::min(wingHd, hdCW_), 0u);
+            std::fill(row + std::max(0, hdCW_ - wingHd), row + hdCW_, 0u);
+        }
+        hdDirty_ = true;
+    }
+    hdInWings_ = false;
 }
 
 void Video::hudBegin() {
@@ -732,6 +744,7 @@ bool Video::spriteHd(const uint8_t* px, int w, int h, int x, int y, bool flip,
     const int cx = x + ox_;
     const int x0 = std::max(cx, 0), x1 = std::min(cx + w, cw_), y0 = std::max(y, 0), y1 = std::min(y + h, h_);
     if (x0 >= x1 || y0 >= y1) return true;   // off screen: nothing to draw either way
+    if (x0 < ox_ || x1 > ox_ + w_) hdInWings_ = true;
     const size_t PW = size_t(hdCW_);
     // 1. Under the sprite, where the HD layer doesn't already show something
     //    (an HD video, an HD sprite), put the screen's own pixels into it.
