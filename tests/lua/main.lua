@@ -876,6 +876,19 @@ test("[data] every career clip", function()
     for id, file in pairs(C.VIDEO) do check(dat.exists(file), string.format("video 0x%02X %s", id, file)) end
 end)
 
+test("music styles", function()
+    local music = require("game.music")
+    check(require("game.save").defaults().music_style == "enhanced", "enhanced by default")
+    check(music.set_style("soundfont") == "soundfont" and audio.music_style() == "soundfont", "soundfont")
+    check(music.set_style("original") == "original", "original")
+    check(music.set_style("bogus") == "enhanced", "unknown: enhanced")
+    check(not pcall(audio.music_style, "bogus"), "the engine rejects unknown styles")
+    local sf = audio.soundfont()
+    check(sf == nil or sf:lower():match("%.sf2$"), "soundfont path or nil")
+    check(music.DRUM == 128 and type(music.GM) == "table", "override table")
+    music.set_style("enhanced")
+end)
+
 test("display modes without HD packs", function()
     -- ctest runs with --no-hd, so there is no HD whatever packs the user has.
     check(sys.hd == false and sys.hd_width == 0, "no HD content")

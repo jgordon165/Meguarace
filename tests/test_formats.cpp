@@ -7,6 +7,7 @@
 #include "fm.h"
 #include "formats/cryo.h"
 #include "formats/herad.h"
+#include "formats/gm_map.h"
 #include "resampler.h"
 #include "voice_filter.h"
 
@@ -487,8 +488,102 @@ static void testHerad() {
     CHECK(std::abs(FmMusic::chip_rate() - 49715.9) < 1.0);
 }
 
+// A version-2 song: track 0 plays a drum through a keymap, track 1 a bass note.
+static Bytes keymapSong() {
+    Bytes t0 = {0x00, 0xC0, 0x00,  0x00, 0x90, 40, 0x7F,  0x05, 0x80, 40,  0x00, 0xFF};
+    Bytes t1 = {0x00, 0xC0, 0x02,  0x00, 0x90, 36, 0x40,  0x08, 0x80, 36,  0x00, 0xFF};
+    Bytes d(0x34, 0);
+    auto put16 = [&](size_t at, uint16_t v) { d[at] = uint8_t(v); d[at + 1] = uint8_t(v >> 8); };
+    put16(0x32, 256);
+    put16(2, uint16_t(d.size() - 2));
+    d.insert(d.end(), t0.begin(), t0.end());
+    put16(4, uint16_t(d.size() - 2));
+    d.insert(d.end(), t1.begin(), t1.end());
+    put16(0, uint16_t(d.size()));
+    Bytes keymap(40, 0);
+    keymap[0] = 0xFF;                                 // mode -1: keymap
+    for (int k = 4; k < 40; ++k) keymap[size_t(k)] = 1;   // every note -> instrument 1
+    Bytes hat(40, 0);                                 // metallic noise, short
+    hat[3] = 14; hat[16] = 14; hat[4] = 7; hat[5] = 15; hat[18] = 15; hat[21] = 8; hat[22] = 8;
+    Bytes bass(40, 0);                                // sustaining
+    bass[3] = 1; bass[16] = 1; bass[5] = 15; bass[18] = 15; bass[20] = 1; bass[19] = 2; bass[14] = 1;
+    for (auto* i : {&keymap, &hat, &bass}) d.insert(d.end(), i->begin(), i->end());
+    return d;
+}
+
+static void testMusicStyles() {
+    herad::Song s;
+    CHECK(s.parse(keymapSong()));
+    CHECK(s.v2 && s.tracks.size() == 2 && s.instruments.size() == 3);
+
+    // Note events, with the keymap resolved to the instrument that sounds.
+    herad::Player p(s, false);
+    std::vector<herad::Write> w;
+    std::vector<herad::Event> ev;
+    p.set_events(&ev);
+    p.rewind(w);
+    p.timer(w);
+    int ons = 0;
+    for (auto& e : ev) {
+        if (e.type != herad::Event::NoteOn) continue;
+        ++ons;
+        if (e.track == 0) CHECK(e.inst == 1 && e.note == 40 && e.vel == 0x7F);
+        if (e.track == 1) CHECK(e.inst == 2 && e.note == 36);
+    }
+    CHECK(ons == 2);
+    ev.clear();
+    bool off = false;
+    for (int i = 0; i < 10; ++i) { p.timer(w); for (auto& e : ev) off |= e.type == herad::Event::NoteOff; }
+    CHECK(off);
+
+    // GM: the keymap's instrument is a drum (the busiest cymbal: closed hat),
+    // the sustaining low part a synth bass, lifted into range.
+    auto gm = herad::gm_map(s);
+    CHECK(gm.size() == 3);
+    CHECK(gm[0].notes == 0 && gm[0].program == -1);   // the keymap itself plays nothing
+    CHECK(gm[1].drum == 42);
+    CHECK(gm[2].drum == -1 && gm[2].program >= 32 && gm[2].program <= 39);
+    CHECK(gm[2].key + gm[2].shift >= 28);
+    // C0 at multiplier 1 is MIDI 12; carrier multiplier 2 adds an octave.
+    herad::Instrument in;
+    in.car_mul = 1;
+    CHECK(herad::midi_key(s, in, 24 + 48) == 60);
+    in.car_mul = 2;
+    CHECK(herad::midi_key(s, in, 24 + 48) == 72);
+    CHECK(herad::track_pans(s).size() == 2);
+
+    // Enhanced: OPL3, stereo out, sound once the notes play.
+    Bytes d = keymapSong();
+    FmMusic e(MusicStyle::Enhanced);
+    CHECK(e.load(d.data(), d.size(), false));
+    CHECK(e.style() == MusicStyle::Enhanced);
+    std::vector<int32_t> out(2 * 4410, 0);
+    e.render(out.data(), 4410, 44100, 1.0f);
+    int32_t peak = 0;
+    for (auto v : out) peak = std::max(peak, std::abs(v));
+    CHECK(peak > 50);
+    // SoundFont without a bank plays Enhanced.
+    FmMusic sf(MusicStyle::SoundFont, nullptr);
+    CHECK(sf.style() == MusicStyle::Enhanced && sf.load(d.data(), d.size(), false));
+    CHECK(!SoundFontBank::load("no-such-file.sf2"));
+    // Starting part-way: the sequencer is already there.
+    FmMusic later(MusicStyle::Original);
+    CHECK(later.load(d.data(), d.size(), false, 5));
+    CHECK(later.position() >= 5);
+
+    // The reverb has a tail; the EQ passes DC through a 0 dB shelf.
+    musicfx::Chain fx;
+    fx.init(44100, 0.0f, 0.0f, 0.6f, 0.5f, 0.3f);
+    std::vector<float> lr(2 * 8000, 0.0f);
+    lr[0] = lr[1] = 1.0f;
+    fx.run(lr.data(), 8000);
+    float tail = 0;
+    for (int i = 4000; i < 8000; ++i) tail = std::max(tail, std::fabs(lr[size_t(2 * i)]));
+    CHECK(tail > 1e-5f);
+}
+
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad, testMusicStyles}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }

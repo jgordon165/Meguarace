@@ -25,6 +25,7 @@ level more, MAX, on Lance's clips), the default HD folder and the voice filter o
 | SMOOTHING | OFF, SUBTLE, MORE or MAX: softens every video in the HD resolutions. Line-doubled videos repeat each pixel to a smaller whole-number size before the final linear step (1080p: 3×4 instead of 5×6 for SUBTLE), so the seams blend wider; MAX interpolates the original pixels straight to the screen, the softest. HD pictures pass through a smaller copy. It's all done by the GPU (render-target copies), so it costs no frame time. The cars, dashboard, text and menus stay sharp. |
 | LANCE VIDEOS | **1 SMOOTHER** (the default): Lance's clips play one SMOOTHING level softer than the other videos (SUBTLE when SMOOTHING is OFF, MAX at most), or **SAME**. |
 | HD FOLDER | where the packs are (Enter edits it; see below) |
+| MUSIC | ORIGINAL, ENHANCED (the default) or SOUNDFONT: see [music.md](music.md) |
 | VOICE FILTER | the hiss filter on Lance's clips (also V while one plays) |
 
 ## Display modes
