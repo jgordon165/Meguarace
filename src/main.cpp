@@ -21,10 +21,8 @@ extern "C" {
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include "fsx.h"
 #include <string>
-
-namespace fs = std::filesystem;
 
 
 static bool callLua(lua_State* L, const char* fn, double arg, bool withArg) {
@@ -86,7 +84,7 @@ int main(int argc, char** argv) {
     if (eng.dataArg.empty()) eng.dataArg = "data";
     // --classic: the original's 320x200 (unless --display says otherwise).
     if (eng.classic && eng.displayArg.empty()) eng.displayArg = "native";
-    if (eng.musicArg.empty()) eng.musicArg = (fs::path(eng.dataArg) / "music").string();
+    if (eng.musicArg.empty()) eng.musicArg = fsx::join(eng.dataArg, "music");
     eng.data.mount(eng.dataArg);
     eng.music.mount(eng.musicArg);
     {
@@ -95,8 +93,8 @@ int main(int argc, char** argv) {
         char* base = SDL_GetBasePath();
         char* pref = SDL_GetPrefPath("Meguarace", "Meguarace");
         eng.audio.setSoundFontDirs({
-            (fs::path(base ? base : "./") / "soundfont").string(),
-            pref ? (fs::path(pref) / "soundfont").string() : std::string(),
+            fsx::join(base ? base : "./", "soundfont"),
+            pref ? fsx::join(pref, "soundfont") : std::string(),
             eng.musicArg});
         SDL_free(base);
         SDL_free(pref);

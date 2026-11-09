@@ -167,6 +167,11 @@ function(megarace_warnings target)
 endfunction()
 
 # ---- File formats (no SDL; shared by the engine and the tests) ---------------
+# File-system helpers (std::filesystem, or stat/opendir on the Xbox 360).
+add_library(megarace_fsx STATIC src/fsx.cpp)
+target_include_directories(megarace_fsx PUBLIC src)
+megarace_warnings(megarace_fsx)
+
 add_library(megarace_formats STATIC
     src/vfs.cpp
     src/formats/binreader.cpp
@@ -182,13 +187,13 @@ target_include_directories(megarace_formats SYSTEM PRIVATE ${tinysoundfont_SOURC
 # TinySoundFont's implementation is third-party code.
 set_source_files_properties(src/tsf_impl.cpp PROPERTIES
     COMPILE_OPTIONS $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)
-target_link_libraries(megarace_formats PUBLIC ymfm_opl)
+target_link_libraries(megarace_formats PUBLIC ymfm_opl megarace_fsx)
 megarace_warnings(megarace_formats)
 
 # ---- HD packs: read by the game, made by the converter ----------------------------
 add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp src/hd/sprpack.cpp)
 target_include_directories(megarace_hdpack PUBLIC src)
-target_link_libraries(megarace_hdpack PUBLIC webp)
+target_link_libraries(megarace_hdpack PUBLIC webp megarace_fsx)
 megarace_warnings(megarace_hdpack)
 
 # ---- hd-conversion-utility, the HD converter (a separate utility) -----------------------

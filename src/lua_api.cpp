@@ -13,7 +13,7 @@ extern "C" {
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include "fsx.h"
 #include <memory>
 #include <string>
 #include <fcntl.h>
@@ -36,7 +36,7 @@ static void pushBytes(lua_State* L, const std::vector<uint8_t>& v) {
 // All paths are relative to the player's game folder, case-insensitive.
 
 static int fs_mounted(lua_State* L) { lua_pushboolean(L, E(L).data.mounted()); return 1; }
-static int fs_root(lua_State* L) { lua_pushstring(L, E(L).data.root().string().c_str()); return 1; }
+static int fs_root(lua_State* L) { lua_pushstring(L, E(L).data.root().c_str()); return 1; }
 static int fs_exists(lua_State* L) { lua_pushboolean(L, E(L).data.exists(luaL_checkstring(L, 1))); return 1; }
 
 static int fs_size(lua_State* L) {
@@ -276,7 +276,7 @@ static int audio_music(lua_State* L) {
     else
         std::snprintf(name, sizeof name, "%s.wav", luaL_checkstring(L, 1));
     auto p = e.music.resolve(name);
-    lua_pushboolean(L, p && e.audio.playMusicWav(p->string(), loop));
+    lua_pushboolean(L, p && e.audio.playMusicWav(*p, loop));
     return 1;
 }
 
@@ -385,13 +385,15 @@ bool loadHd(Engine& e) {
     std::string user = userDir();
     if (e.hdOff || (user.empty() && e.hdArg.empty())) { e.video.disableHd(); return false; }
     std::string dir = !e.hdArg.empty() ? e.hdArg : hd::packFolder(user);   // --hd first
-    std::error_code ec;
     bool old = false;
-    if (std::filesystem::is_directory(dir, ec)) {
-        for (const auto& f : std::filesystem::directory_iterator(dir, ec)) {
-            if (f.path().extension() != ".hdv") continue;
+    if (fsx::isDir(dir)) {
+        auto entries = fsx::list(dir);
+        std::sort(entries.begin(), entries.end(),
+                  [](const fsx::DirEntry& a, const fsx::DirEntry& b) { return a.name < b.name; });
+        for (const auto& f : entries) {
+            if (fsx::extension(f.name) != ".hdv") continue;
             hd::PackHeader h;
-            if (hd::Pack::peek(f.path().string(), h)) {
+            if (hd::Pack::peek(fsx::join(dir, f.name), h)) {
                 if (!e.video.enableHd(h.pictureW, h.pictureH)) break;
                 e.hdDir = dir;
                 e.hdUpscaler = hd::upscalerName(h.upscaler);
@@ -707,22 +709,21 @@ static int hnm_open(lua_State* L) {
     if (!h->video.load(std::move(*d))) { lua_pushnil(L); lua_pushstring(L, "bad HNM"); return 2; }
     // <hd folder>/<NAME>.hdv, made from exactly these bytes, at the session's
     // size. Only plain archive names (B01.HNM) map to a pack.
-    const std::string stem = hd::safeVideoStem(std::filesystem::path(name).filename().string());
+    const std::string stem = hd::safeVideoStem(fsx::filename(name));
     if (!e.hdDir.empty() && e.video.hdAvailable() && !stem.empty()) {
-        std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hdv");
-        std::error_code ec;
-        if (std::filesystem::exists(p, ec)) {
+        const std::string p = fsx::join(e.hdDir, stem + ".hdv");
+        if (fsx::exists(p)) {
             auto pack = std::make_unique<hd::Pack>();
             const auto& ph = pack->header();
-            if (!pack->open(p.string(), crc))
-                std::fprintf(stderr, "HD pack %s ignored: %s\n", p.string().c_str(), pack->error().c_str());
+            if (!pack->open(p, crc))
+                std::fprintf(stderr, "HD pack %s ignored: %s\n", p.c_str(), pack->error().c_str());
             else if (ph.pictureW != e.video.hdPictureW() || ph.pictureH != e.video.hdPictureH() ||
                      ph.width != e.video.width() || ph.height != e.video.height())
                 std::fprintf(stderr, "HD pack %s ignored: made at %dx%d, the others are %dx%d\n",
-                             p.string().c_str(), ph.pictureW, ph.pictureH, e.video.hdPictureW(),
+                             p.c_str(), ph.pictureW, ph.pictureH, e.video.hdPictureW(),
                              e.video.hdPictureH());
             else if (int(ph.frames) != h->video.frameCount())
-                std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.string().c_str());
+                std::fprintf(stderr, "HD pack %s ignored: frame count differs\n", p.c_str());
             else {
                 h->pack = std::move(pack);
                 h->name = stem;
@@ -831,18 +832,17 @@ static int spr_open(lua_State* L) {
     // <hd folder>/<NAME>.hds, made from exactly these bytes, at the session's size.
     std::string stem = hd::safeSpriteStem(name);
     if (!e.hdDir.empty() && e.video.hdAvailable() && !stem.empty()) {
-        std::filesystem::path p = std::filesystem::path(e.hdDir) / (stem + ".hds");
-        std::error_code ec;
-        if (std::filesystem::exists(p, ec)) {
+        const std::string p = fsx::join(e.hdDir, stem + ".hds");
+        if (fsx::exists(p)) {
             auto pack = std::make_unique<hd::SpritePackData>();
             std::string err;
             SprUd* s = static_cast<SprUd*>(lua_touserdata(L, -1));
-            if (!hd::readSpritePack(p.string(), crc, *pack, err))
-                std::fprintf(stderr, "HD sprites %s ignored: %s\n", p.string().c_str(), err.c_str());
+            if (!hd::readSpritePack(p, crc, *pack, err))
+                std::fprintf(stderr, "HD sprites %s ignored: %s\n", p.c_str(), err.c_str());
             else if (pack->pictureW != e.video.hdPictureW() || pack->pictureH != e.video.hdPictureH() ||
                      pack->images.size() != s->set.count())
                 std::fprintf(stderr, "HD sprites %s ignored: they don't match the videos or the set\n",
-                             p.string().c_str());
+                             p.c_str());
             else {
                 s->hd = std::move(pack);
                 s->name = stem;
