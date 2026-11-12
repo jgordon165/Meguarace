@@ -9,6 +9,18 @@
 
 #include "SDL_platform.h"
 
+/* xenon-gcc says __linux__, but there is no Linux under LibXenon: none of
+ * SDL's Linux code applies. */
+#ifdef XENON
+#undef __LINUX__
+#endif
+
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#define SDL_BYTEORDER 4321
+#else
+#define SDL_BYTEORDER 1234
+#endif
+
 #define HAVE_STDARG_H 1
 #define HAVE_STDDEF_H 1
 #define HAVE_STDINT_H 1
