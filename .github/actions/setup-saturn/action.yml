@@ -1,0 +1,45 @@
+name: setup-saturn
+description: the Saturn tool-chain (GCC 14.3 for the SH-2, binutils, libyaul), cached, and its environment for the steps after
+
+runs:
+  using: "composite"
+  steps:
+    - name: Host packages
+      run: |
+        sudo apt-get update -q
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+          texinfo flex bison xorriso libgmp-dev libmpfr-dev libmpc-dev python3-numpy python3-pil
+      shell: bash
+
+    # /opt is root's: make the folder the runner's before the cache restores into it.
+    - name: Tool-chain folder
+      run: |
+        sudo mkdir -p /opt/tool-chains/sh2eb-elf
+        sudo chown "$USER" /opt/tool-chains/sh2eb-elf
+      shell: bash
+
+    # The tool-chain takes about 25 minutes to build; it's rebuilt only when
+    # build-toolchain.sh (its versions and options) changes.
+    - name: Tool-chain cache
+      uses: actions/cache@v4
+      with:
+        path: /opt/tool-chains/sh2eb-elf
+        key: saturn-toolchain-${{ runner.os }}-${{ hashFiles('platform/saturn/toolchain/build-toolchain.sh') }}
+
+    - name: Tool-chain
+      run: |
+        PREFIX=/opt/tool-chains/sh2eb-elf platform/saturn/toolchain/build-toolchain.sh "$RUNNER_TEMP/sh2"
+        # libyaul's makefiles read these: give them to every later step.
+        sed -n 's/^export //p' "$HOME/.yaul.env" >> "$GITHUB_ENV"
+      shell: bash
+
+    # Lua, printf and musl at pinned versions (platform/saturn/deps.sh).
+    - name: Third-party code cache
+      uses: actions/cache@v4
+      with:
+        path: platform/saturn/third_party
+        key: saturn-deps-${{ hashFiles('platform/saturn/deps.sh') }}
+
+    - name: Third-party code
+      run: platform/saturn/deps.sh
+      shell: bash

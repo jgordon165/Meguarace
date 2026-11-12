@@ -1,0 +1,30 @@
+name: test-saturn
+description: boot the Saturn build in an emulator (Yabause, HLE BIOS) on a synthetic MEGARACE.DAT and check picture, sound and Lua
+
+runs:
+  using: "composite"
+  steps:
+    # Yabause's libretro core, pinned and patched (tests/saturn): cached
+    # with the scripts that decide how it's built.
+    - name: Emulator cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/yabause
+        key: saturn-yabause-${{ hashFiles('tests/saturn/run_emulator_test.sh', 'tests/saturn/patch_yabause.py') }}
+
+    - name: Emulator test
+      run: make -C platform/saturn test TEST_DIR="$RUNNER_TEMP/saturn-test" YABAUSE="$RUNNER_TEMP/yabause"
+      shell: bash
+
+    # Only when a check fails: what the emulator showed and played.
+    - name: Keep the emulator's screenshots and sound
+      if: failure()
+      uses: actions/upload-artifact@v6
+      with:
+        name: saturn-emulator-run-${{ github.job }}
+        if-no-files-found: ignore
+        path: |
+          ${{ runner.temp }}/saturn-test/run_*.ppm
+          ${{ runner.temp }}/saturn-test/run.wav
+          ${{ runner.temp }}/saturn-test/lua_*.ppm
+          ${{ runner.temp }}/saturn-test/lua_pc.txt
