@@ -17,7 +17,13 @@ You need Python 3.8 or newer (python.org). From this folder:
   python saturn_disc.py --data D:\ --build . --out megarace
 
 where D:\ is your MegaRace CD (or a folder holding a copy of it). This
-writes megarace.iso and megarace.cue (about 500 MB).
+writes megarace.iso and megarace.cue (about 500 MB). The game's Lua
+scripts (the scripts folder here) go on the disc too.
+
+Add --lua-test to also put the port's Lua test suite on the disc: the
+Saturn runs it at boot and shows the result (START goes on). On this build
+some display tests fail because the engine's drawing functions aren't on
+the Saturn yet; the rest should pass.
 
 Playing it
 ----------

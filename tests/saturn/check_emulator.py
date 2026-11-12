@@ -15,6 +15,12 @@ checks what make_test_dat.py's videos must look and sound like:
   * then the video explorer (text on black)
 
     python tests/saturn/check_emulator.py <prefix>
+
+With --lua <screenshot> <pc output>: checks the result screen of a disc built
+with --lua-test. The Saturn draws a hash (FNV-1a) of everything its Lua
+printed as 32 cells on the picture's last lines; it must equal the hash of
+what the same suite printed on the PC (tests/saturn/lua_stub_runner.c).
+
 Exit status 0 if every check passes.
 """
 import glob
@@ -66,7 +72,30 @@ def classify(im):
     return "bars"
 
 
+def fnv1a(data):
+    h = 2166136261
+    for b in data:
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    return h
+
+
+def check_lua(shot, pc_output):
+    px = Image.open(shot).convert("RGB").load()
+    cells = "".join("1" if px[16 + (b + 1) * 8 + 4, 210][0] > 128 else "0" for b in range(-1, 33))
+    check(cells[0] == "1" and cells[-1] == "1", "the Lua result strip is on screen")
+    saturn = int(cells[1:33], 2)
+    data = open(pc_output, "rb").read()
+    data = data[:data.rindex(b"quit ")]
+    pc = fnv1a(data)
+    print("Lua output hash: Saturn %08x, PC %08x (%d bytes)" % (saturn, pc, len(data)))
+    check(saturn == pc, "the Saturn's Lua printed exactly what the PC's did")
+    print("%d failures" % len(failures))
+    return 1 if failures else 0
+
+
 def main():
+    if sys.argv[1] == "--lua":
+        return check_lua(sys.argv[2], sys.argv[3])
     prefix = sys.argv[1]
     shots = {}
     for path in glob.glob(prefix + "_*.ppm"):

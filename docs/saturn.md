@@ -14,11 +14,27 @@ plays any HNM in the archive. It also detects a RAM cartridge (1 or 4 MiB).
 Verified in an emulator on synthetic data (below), not yet on a console with
 the real disc.
 
+**Milestone 2: Lua on the Saturn (the VM: done).** Lua 5.4.7 runs on the
+SH-2, built 32-bit (`LUA_32BITS`: 32-bit integers and single-precision
+floats; the SH-2 has no FPU). The disc builder packs `scripts/` into
+`SCRIPTS.PAK` and `require` loads modules from it. The heap is the free part
+of low work RAM (896 KiB) plus the RAM cart (4 MiB) when one is plugged in.
+The PC's Lua test suite runs on it (a disc built with `--lua-test`): 42 of
+the game's modules, 51 tests, in about 3 s. They use 373 KiB of heap (470
+KiB at the peak), so a stock Saturn has room for them. Its output is
+byte-for-byte what the same suite prints on the PC with the same set-up,
+and the 32-bit numbers change nothing in it. The 29 checks that fail on
+both are the display tests: the engine API is only stand-ins on the Saturn
+so far.
+
+Still to do for milestone 2: precompile the scripts on the PC (a luac that
+writes the SH-2's byte order and 32-bit sizes) to save the parse time and
+memory at boot, and profile the menu and race scripts on hardware.
+
 **Next, in order:**
 
 | | Milestone | What it takes |
 |---|---|---|
-| 2 | Lua on the Saturn | Lua 5.4 built 32-bit (`LUA_32BITS`: 32-bit integers, single-precision floats; the SH-2 has no FPU), the scripts precompiled and stripped on the PC by the disc builder, a small libc layer (`setjmp`, `strtod`, number formatting). Heap in low work RAM, plus the RAM cart when there is one. Measure memory and speed with the menu scripts. |
 | 3 | Engine API | The Lua API of `src/lua_api.cpp` (`gfx`, `audio`, `dat`, `spr`, `hnm`, `input`, `sys`, `fs`) on the platform layer. Classic mode only: no HD packs, 16:9, smoothing, SoundFont or voice filter. Saves in backup RAM. |
 | 4 | Menus and career | The main menu, options, Hall of Fame, Lance's clips: mostly the scripts as they are. |
 | 5 | Races | Track video at gameplay speed (forward-only streaming fits; the track data chunks `pt`/`kl` come with the frames), cars and dashboards composited onto the picture. Profile on hardware; move hot Lua paths to C. |
@@ -50,6 +66,14 @@ crosstool-ng configuration (GCC 14.3.0, binutils 2.44, no C library:
 libyaul has its own) and pins libyaul to the commit the port was tested
 with. On Windows, libyaul's MSYS2 packages work too.
 
+Lua needs more C library than libyaul has. `platform/saturn/libc/` fills
+the gaps: `setjmp`/`longjmp` in SH-2 assembly; `strtod`/`strtof`; the "C"
+locale; and headers for musl's single-precision maths (`math.h`,
+`endian.h`). `deps.sh` fetches the third-party code at pinned versions:
+Lua 5.4.7, Eyal Rozenberg's printf (libyaul's `printf` has no floating
+point: `%f` is 16.16 fixed point) and musl's float maths. All three are
+MIT-licensed.
+
 libyaul's C++ has no exceptions and no standard library, so the engine's
 C++ decoders can't be built there. `src/formats/cryo_c.{h,c}` is a
 freestanding C version of the DAT, HSQ and HNM decoders (no allocation,
@@ -66,10 +90,12 @@ damaged ones.
 | CD | `sat_cd.c` | The disc's root directory (libyaul cdfs) and the DAT directory. Videos stream: one play command covers the whole entry, and sectors move from the CD block's buffer into a 96 KiB buffer whenever the game asks for data or waits for a frame. |
 | Video | `sat_hnm.c` | As the PC player: a video with sound is clocked by it (frame *k* shows once the sound before it has played), a silent one runs at 12.5 fps, and overlay frames build on the previous picture. Sound is queued as far ahead as the CD buffer and the ring allow, so slow reads don't starve the SCSP. |
 | Pad | `sat_pad.c` | Port 1, polled at vblank. |
+| Lua | `sat_lua.c` | The Lua state, its TLSF heap, `require` from `SCRIPTS.PAK`, stand-ins for the engine API, and the test runner for `--lua-test` discs. |
 
-Memory (`sat_mem.h`): high work RAM holds the program, the 320×200 screen
-and the decode buffers. Low work RAM holds the CD buffers, and the rest of
-it (about 900 KiB) is left for the Lua heap, as is the RAM cartridge.
+Memory (`sat_mem.h`): high work RAM holds the program (about 240 KiB of
+code with Lua), the 320×200 screen and the decode buffers. Low work RAM
+holds the CD buffers, and the rest of it (896 KiB) is the Lua heap, together
+with the RAM cartridge when one is plugged in.
 
 ## Testing without the game or a BIOS
 
@@ -88,6 +114,12 @@ tests/saturn/run_emulator_test.sh platform/saturn/build /tmp/saturn-test
    MINDSCAP's 4.0 s, silence for CRYO, 660 Hz for INTRO; each picture within
    a frame of its sound; index 0 in its own colour and the black borders;
    overlay transparency; the palette change; the explorer at the end.
+
+5. The same image built with `--lua-test` runs the PC's Lua test suite on
+   the Saturn. The Saturn draws a hash of everything Lua printed on its
+   result screen, and the check compares it with the same suite run on the
+   PC with the same set-up (`tests/saturn/lua_stub_runner.c`, built from
+   the Saturn's copy of Lua).
 
 Yabause needs one patch for libyaul programs (`tests/saturn/patch_yabause.py`):
 it returns zeros for 16-bit sector reads from the CD block's DTR register,

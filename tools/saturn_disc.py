@@ -81,6 +81,42 @@ def dir_record(name, lba, size, is_dir, t):
     return bytes(rec)
 
 
+PAK_MAGIC = b"MGPK"
+PAK_NAME = 56
+
+
+def write_pak(out_path, modules):
+    """SCRIPTS.PAK: the game's Lua modules for the Saturn, big-endian.
+    u8 magic[4] "MGPK", u32 count, then count entries
+    { char name[56] ("race.rules"), u32 offset, u32 size }, then the sources."""
+    names = sorted(modules)
+    head = PAK_MAGIC + struct.pack(">I", len(names))
+    offset = len(head) + 64 * len(names)
+    table, blobs = bytearray(), bytearray()
+    for name in names:
+        data = modules[name]
+        enc = name.encode("ascii")
+        if len(enc) >= PAK_NAME:
+            sys.exit("module name too long for SCRIPTS.PAK: %s" % name)
+        table += enc.ljust(PAK_NAME, b"\0") + struct.pack(">II", offset + len(blobs), len(data))
+        blobs += data
+    with open(out_path, "wb") as f:
+        f.write(head + bytes(table) + bytes(blobs))
+    return len(names), len(head) + len(table) + len(blobs)
+
+
+def lua_modules(scripts_dir):
+    """Every .lua under scripts/, by module name (core/scenes.lua -> core.scenes)."""
+    mods = {}
+    for root, _dirs, files in os.walk(scripts_dir):
+        for fn in files:
+            if fn.endswith(".lua"):
+                path = os.path.join(root, fn)
+                rel = os.path.relpath(path, scripts_dir)[:-4].replace(os.sep, ".")
+                mods[rel] = open(path, "rb").read()
+    return mods
+
+
 def find_file(folder, name):
     """Case-insensitive lookup in one folder (a CD is often lower-cased on Linux)."""
     try:
@@ -195,6 +231,12 @@ def main(argv=None):
                          "(default: platform/saturn/build next to this tool)")
     ap.add_argument("--out", default="megarace",
                     help="output name, without extension (default: megarace)")
+    ap.add_argument("--scripts", default=None,
+                    help="the game's Lua scripts (default: scripts/ next to this tool, "
+                         "or the scripts folder of the zip)")
+    ap.add_argument("--lua-test", action="store_true",
+                    help="also put the Lua test suite (tests/lua/main.lua) on the disc; "
+                         "the Saturn runs it at boot and shows the result")
     args = ap.parse_args(argv)
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -214,6 +256,25 @@ def main(argv=None):
             sys.exit("MEGARACE.DAT not found in %s" % args.data)
         else:
             print("note: %s not found in %s (optional)" % (name, args.data))
+    scripts = args.scripts
+    if not scripts:
+        for cand in (os.path.join(here, "scripts"), os.path.join(here, "..", "scripts")):
+            if os.path.isdir(cand):
+                scripts = cand
+                break
+    if scripts and os.path.isdir(scripts):
+        mods = lua_modules(scripts)
+        if args.lua_test:
+            test = os.path.join(here, "..", "tests", "lua", "main.lua")
+            if not os.path.isfile(test):
+                test = os.path.join(here, "tests", "lua", "main.lua")
+            mods["@test"] = open(test, "rb").read()
+        pak = args.out + ".scripts.pak"
+        n, size = write_pak(pak, mods)
+        files.append(("SCRIPTS.PAK", pak))
+        print("SCRIPTS.PAK: %d Lua modules, %d bytes" % (n, size))
+    else:
+        print("note: no Lua scripts found (pass --scripts); the disc plays videos only")
     for txt in ("ABS.TXT", "BIB.TXT", "CPY.TXT"):
         path = find_file(build_dir, txt)
         if path:

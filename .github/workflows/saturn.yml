@@ -1,9 +1,10 @@
 # The Sega Saturn build (libyaul, SH-2). Makes A.BIN and IP.BIN, packages
-# them with the disc builder (tools/saturn_disc.py) as meguarace-saturn.zip,
-# and boots the build in an emulator on a synthetic MEGARACE.DAT (test
-# patterns made by tests/saturn/make_test_dat.py: no game data, and no Sega
-# BIOS: Yabause's HLE BIOS), checking the picture and sound
-# (docs/saturn.md).
+# them with the disc builder (tools/saturn_disc.py) and the Lua scripts as
+# meguarace-saturn.zip, and boots the build in an emulator on a synthetic
+# MEGARACE.DAT (test patterns made by tests/saturn/make_test_dat.py: no game
+# data, and no Sega BIOS: Yabause's HLE BIOS), checking the picture and
+# sound, and that the Saturn's Lua runs the Lua test suite exactly as the
+# PC does (docs/saturn.md).
 name: saturn
 
 on:
@@ -48,7 +49,9 @@ jobs:
           cp platform/saturn/build/A.BIN platform/saturn/build/IP.BIN \
              platform/saturn/build/ABS.TXT platform/saturn/build/BIB.TXT \
              platform/saturn/build/CPY.TXT tools/saturn_disc.py pkg/meguarace-saturn/
+          cp -r scripts pkg/meguarace-saturn/scripts
           cp platform/saturn/README-saturn.txt pkg/meguarace-saturn/README.txt
+          cp platform/saturn/THIRD-PARTY.txt pkg/meguarace-saturn/
           (cd pkg && zip -qr ../meguarace-saturn.zip meguarace-saturn)
       - uses: actions/upload-artifact@v4
         with:
@@ -61,4 +64,6 @@ jobs:
           path: |
             ${{ runner.temp }}/emu/run_*.ppm
             ${{ runner.temp }}/emu/run.wav
+            ${{ runner.temp }}/emu/lua_*.ppm
+            ${{ runner.temp }}/emu/lua_pc.txt
           if-no-files-found: ignore

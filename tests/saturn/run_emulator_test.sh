@@ -36,3 +36,16 @@ rm -f "$work"/run_*.ppm
 # shellcheck disable=SC2086
 "$work/lrhost" "$core" "$work/megatest.cue" 720 "$work/run" $shots
 python3 "$here/check_emulator.py" "$work/run"
+
+# Lua: the PC's Lua test suite on the Saturn's Lua (a disc built with
+# --lua-test), against the same suite on the PC with the same set-up.
+lua="$here/../../platform/saturn/third_party/lua"
+[ -f "$lua/lua.h" ] || "$here/../../platform/saturn/deps.sh"
+lua_srcs=$(ls "$lua"/*.c | grep -vE '/(lua|luac|onelua|ltests|linit|liolib|loslib)\.c$')
+# shellcheck disable=SC2086
+cc -O1 -w -I"$lua" -o "$work/lua_stub_runner" "$here/lua_stub_runner.c" $lua_srcs -lm
+(cd "$here/../.." && "$work/lua_stub_runner" scripts tests/lua/main.lua) > "$work/lua_pc.txt"
+python3 "$here/../../tools/saturn_disc.py" --data "$work/cd" --build "$build" --out "$work/luatest" --lua-test >/dev/null
+rm -f "$work"/lua_*.ppm
+"$work/lrhost" "$core" "$work/luatest.cue" 601 "$work/lua" shot@600
+python3 "$here/check_emulator.py" --lua "$work/lua_00600.ppm" "$work/lua_pc.txt"
