@@ -178,3 +178,19 @@ void xp_audio_submit(const void *s16le, int bytes)
 }
 
 void xp_log(const char *msg) { printf("%s\n", msg); }
+
+/* newlib's clock() (Lua's os.clock) asks for times(), which LibXenon lacks:
+ * the time base, counted as processor time. */
+#include <sys/times.h>
+#include <time.h>
+clock_t times(struct tms *t)
+{
+    clock_t c = (clock_t)(mftb() / (PPC_TIMEBASE_FREQ / CLOCKS_PER_SEC));
+    if (t) {
+        t->tms_utime = c;
+        t->tms_stime = 0;
+        t->tms_cutime = 0;
+        t->tms_cstime = 0;
+    }
+    return c;
+}
