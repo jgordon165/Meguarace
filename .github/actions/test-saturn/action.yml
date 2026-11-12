@@ -16,8 +16,9 @@ runs:
       run: make -C platform/saturn test TEST_DIR="$RUNNER_TEMP/saturn-test" YABAUSE="$RUNNER_TEMP/yabause"
       shell: bash
 
+    # Only when a check fails: what the emulator showed and played.
     - name: Keep the emulator's screenshots and sound
-      if: always()
+      if: failure()
       uses: actions/upload-artifact@v6
       with:
         name: saturn-emulator-run-${{ github.job }}
