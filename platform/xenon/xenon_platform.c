@@ -19,6 +19,9 @@
 #include <libfat/fat.h>
 
 extern int bdev_enum(int handle, const char **name);
+/* LibXenon's console prints to the TV through this; once the game draws,
+ * it's turned off so log lines don't scribble over the picture. */
+extern void (*stdout_hook)(const char *buf, int len);
 
 /* Where the GPU scans out from (as LibXenon's console finds it). */
 struct ati_info {
@@ -110,6 +113,7 @@ void xp_present(const uint32_t *argb, int w, int h, int pitch)
 {
     int x0 = (fb_w - w) / 2, y0 = (fb_h - h) / 2, y;
     if (!fb) return;
+    stdout_hook = NULL;
     if (w > fb_w) w = fb_w;
     if (h > fb_h) h = fb_h;
     if (x0 < 0) x0 = 0;
