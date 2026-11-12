@@ -21,7 +21,9 @@ set(CMAKE_RANLIB       ${DEVKITXENON}/bin/xenon-ranlib CACHE FILEPATH "")
 set(XENON_OBJCOPY      ${DEVKITXENON}/bin/xenon-objcopy)
 
 set(XENON_MACHDEP "-DXENON -m32 -maltivec -fno-pic -mpowerpc64 -mhard-float")
-set(CMAKE_C_FLAGS_INIT   "${XENON_MACHDEP} -I${DEVKITXENON}/usr/include")
+# No auto-vectorising of C: xenon-gcc crashes on some of libwebp's loops
+# with it (an internal compiler error in expand_insn).
+set(CMAKE_C_FLAGS_INIT   "${XENON_MACHDEP} -fno-tree-vectorize -I${DEVKITXENON}/usr/include")
 set(CMAKE_CXX_FLAGS_INIT "${XENON_MACHDEP} -I${DEVKITXENON}/usr/include")
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "${XENON_MACHDEP} -L${DEVKITXENON}/xenon/lib/32 -L${DEVKITXENON}/usr/lib -n -T ${DEVKITXENON}/app.lds -Wl,--gc-sections")
