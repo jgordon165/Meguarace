@@ -10,7 +10,7 @@
 #include "voice_filter.h"
 #include <cstdint>
 #include <memory>
-#include <mutex>
+#include "compat_mutex.h"
 #include <string>
 #include <vector>
 
@@ -78,7 +78,7 @@ private:
 
     SDL_AudioDeviceID dev_ = 0;
     SDL_AudioSpec spec_{};
-    std::mutex mtx_;
+    compat::Mutex mtx_;
     Source music_;
     std::unique_ptr<FmMusic> song_;
     MusicStyle style_ = MusicStyle::Original;

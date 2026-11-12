@@ -4,7 +4,7 @@
 #include <cctype>
 #include <fstream>
 
-namespace fs = std::filesystem;
+#include "fsx.h"
 
 static std::string lower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -27,25 +27,23 @@ static std::vector<std::string> splitPath(const std::string& rel) {
     return parts;
 }
 
-bool Vfs::mount(const fs::path& root) {
-    std::error_code ec;
-    mounted_ = fs::is_directory(root, ec);
-    root_ = mounted_ ? fs::canonical(root, ec) : root;
+bool Vfs::mount(const std::string& root) {
+    mounted_ = fsx::isDir(root);
+    root_ = mounted_ ? fsx::canonical(root) : root;
     return mounted_;
 }
 
-std::optional<fs::path> Vfs::resolve(const std::string& rel) const {
+std::optional<std::string> Vfs::resolve(const std::string& rel) const {
     if (!mounted_) return std::nullopt;
-    fs::path cur = root_;
+    std::string cur = root_;
     for (const auto& part : splitPath(rel)) {
         if (part == "." ) continue;
         if (part == "..") return std::nullopt;   // stay inside the game folder
         const std::string want = lower(part);
-        std::error_code ec;
         bool found = false;
-        for (const auto& de : fs::directory_iterator(cur, ec)) {
-            if (lower(de.path().filename().string()) == want) {
-                cur = de.path();
+        for (const auto& de : fsx::list(cur)) {
+            if (lower(de.name) == want) {
+                cur = de.path;
                 found = true;
                 break;
             }
@@ -58,10 +56,7 @@ std::optional<fs::path> Vfs::resolve(const std::string& rel) const {
 std::optional<uint64_t> Vfs::size(const std::string& rel) const {
     auto p = resolve(rel);
     if (!p) return std::nullopt;
-    std::error_code ec;
-    auto s = fs::file_size(*p, ec);
-    if (ec) return std::nullopt;
-    return s;
+    return fsx::fileSize(*p);
 }
 
 std::optional<std::vector<uint8_t>> Vfs::read(const std::string& rel) const {
@@ -87,14 +82,7 @@ std::vector<Vfs::Entry> Vfs::list(const std::string& rel) const {
     std::vector<Entry> out;
     auto p = resolve(rel);
     if (!p) return out;
-    std::error_code ec;
-    for (const auto& de : fs::directory_iterator(*p, ec)) {
-        Entry e;
-        e.name  = de.path().filename().string();
-        e.isDir = de.is_directory(ec);
-        e.size  = e.isDir ? 0 : de.file_size(ec);
-        out.push_back(std::move(e));
-    }
+    for (const auto& de : fsx::list(*p)) out.push_back(Entry{de.name, de.dir, de.size});
     std::sort(out.begin(), out.end(),
               [](const Entry& a, const Entry& b) { return lower(a.name) < lower(b.name); });
     return out;

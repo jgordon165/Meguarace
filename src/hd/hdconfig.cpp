@@ -1,16 +1,15 @@
 #include "hd/hdconfig.h"
 
 #include <cctype>
-#include <filesystem>
 #include <fstream>
 
-namespace fs = std::filesystem;
+#include "fsx.h"
 
 namespace hd {
 
-static fs::path configFile(const std::string& userDir) { return fs::path(userDir) / "hd.cfg"; }
+static std::string configFile(const std::string& userDir) { return fsx::join(userDir, "hd.cfg"); }
 
-std::string defaultFolder(const std::string& userDir) { return (fs::path(userDir) / "hd").string(); }
+std::string defaultFolder(const std::string& userDir) { return fsx::join(userDir, "hd"); }
 
 std::string configuredFolder(const std::string& userDir) {
     std::ifstream in(configFile(userDir));
@@ -27,11 +26,7 @@ std::string packFolder(const std::string& userDir) {
 }
 
 bool setConfiguredFolder(const std::string& userDir, const std::string& folder) {
-    std::error_code ec;
-    if (folder.empty()) {
-        fs::remove(configFile(userDir), ec);
-        return !fs::exists(configFile(userDir), ec);
-    }
+    if (folder.empty()) return fsx::remove(configFile(userDir));
     std::ofstream out(configFile(userDir), std::ios::trunc);
     out << folder << "\n";
     return bool(out);

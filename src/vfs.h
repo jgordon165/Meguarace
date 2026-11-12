@@ -4,7 +4,6 @@
 // case-insensitive on every path component regardless of host OS.
 
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,12 +18,12 @@ public:
 
     // Returns false if the folder doesn't exist; the engine still runs so the
     // Lua side can tell the player what to do.
-    bool mount(const std::filesystem::path& root);
+    bool mount(const std::string& root);
     bool mounted() const { return mounted_; }
-    const std::filesystem::path& root() const { return root_; }
+    const std::string& root() const { return root_; }
 
     // `rel` uses '/' or '\\' separators and any letter case.
-    std::optional<std::filesystem::path> resolve(const std::string& rel) const;
+    std::optional<std::string> resolve(const std::string& rel) const;
     bool exists(const std::string& rel) const { return resolve(rel).has_value(); }
     std::optional<uint64_t> size(const std::string& rel) const;
     std::optional<std::vector<uint8_t>> read(const std::string& rel) const;
@@ -34,6 +33,6 @@ public:
     std::vector<Entry> list(const std::string& rel) const;
 
 private:
-    std::filesystem::path root_;
+    std::string root_;
     bool mounted_ = false;
 };

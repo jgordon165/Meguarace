@@ -11,6 +11,7 @@
 local scenes = require("core.scenes")
 local slots  = require("game.slots")
 local font   = require("ui.font")
+local padtype = require("ui.padtype")
 local S = { overlay = true, hd_menu = true }
 
 S.ROWS = 6
@@ -59,6 +60,10 @@ end
 
 function S:update()
     if self.mode == "save" then
+        if padtype.active() then                   -- a controller: letters by wheel
+            local n = padtype.update(self.name, slots.MAX_NAME)
+            if n then self.name = n; return end
+        end
         local k = input.key()
         if not k then return end
         if k == "Escape" then return self:finish(false) end

@@ -131,6 +131,33 @@ the videos' sound are in the video files, and the in-game music is FM songs
 
 Headless test run: `--frames 60 --screenshot out.bmp`.
 
+## Xbox 360
+
+A build for the Xbox 360 runs on a console that can start **XeLL**
+(XeLL Reloaded): a BadUpdate softmod with FreeMyXe, an RGH or a JTAG. It
+doesn't run from the normal dashboard. The `xbox360` workflow makes it with
+the LibXenon (Free60) toolchain and uploads `meguarace-xbox360.zip`.
+
+1. Format a USB stick as FAT32 and copy the zip's `meguarace` folder to its
+   root.
+2. Copy your MegaRace CD's files into `meguarace/data/` (and, if you have
+   them, ripped music tracks into `meguarace/data/music/` and HD packs into
+   `meguarace/hd/`).
+3. Start XeLL and load `meguarace/meguarace.elf32` from the stick.
+
+Controls: left stick or D-pad steers and moves in menus, RT accelerates, LT
+brakes, X or RB fires, A or START chooses, B or BACK goes back, Y turns HD
+pictures on and off, LB turns the menu music on and off. Names (Hall of
+Fame, saves) are typed with the D-pad: Up/Down change the letter, Right adds
+one, Left takes one off. Saves go in `meguarace/save/`.
+
+How it works: the 360 has no SDL, so `platform/xenon/` builds SDL2's own
+platform-neutral code (with its software renderer) and adds small drivers
+for the TV picture, the sound, the controllers and the USB stick on top of
+LibXenon. The engine and the Lua game are the same as on a PC. With
+`-DMEGARACE_XENON_SIM=ON` the same SDL build and folder layout run on Linux
+(`platform/xenon/xenon_platform_sim.c`), which CI runs as well.
+
 ## HD videos and display modes
 
 The game plays upscaled videos at 1440×1080 (the 4:3 picture of 1080p). You

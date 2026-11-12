@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cctype>
 #include <cstring>
-#include <filesystem>
+#include "fsx.h"
 
 bool Audio::init() {
     if (!SDL_WasInit(SDL_INIT_AUDIO)) return false;
@@ -56,7 +56,7 @@ bool Audio::playMusicWav(const std::string& hostPath, bool loop) {
     bool ok = convertToDevice(buf, blen, wspec.format, wspec.channels, wspec.freq, pcm);
     SDL_FreeWAV(buf);
     if (!ok) return false;
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     float vol = music_.active ? music_.vol : 1.0f;
     music_ = Source{std::move(pcm), 0, vol, loop, true, 0};
     return true;
@@ -64,14 +64,13 @@ bool Audio::playMusicWav(const std::string& hostPath, bool loop) {
 
 std::string Audio::soundFontPath() {
     if (bank_) return bank_->path();
-    std::error_code ec;
     for (const auto& d : sfDirs_) {
-        if (d.empty() || !std::filesystem::is_directory(d, ec)) continue;
+        if (d.empty() || !fsx::isDir(d)) continue;
         std::vector<std::string> found;
-        for (const auto& e : std::filesystem::directory_iterator(d, ec)) {
-            std::string ext = e.path().extension().string();
+        for (const auto& e : fsx::list(d)) {
+            std::string ext = fsx::extension(e.name);
             for (auto& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
-            if (ext == ".sf2" && e.is_regular_file(ec)) found.push_back(e.path().string());
+            if (ext == ".sf2" && !e.dir) found.push_back(e.path);
         }
         if (!found.empty()) { std::sort(found.begin(), found.end()); return found.front(); }
     }
@@ -97,13 +96,13 @@ void Audio::setMusicStyle(MusicStyle s) {
     if (!dev_ || songBytes_.empty()) return;
     uint32_t at = 0;
     {
-        std::lock_guard<std::mutex> lk(mtx_);
+        compat::Lock lk(mtx_);
         if (!song_ || !song_->playing() || songFadeTotal_) return;
         at = song_->position();
     }
     auto m = std::make_unique<FmMusic>(style_, (style_ == MusicStyle::SoundFont || style_ == MusicStyle::Enhanced) ? bank() : nullptr);
     if (!m->load(songBytes_.data(), songBytes_.size(), songLoop_, at, &songGm_)) return;
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     song_.swap(m);
 }
 
@@ -115,7 +114,7 @@ bool Audio::playSong(const uint8_t* data, size_t len, bool loop, const std::vect
     songLoop_ = loop;
     songGm_ = gm;
     {
-        std::lock_guard<std::mutex> lk(mtx_);
+        compat::Lock lk(mtx_);
         song_.swap(m);
         songFade_ = songFadeTotal_ = 0;
     }
@@ -124,21 +123,21 @@ bool Audio::playSong(const uint8_t* data, size_t len, bool loop, const std::vect
 
 void Audio::stopSong() {
     std::unique_ptr<FmMusic> old;
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     old = std::move(song_);
 }
 void Audio::fadeSong(double seconds) {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     if (!song_) return;
     songFadeTotal_ = std::max(1, int(seconds * spec_.freq));
     songFade_ = songFadeTotal_;
 }
-bool Audio::songPlaying() { std::lock_guard<std::mutex> lk(mtx_); return song_ && song_->playing(); }
-void Audio::setSongVolume(float v) { std::lock_guard<std::mutex> lk(mtx_); songVol_ = v; }
+bool Audio::songPlaying() { compat::Lock lk(mtx_); return song_ && song_->playing(); }
+void Audio::setSongVolume(float v) { compat::Lock lk(mtx_); songVol_ = v; }
 
-void Audio::stopMusic() { std::lock_guard<std::mutex> lk(mtx_); music_.active = false; }
-bool Audio::musicPlaying() { std::lock_guard<std::mutex> lk(mtx_); return music_.active; }
-void Audio::setMusicVolume(float v) { std::lock_guard<std::mutex> lk(mtx_); music_.vol = v; }
+void Audio::stopMusic() { compat::Lock lk(mtx_); music_.active = false; }
+bool Audio::musicPlaying() { compat::Lock lk(mtx_); return music_.active; }
+void Audio::setMusicVolume(float v) { compat::Lock lk(mtx_); music_.vol = v; }
 
 int Audio::playPcm(const uint8_t* data, size_t len, int rate, int bits, int channels,
                    float volume, bool loop) {
@@ -147,7 +146,7 @@ int Audio::playPcm(const uint8_t* data, size_t len, int rate, int bits, int chan
     Resampler rs;
     rs.push(data, len, bits, channels, rate, spec_.freq, pcm);
     rs.finish(pcm);
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     auto it = std::find_if(voices_.begin(), voices_.end(), [](const Source& s) { return !s.active; });
     if (it == voices_.end()) it = voices_.begin();   // steal the oldest slot
     *it = Source{std::move(pcm), 0, volume, loop, true, nextId_++};
@@ -155,18 +154,18 @@ int Audio::playPcm(const uint8_t* data, size_t len, int rate, int bits, int chan
 }
 
 void Audio::stopVoice(int id) {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     for (auto& v : voices_) if (v.id == id) v.active = false;
 }
 
 void Audio::stopAll() {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     for (auto& v : voices_) v.active = false;
     music_.active = false;
 }
 
 void Audio::streamReset() {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     stream_ = Source{};
     stream_.active = true;
     streamPlayed_ = 0;
@@ -220,7 +219,7 @@ void Audio::pushFiltered(const std::vector<float>& out) {
 }
 
 void Audio::queueStream(const std::vector<int16_t>& pcm) {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     // Drop what's already played so the buffer doesn't grow forever.
     if (stream_.pos > 0) {
         stream_.samples.erase(stream_.samples.begin(),
@@ -232,13 +231,13 @@ void Audio::queueStream(const std::vector<int16_t>& pcm) {
 }
 
 double Audio::streamQueuedSeconds() {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     if (!dev_) return 0;
     return double(stream_.samples.size() - stream_.pos) / 2.0 / spec_.freq;
 }
 
 uint64_t Audio::streamPlayedFrames() {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     return streamPlayed_;
 }
 
@@ -249,7 +248,7 @@ void Audio::callback(void* user, Uint8* stream, int len) {
 }
 
 void Audio::mix(int16_t* out, int frames) {
-    std::lock_guard<std::mutex> lk(mtx_);
+    compat::Lock lk(mtx_);
     const size_t n = static_cast<size_t>(frames) * 2;
     std::vector<int32_t> acc(n, 0);
     auto add = [&](Source& s) {

@@ -21,10 +21,8 @@ extern "C" {
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include "fsx.h"
 #include <string>
-
-namespace fs = std::filesystem;
 
 
 static bool callLua(lua_State* L, const char* fn, double arg, bool withArg) {
@@ -83,10 +81,23 @@ int main(int argc, char** argv) {
         scripts = (base ? std::string(base) : std::string("./")) + "scripts";
         SDL_free(base);
     }
+#ifdef MEGARACE_XENON_LAYOUT
+    // The Xbox 360 starts with no arguments: everything is in the port's
+    // folder on the USB stick (README, "Xbox 360"): data/ the CD's files,
+    // hd/ the HD packs if any.
+    {
+        char* base = SDL_GetBasePath();
+        const std::string root = base ? base : "./";
+        SDL_free(base);
+        if (eng.dataArg.empty()) eng.dataArg = fsx::join(root, "data");
+        if (eng.hdArg.empty() && fsx::isDir(fsx::join(root, "hd"))) eng.hdArg = fsx::join(root, "hd");
+        std::printf("data: %s\n", eng.dataArg.c_str());
+    }
+#endif
     if (eng.dataArg.empty()) eng.dataArg = "data";
     // --classic: the original's 320x200 (unless --display says otherwise).
     if (eng.classic && eng.displayArg.empty()) eng.displayArg = "native";
-    if (eng.musicArg.empty()) eng.musicArg = (fs::path(eng.dataArg) / "music").string();
+    if (eng.musicArg.empty()) eng.musicArg = fsx::join(eng.dataArg, "music");
     eng.data.mount(eng.dataArg);
     eng.music.mount(eng.musicArg);
     {
@@ -95,8 +106,8 @@ int main(int argc, char** argv) {
         char* base = SDL_GetBasePath();
         char* pref = SDL_GetPrefPath("Meguarace", "Meguarace");
         eng.audio.setSoundFontDirs({
-            (fs::path(base ? base : "./") / "soundfont").string(),
-            pref ? (fs::path(pref) / "soundfont").string() : std::string(),
+            fsx::join(base ? base : "./", "soundfont"),
+            pref ? fsx::join(pref, "soundfont") : std::string(),
             eng.musicArg});
         SDL_free(base);
         SDL_free(pref);

@@ -16,15 +16,39 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 include(FetchContent)
 
+# ---- Xbox 360 ------------------------------------------------------------------
+# cmake -DCMAKE_TOOLCHAIN_FILE=platform/xenon/toolchain.cmake builds for the
+# console (LibXenon, run from XeLL); -DMEGARACE_XENON_SIM=ON builds the same
+# SDL and layout on a PC, to test them (platform/xenon/xenon_platform_sim.c).
+option(MEGARACE_XENON_SIM "Build the Xbox 360's SDL and layout on a PC, for testing" OFF)
+if(MEGARACE_XENON_TARGET OR MEGARACE_XENON_SIM)
+    set(MEGARACE_XENON ON)
+    set(MEGARACE_TESTS OFF CACHE BOOL "" FORCE)
+    set(MEGARACE_HD_CONVERTER OFF CACHE BOOL "" FORCE)
+else()
+    set(MEGARACE_XENON OFF)
+endif()
+
 # ---- SDL2 (static) ---------------------------------------------------------
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON  CACHE BOOL "" FORCE)
 set(SDL_TEST   OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(SDL2
-    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG        release-2.30.9
-    GIT_SHALLOW    TRUE)
-FetchContent_MakeAvailable(SDL2)
+if(MEGARACE_XENON)
+    FetchContent_Declare(SDL2
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG        release-2.30.9
+        GIT_SHALLOW    TRUE
+        SOURCE_SUBDIR  sources-only)
+    FetchContent_MakeAvailable(SDL2)
+    set(SDL2_SRC ${sdl2_SOURCE_DIR})
+    include(platform/xenon/sdl2_xenon.cmake)
+else()
+    FetchContent_Declare(SDL2
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG        release-2.30.9
+        GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(SDL2)
+endif()
 
 # ---- Lua 5.4 (built from source; upstream has no CMake) ---------------------
 FetchContent_Declare(lua
@@ -116,6 +140,11 @@ if(APPLE AND _megarace_archs GREATER 1)
         set(FLAG_${flag} 0 CACHE INTERNAL "")
     endforeach()
 endif()
+if(MEGARACE_XENON_TARGET)
+    # The 360: no threads, and libwebp's SIMD is for other CPUs.
+    set(WEBP_USE_THREAD OFF CACHE BOOL "" FORCE)
+    set(WEBP_ENABLE_SIMD OFF CACHE BOOL "" FORCE)
+endif()
 FetchContent_Declare(libwebp
     GIT_REPOSITORY https://github.com/webmproject/libwebp.git
     GIT_TAG        v1.6.0
@@ -167,6 +196,11 @@ function(megarace_warnings target)
 endfunction()
 
 # ---- File formats (no SDL; shared by the engine and the tests) ---------------
+# File-system helpers (std::filesystem, or stat/opendir on the Xbox 360).
+add_library(megarace_fsx STATIC src/fsx.cpp)
+target_include_directories(megarace_fsx PUBLIC src)
+megarace_warnings(megarace_fsx)
+
 add_library(megarace_formats STATIC
     src/vfs.cpp
     src/formats/binreader.cpp
@@ -182,13 +216,13 @@ target_include_directories(megarace_formats SYSTEM PRIVATE ${tinysoundfont_SOURC
 # TinySoundFont's implementation is third-party code.
 set_source_files_properties(src/tsf_impl.cpp PROPERTIES
     COMPILE_OPTIONS $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)
-target_link_libraries(megarace_formats PUBLIC ymfm_opl)
+target_link_libraries(megarace_formats PUBLIC ymfm_opl megarace_fsx)
 megarace_warnings(megarace_formats)
 
 # ---- HD packs: read by the game, made by the converter ----------------------------
 add_library(megarace_hdpack STATIC src/hd/hdpack.cpp src/hd/hdconfig.cpp src/hd/sprpack.cpp)
 target_include_directories(megarace_hdpack PUBLIC src)
-target_link_libraries(megarace_hdpack PUBLIC webp)
+target_link_libraries(megarace_hdpack PUBLIC webp megarace_fsx)
 megarace_warnings(megarace_hdpack)
 
 # ---- hd-conversion-utility, the HD converter (a separate utility) -----------------------
@@ -233,6 +267,19 @@ if(WIN32)
     target_sources(megarace PRIVATE res/meguarace.rc)
 endif()
 target_link_libraries(megarace PRIVATE megarace_formats megarace_hdpack SDL2::SDL2-static SDL2::SDL2main lua_static)
+if(MEGARACE_XENON)
+    # Paths and controls laid out for the console (src/main.cpp, lua_api.cpp).
+    target_compile_definitions(megarace PRIVATE MEGARACE_XENON_LAYOUT=1)
+endif()
+if(MEGARACE_XENON_TARGET)
+    # LibXenon and its FAT driver, then the .elf32 that XeLL loads.
+    target_link_libraries(megarace PRIVATE -Wl,--start-group fat xenon m c stdc++ -Wl,--end-group)
+    set_target_properties(megarace PROPERTIES SUFFIX ".elf")
+    add_custom_command(TARGET megarace POST_BUILD
+        COMMAND ${XENON_OBJCOPY} -O elf32-powerpc --adjust-vma 0x80000000
+                $<TARGET_FILE:megarace> $<TARGET_FILE_DIR:megarace>/meguarace.elf32
+        COMMENT "meguarace.elf32 for XeLL")
+endif()
 megarace_warnings(megarace)
 if(MSVC)
     # Debugging symbols for Release too (uploaded separately by the release workflow).
