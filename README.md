@@ -158,6 +158,21 @@ LibXenon. The engine and the Lua game are the same as on a PC. With
 `-DMEGARACE_XENON_SIM=ON` the same SDL build and folder layout run on Linux
 (`platform/xenon/xenon_platform_sim.c`), which CI runs as well.
 
+## Sega Saturn
+
+A first Saturn build (libyaul, `platform/saturn/`) plays the boot sequence
+with its sound and has a video explorer for every video on the disc; the
+game itself comes next. You make the disc from your own CD:
+
+```
+python tools/saturn_disc.py --data D:\ --build platform/saturn/build --out megarace
+```
+
+then play `megarace.cue` in an emulator, from an optical drive emulator, or
+burned to a CD-R (a Saturn that boots CD-Rs). The `saturn` workflow builds
+it, boots it in an emulator on synthetic test data and uploads
+`meguarace-saturn.zip`. Status, design and roadmap: [docs/saturn.md](docs/saturn.md).
+
 ## HD videos and display modes
 
 The game plays upscaled videos at 1440×1080 (the 4:3 picture of 1080p). You
@@ -231,6 +246,7 @@ GitHub Actions (same layout as the Aleph One fork):
 | `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
 | `hd-converter` | pushes touching the converter, or manually | `hd-conversion-utility` (the HD video converter): Linux, macOS arm64, Windows x64; build and test |
 | `release-hd-converter` | manual | the converter's own packages, `hd-conversion-utility-<platform>-<version>`, with Real-ESRGAN; never HD videos ([docs/hd.md](docs/hd.md)) |
+| `saturn` | every push to `master`/`saturn`, PRs, or manually | the Saturn build (GCC 14.3 for SH-2, libyaul), booted in an emulator on synthetic data and checked; `meguarace-saturn.zip` ([docs/saturn.md](docs/saturn.md)) |
 
 ## Status
 

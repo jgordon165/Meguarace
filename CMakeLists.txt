@@ -205,6 +205,7 @@ add_library(megarace_formats STATIC
     src/vfs.cpp
     src/formats/binreader.cpp
     src/formats/cryo.cpp
+    src/formats/cryo_c.c
     src/formats/herad.cpp
     src/formats/gm_map.cpp
     src/fm.cpp

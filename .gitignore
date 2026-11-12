@@ -41,3 +41,4 @@ __pycache__/
 stage/
 dist/
 .deps/
+audio-tracks/

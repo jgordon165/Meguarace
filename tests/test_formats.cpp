@@ -6,6 +6,7 @@
 
 #include "fm.h"
 #include "formats/cryo.h"
+#include "formats/cryo_c.h"
 #include "formats/herad.h"
 #include "formats/gm_map.h"
 #include "sides.h"
@@ -602,8 +603,170 @@ static void testSides() {
     CHECK(sides::make(sides::Carbon, 0, 10).base.empty());
 }
 
+// ---------------------------------------------------------------------------
+// The freestanding C decoders (formats/cryo_c.h, used by the Saturn build)
+// must agree with the C++ ones: same pixels, palette, sound and chunks, and
+// failing on exactly the inputs the C++ decoder rejects.
+
+static bool cHsq(const Bytes& in, Bytes& out) {
+    out.assign(65536 + 16, 0);
+    long n = cryo_hsq_unpack(in.data(), in.size(), out.data(), out.size());
+    if (n < 0) return false;
+    out.resize(size_t(n));
+    return true;
+}
+
+static bool cppHsq(const Bytes& in, Bytes& out) {
+    try { out = unHsq(in.data(), in.size()); return true; }
+    catch (const std::exception&) { return false; }
+}
+
+// Decodes every superchunk of `file` with both decoders; returns false on a
+// mismatch. `frames` counts the frames both decoded.
+static bool sameHnm(const Bytes& file, int* frames = nullptr) {
+    HnmVideo v;
+    const bool cppLoaded = v.load(file);
+    cryo_hnm_state st;
+    long hs = cryo_hnm_header(&st, file.data(), file.size(), nullptr);
+    if (!cppLoaded) return true;   // the C side walks superchunks the same way below
+    if (hs < 0) return false;
+    if (std::memcmp(st.pal, v.palette().data(), 768) != 0) return false;
+    std::vector<uint8_t> px(320 * 200), scratch(CRYO_HNM_SCRATCH);
+    size_t p = size_t(hs);
+    int ok = 0;
+    for (int i = 0; i < v.frameCount(); ++i) {
+        unsigned sz = cryo_hnm_superchunk_size(file.data() + p);
+        HnmVideo::Frame f;
+        bool a;
+        try { a = v.decode(i, f); } catch (const std::exception&) { a = false; }
+        cryo_hnm_frame cf;
+        int rc = cryo_hnm_decode(&st, file.data() + p, file.size() - p, &cf, px.data(), px.size(),
+                                 scratch.data(), scratch.size());
+        p += sz;
+        // The C side has fixed buffers: a frame larger than the screen, or
+        // an HSQ frame unpacking past 64 KiB, is refused there on purpose.
+        if (rc == CRYO_E_SPACE) continue;
+        if (a != (rc == CRYO_OK)) return false;
+        if (!a) continue;
+        if (std::memcmp(st.pal, v.palette().data(), 768) != 0) return false;
+        if (st.sound_rate != v.soundRate()) return false;
+        if (bool(cf.has_video) != f.hasVideo || bool(cf.palette_changed) != f.paletteChanged) return false;
+        Bytes snd;
+        for (int k = 0; k < cf.sound_count; ++k) snd.insert(snd.end(), cf.sound[k], cf.sound[k] + cf.sound_len[k]);
+        if (snd != f.sound) return false;
+        if (bool(cf.pt) != (f.chunks.count("pt") == 1)) return false;
+        if (bool(cf.kl) != (f.chunks.count("kl") == 1)) return false;
+        if (cf.pt && Bytes(cf.pt, cf.pt + cf.pt_len) != f.chunks["pt"]) return false;
+        if (cf.kl && Bytes(cf.kl, cf.kl + cf.kl_len) != f.chunks["kl"]) return false;
+        if (f.hasVideo) {
+            if (cf.w != f.w || cf.h != f.h || cf.x != f.x || cf.y != f.y) return false;
+            if (bool(cf.overlay) != f.overlay || cf.subtitle_cue != f.subtitleCue) return false;
+            if (!std::equal(f.pixels.begin(), f.pixels.end(), px.begin())) return false;
+        }
+        ++ok;
+    }
+    if (frames) *frames = ok;
+    return true;
+}
+
+static void testCryoC() {
+    // DAT directory: two named entries and an unused slot.
+    Bytes dir(3 * CRYO_DAT_ENTRY_SIZE, 0);
+    std::memcpy(dir.data(), "MINDSCAP.HNM", 12);
+    dir[16] = 0x10; dir[20] = 0x34; dir[21] = 0x12;
+    std::memcpy(dir.data() + 2 * CRYO_DAT_ENTRY_SIZE, "cryo.hnm", 8);
+    dir[2 * CRYO_DAT_ENTRY_SIZE + 19] = 1;
+    cryo_dat_entry e[4];
+    int n = cryo_dat_parse(dir.data(), dir.size(), 3, e, 4);
+    CHECK(n == 2);
+    CHECK(cryo_dat_find(e, n, "mindscap.hnm") == 0 && e[0].size == 0x10 && e[0].offset == 0x1234);
+    CHECK(cryo_dat_find(e, n, "CRYO.HNM") == 1 && e[1].size == 0x01000000u);
+    CHECK(cryo_dat_find(e, n, "CRYO.HN") == -1);
+
+    // HSQ: the hand-built stream from testHsq, then random valid streams.
+    std::mt19937 rng(1234);
+    for (int it = 0; it < 400; ++it) {
+        HsqWriter w;
+        size_t len = 0;
+        int ops = 1 + int(rng() % 200);
+        for (int k = 0; k < ops; ++k) {
+            unsigned r = rng() % 3;
+            if (r == 0 || len < 2) { w.literal(uint8_t(rng())); ++len; }
+            else if (r == 1) { int c = 2 + int(rng() % 4); int o = 1 + int(rng() % std::min<size_t>(len, 256)); w.shortMatch(c, -o); len += size_t(c); }
+            else { int c = 3 + int(rng() % 7); int o = 1 + int(rng() % std::min<size_t>(len, 8192)); w.longMatch(c, -o); len += size_t(c); }
+        }
+        Bytes packed = w.finish(uint16_t(len)), a, b;
+        CHECK(cppHsq(packed, a) && cHsq(packed, b) && a == b);
+        // Random damage: both must fail, or both give the same bytes.
+        for (int d = 0; d < 8; ++d) {
+            Bytes bad = packed;
+            if (rng() % 4 == 0) bad.resize(rng() % bad.size());
+            else bad[6 + rng() % (bad.size() - 6)] ^= uint8_t(1 + rng() % 255);
+            bool ca = cppHsq(bad, a), cb = cHsq(bad, b);
+            if (cb && b.size() > 65536) cb = ca;   // the C buffer limit
+            CHECK(ca == cb && (!ca || a == b));
+        }
+    }
+
+    // HNM: the frames from testHnm173, plus a VOC soundtrack and a palette chunk.
+    Bytes a = {6, 0, 3, 0, 0x84, 0x20, 5, 7, 9, 0x00, 0x6E};
+    Bytes b = {5, 0, 5, 0, 0x84, 0x1F, 1, 2, 0x80, 0x10, 3, 0x00, 0x00};
+    Bytes c = {2, 0, 2, 0, 0x80, 0x00, 3, 0, 4, 0, 0, 8, 0x00, 0x00};
+    unsigned s = 0;
+    for (int i = 0; i < 5; ++i) s += c[size_t(i)];
+    c[5] = uint8_t(0xAD - s);
+    Bytes voc(26, 0);
+    std::memcpy(voc.data(), "Creative Voice File\x1a", 20);
+    voc[20] = 26;
+    voc.insert(voc.end(), {1, 0x10, 0, 0, 0xA6, 0, 0x80, 0x81, 0x7F});
+    Bytes frame0 = chunk("sd", voc);
+    Bytes pal = chunk("pl", Bytes{4, 1, 10, 20, 30, 0xFF, 0xFF});
+    frame0.insert(frame0.end(), pal.begin(), pal.end());
+    Bytes pt = chunk("pt", Bytes(58, 0x11));
+    frame0.insert(frame0.end(), pt.begin(), pt.end());
+    Bytes v0 = videoChunk(3, 2, 0xFE, a);
+    frame0.insert(frame0.end(), v0.begin(), v0.end());
+    Bytes frame1 = chunk("sd", Bytes{1, 2, 3});
+    Bytes v1 = videoChunk(5, 1, 0xFE, b);
+    frame1.insert(frame1.end(), v1.begin(), v1.end());
+    Bytes frame2 = videoChunk(2, 1, 0xFF, c);
+    Bytes kl = {0xF8, 0x4B};
+    put16(kl, 8);
+    kl.insert(kl.end(), {1, 2, 3, 4});
+    Bytes frame3 = kl;
+    frame3.insert(frame3.end(), v1.begin(), v1.end());
+    // An HSQ-packed overlay at x=2, y=1: PackBits "repeat 9 three times", "copy 2".
+    HsqWriter hw;
+    for (uint8_t byte : Bytes{2, 0, 1, 0, uint8_t(257 - 3), 9, 1, 4, 5}) hw.literal(byte);
+    Bytes frame4 = videoChunk(5, 2, 0xFF, hw.finish(9));
+    Bytes frame5 = chunk("sd", Bytes{9, 9});   // sound only, no picture
+    Bytes file = hnmFile({frame0, frame1, frame2, frame3, frame4, frame5});
+    int frames = 0;
+    CHECK(sameHnm(file, &frames) && frames == 6);
+
+    cryo_hnm_state st;
+    long hs = cryo_hnm_header(&st, file.data(), file.size(), nullptr);
+    CHECK(hs > 0 && st.pal[3] == 255 && st.pal_first == 1 && st.pal_last == 2);
+    std::vector<uint8_t> px(320 * 200), scratch(CRYO_HNM_SCRATCH);
+    cryo_hnm_frame f;
+    CHECK(cryo_hnm_decode(&st, file.data() + hs, file.size() - size_t(hs), &f, px.data(), px.size(),
+                          scratch.data(), scratch.size()) == CRYO_OK);
+    CHECK(f.has_video && f.palette_changed && st.pal_first == 4 && st.pal_last == 4);
+    CHECK(st.sound_rate == 11111 && f.sound_count == 1 && f.sound_len[0] == 3);
+    size_t need = 0;
+    CHECK(cryo_hnm_header(&st, file.data(), 5, &need) == CRYO_E_TRUNCATED && need == size_t(hs));
+
+    // Random damage to the whole file: the decoders must agree frame by frame.
+    for (int it = 0; it < 4000; ++it) {
+        Bytes bad = file;
+        int hits = 1 + int(rng() % 3);
+        for (int k = 0; k < hits; ++k) bad[size_t(hs) + rng() % (bad.size() - size_t(hs))] ^= uint8_t(1 + rng() % 255);
+        CHECK(sameHnm(bad));
+    }
+}
+
 int main() {
-    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad, testMusicStyles, testSides}) {
+    for (auto* t : {testHsq, testHnm173, testHnmCorrupt, testCryoC, testSpriteSet, testResamplerChunks, testVoiceFilter, testHerad, testMusicStyles, testSides}) {
         try { t(); }
         catch (const std::exception& e) { ++g_failures; std::fprintf(stderr, "exception: %s\n", e.what()); }
     }
