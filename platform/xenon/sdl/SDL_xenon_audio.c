@@ -5,6 +5,7 @@
  * driver (DUMMYAUDIO_bootstrap); modelled on SDL's Emscripten driver, which
  * also has no audio thread. */
 #include "SDL_internal.h"
+#include "SDL_error.h"
 
 #include "SDL_audio.h"
 #include "audio/SDL_audio_c.h"
@@ -61,7 +62,7 @@ void XENON_AudioPump(void)
     }
 }
 
-static int XENON_OpenDevice(_THIS, const char *devname)
+static int XENON_OpenDevice(SDL_AudioDevice *this, const char *devname)
 {
     (void)devname;
     this->spec.freq = XP_AUDIO_RATE;
@@ -74,7 +75,7 @@ static int XENON_OpenDevice(_THIS, const char *devname)
     return 0;
 }
 
-static void XENON_CloseDevice(_THIS)
+static void XENON_CloseDevice(SDL_AudioDevice *this)
 {
     if (xenon_device == this) xenon_device = NULL;
 }

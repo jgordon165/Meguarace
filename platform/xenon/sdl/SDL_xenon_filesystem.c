@@ -2,6 +2,7 @@
  * the USB stick, and its save/ folder. Takes the place of SDL's dummy file
  * system driver. */
 #include "SDL_internal.h"
+#include "SDL_error.h"
 
 #include "SDL_filesystem.h"
 
@@ -24,7 +25,7 @@ char *SDL_GetPrefPath(const char *org, const char *app)
     len = SDL_strlen(xp_root()) + 6;
     p = (char *)SDL_malloc(len);
     if (!p) {
-        SDL_OutOfMemory();
+        SDL_Error(SDL_ENOMEM);
         return NULL;
     }
     SDL_snprintf(p, len, "%ssave/", xp_root());

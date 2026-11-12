@@ -1,9 +1,0 @@
-name: xenon-probe
-on: { push: { branches: [xbox360] } }
-jobs:
-  probe:
-    runs-on: ubuntu-24.04
-    container: free60/libxenon:latest
-    steps:
-      - uses: actions/checkout@v5
-      - run: bash -l tools/xenon-probe/probe.sh

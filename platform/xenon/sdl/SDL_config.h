@@ -80,8 +80,8 @@
 /* No dlopen, so no dynamic API (see src/dynapi/SDL_dynapi.h). */
 #define DYNAPI_NEEDS_DLOPEN 1
 
-/* Blitters in plain C (SDL's AltiVec ones aren't needed and VMX128 differs). */
-#define SDL_ALTIVEC_BLITTERS 0
+/* Blitters in plain C: SDL_ALTIVEC_BLITTERS stays undefined (SDL's AltiVec
+ * blitters aren't needed). */
 
 /* The drivers in platform/xenon/sdl replace these dummy ones. */
 #define SDL_VIDEO_DRIVER_DUMMY 1

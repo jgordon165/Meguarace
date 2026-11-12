@@ -1,0 +1,61 @@
+# The Xbox 360 build (LibXenon, for a console that runs XeLL: BadUpdate +
+# FreeMyXe, RGH or JTAG). Makes meguarace.elf32 and the folder to copy to a
+# USB stick (README, "Xbox 360"). The stand-in job builds the same SDL and
+# layout on Linux and runs it, to catch breakage without a console.
+name: xbox360
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  xenon:
+    name: Xbox 360 (LibXenon)
+    runs-on: ubuntu-24.04
+    container: free60/libxenon:latest
+    steps:
+      - name: Build tools
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q cmake ninja-build git zip python3
+      - uses: actions/checkout@v5
+      - name: Configure
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake -S . -B build-xenon -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=platform/xenon/toolchain.cmake
+      - name: Build
+        run: cmake --build build-xenon
+      - name: Package
+        run: |
+          mkdir -p pkg/meguarace
+          cp build-xenon/meguarace.elf32 pkg/meguarace/
+          cp -r build-xenon/scripts pkg/meguarace/scripts
+          [ -d build-xenon/soundfont ] && cp -r build-xenon/soundfont pkg/meguarace/soundfont || true
+          mkdir -p pkg/meguarace/data pkg/meguarace/hd
+          cp platform/xenon/README-360.txt pkg/meguarace/README.txt
+          cp platform/xenon/README-360.txt pkg/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
+          (cd pkg && zip -qr ../meguarace-xbox360.zip meguarace)
+          ls -la build-xenon/meguarace.elf32 meguarace-xbox360.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meguarace-xbox360
+          path: meguarace-xbox360.zip
+
+  stand-in:
+    name: Xbox 360 stand-in (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+      - name: Build
+        run: |
+          cmake -S . -B build-sim -G Ninja -DCMAKE_BUILD_TYPE=Release -DMEGARACE_XENON_SIM=ON -DMEGARACE_FETCH_SOUNDFONT=OFF
+          cmake --build build-sim
+      - name: Run 300 frames (no game data)
+        run: |
+          cd build-sim
+          XENON_SIM_ROOT=$PWD XENON_SIM_SHOT="300:$PWD/frame300.bmp" XENON_SIM_FRAMES=300 timeout 120 ./megarace
+          test -s frame300.bmp

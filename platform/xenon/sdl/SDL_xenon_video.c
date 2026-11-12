@@ -3,6 +3,7 @@
  * screen. Controllers arrive as keyboard keys (see key_map below). This file
  * takes the place of SDL's dummy video driver (DUMMY_bootstrap). */
 #include "SDL_internal.h"
+#include "SDL_error.h"
 
 #include "SDL_video.h"
 #include "video/SDL_sysvideo.h"
@@ -144,7 +145,7 @@ static SDL_VideoDevice *XENON_CreateDevice(void)
 {
     SDL_VideoDevice *device = (SDL_VideoDevice *)SDL_calloc(1, sizeof(SDL_VideoDevice));
     if (!device) {
-        SDL_OutOfMemory();
+        SDL_Error(SDL_ENOMEM);
         return NULL;
     }
     device->VideoInit = XENON_VideoInit;

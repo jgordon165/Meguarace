@@ -1,6 +1,7 @@
 /* SDL's clock on the Xbox 360: the PowerPC time base (xp_counter). Takes the
  * place of SDL's per-platform timer file. */
 #include "SDL_internal.h"
+#include "SDL_error.h"
 
 #include "SDL_timer.h"
 #include "timer/SDL_timer_c.h"

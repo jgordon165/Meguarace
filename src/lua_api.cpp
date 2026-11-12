@@ -1013,5 +1013,12 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
     lua_pushboolean(L, e.classic);             lua_setfield(L, -2, "classic");
     lua_pushstring(L, e.hdArg.c_str());        lua_setfield(L, -2, "hd_arg");
+    // "xenon" on the Xbox 360 (a controller, no keyboard), else "pc".
+#ifdef MEGARACE_XENON_LAYOUT
+    lua_pushstring(L, "xenon");
+#else
+    lua_pushstring(L, "pc");
+#endif
+    lua_setfield(L, -2, "platform");
     lua_pop(L, 1);
 }
