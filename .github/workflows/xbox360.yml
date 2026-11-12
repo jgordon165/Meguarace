@@ -1,5 +1,5 @@
 # The Xbox 360 build (LibXenon, for a console that runs XeLL: BadUpdate +
-# FreeMyXe, RGH or JTAG). Makes meguarace.elf32 and the folder to copy to a
+# FreeMyXe, RGH or JTAG). Makes meguarace.elf and the folder to copy to a
 # USB stick (README, "Xbox 360"). The stand-in job builds the same SDL and
 # layout on Linux and runs it, to catch breakage without a console.
 name: xbox360
@@ -31,14 +31,14 @@ jobs:
       - name: Package
         run: |
           mkdir -p pkg/meguarace
-          cp build-xenon/meguarace.elf32 pkg/meguarace/
+          cp build-xenon/meguarace.elf pkg/meguarace/
           cp -r build-xenon/scripts pkg/meguarace/scripts
           [ -d build-xenon/soundfont ] && cp -r build-xenon/soundfont pkg/meguarace/soundfont || true
           mkdir -p pkg/meguarace/data pkg/meguarace/hd
           cp platform/xenon/README-360.txt pkg/meguarace/README.txt
           cp platform/xenon/README-360.txt pkg/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
           (cd pkg && zip -qr ../meguarace-xbox360.zip meguarace)
-          ls -la build-xenon/meguarace.elf32 meguarace-xbox360.zip
+          ls -la build-xenon/meguarace.elf meguarace-xbox360.zip
       - uses: actions/upload-artifact@v4
         with:
           name: meguarace-xbox360

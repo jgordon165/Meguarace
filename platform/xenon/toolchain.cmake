@@ -2,7 +2,7 @@
 # cross compiler from the free60/libxenon Docker image (DEVKITXENON).
 #   cmake -B build-xenon -DCMAKE_TOOLCHAIN_FILE=platform/xenon/toolchain.cmake
 # The flags are LibXenon's own (devkitxenon/rules). Programs come out as
-# .elf, and as .elf32 for XeLL.
+# meguarace.elf, which XeLL loads.
 
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR powerpc64)

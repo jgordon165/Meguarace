@@ -272,13 +272,9 @@ if(MEGARACE_XENON)
     target_compile_definitions(megarace PRIVATE MEGARACE_XENON_LAYOUT=1)
 endif()
 if(MEGARACE_XENON_TARGET)
-    # LibXenon and its FAT driver, then the .elf32 that XeLL loads.
+    # LibXenon and its FAT driver; XeLL loads the result, meguarace.elf.
     target_link_libraries(megarace PRIVATE -Wl,--start-group fat xenon m c stdc++ -Wl,--end-group)
-    set_target_properties(megarace PROPERTIES SUFFIX ".elf")
-    add_custom_command(TARGET megarace POST_BUILD
-        COMMAND ${XENON_OBJCOPY} -O elf32-powerpc --adjust-vma 0x80000000
-                $<TARGET_FILE:megarace> $<TARGET_FILE_DIR:megarace>/meguarace.elf32
-        COMMENT "meguarace.elf32 for XeLL")
+    set_target_properties(megarace PROPERTIES OUTPUT_NAME meguarace SUFFIX ".elf")
 endif()
 megarace_warnings(megarace)
 if(MSVC)
