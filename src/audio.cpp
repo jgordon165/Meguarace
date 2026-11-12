@@ -70,7 +70,7 @@ std::string Audio::soundFontPath() {
         for (const auto& e : fsx::list(d)) {
             std::string ext = fsx::extension(e.name);
             for (auto& c : ext) c = char(std::tolower(static_cast<unsigned char>(c)));
-            if (ext == ".sf2" && !e.dir) found.push_back(fsx::join(d, e.name));
+            if (ext == ".sf2" && !e.dir) found.push_back(e.path);
         }
         if (!found.empty()) { std::sort(found.begin(), found.end()); return found.front(); }
     }

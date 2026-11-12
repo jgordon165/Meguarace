@@ -12,6 +12,7 @@ namespace fsx {
 
 struct DirEntry {
     std::string name;   // as on disk
+    std::string path;   // the folder and the name, as the listing gives it
     bool dir = false;
     uint64_t size = 0;
 };

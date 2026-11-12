@@ -27,6 +27,7 @@ std::vector<DirEntry> list(const std::string& dir) {
     for (const auto& de : fs::directory_iterator(dir, ec)) {
         DirEntry e;
         e.name = de.path().filename().string();
+        e.path = de.path().string();
         e.dir = de.is_directory(ec);
         e.size = e.dir ? 0 : uint64_t(de.file_size(ec));
         out.push_back(std::move(e));
@@ -60,6 +61,7 @@ std::vector<DirEntry> list(const std::string& dir) {
         DirEntry e;
         e.name = n;
         std::string full = join(dir, n);
+        e.path = full;
         struct stat st;
         if (::stat(full.c_str(), &st) == 0) {
             e.dir = S_ISDIR(st.st_mode);

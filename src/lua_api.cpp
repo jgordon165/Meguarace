@@ -393,7 +393,7 @@ bool loadHd(Engine& e) {
         for (const auto& f : entries) {
             if (fsx::extension(f.name) != ".hdv") continue;
             hd::PackHeader h;
-            if (hd::Pack::peek(fsx::join(dir, f.name), h)) {
+            if (hd::Pack::peek(f.path, h)) {
                 if (!e.video.enableHd(h.pictureW, h.pictureH)) break;
                 e.hdDir = dir;
                 e.hdUpscaler = hd::upscalerName(h.upscaler);

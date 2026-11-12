@@ -43,7 +43,7 @@ std::optional<std::string> Vfs::resolve(const std::string& rel) const {
         bool found = false;
         for (const auto& de : fsx::list(cur)) {
             if (lower(de.name) == want) {
-                cur = fsx::join(cur, de.name);
+                cur = de.path;
                 found = true;
                 break;
             }
