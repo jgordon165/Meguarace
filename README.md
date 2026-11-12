@@ -143,7 +143,7 @@ the LibXenon (Free60) toolchain and uploads `meguarace-xbox360.zip`.
 2. Copy your MegaRace CD's files into `meguarace/data/` (and, if you have
    them, ripped music tracks into `meguarace/data/music/` and HD packs into
    `meguarace/hd/`).
-3. Start XeLL and load `meguarace/meguarace.elf32` from the stick.
+3. Start XeLL and load `meguarace/meguarace.elf` from the stick.
 
 Controls: left stick or D-pad steers and moves in menus, RT accelerates, LT
 brakes, X or RB fires, A or START chooses, B or BACK goes back, Y turns HD
