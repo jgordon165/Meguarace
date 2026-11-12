@@ -641,6 +641,16 @@ test("rival: steering (0x4210) and sideways step (0x38EF)", function()
     check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
 end)
 
+test("padtype: typing with a controller", function()
+    local P = require("ui.padtype")
+    check(P.step("", "up", 8) == "A", "first letter")
+    check(P.step("A", "up", 8) == "B" and P.step("A", "down", 8) == "9", "turns both ways, wrapping")
+    check(P.step("AB", "add", 8) == "ABA" and P.step("ABCDEFGH", "add", 8) == "ABCDEFGH", "adds, up to the length")
+    check(P.step("AB", "del", 8) == "A", "takes one off")
+    check(P.step("Z", "up", 8, P.CHARS .. " ") == "0" and P.step("9", "up", 8, P.CHARS .. " ") == " ", "with a space")
+    check(P.active() == (sys.platform == "xenon"), "only where there's no keyboard")
+end)
+
 test("keys: bindings and names (0x611D)", function()
     local keys = require("game.keys")
     local st = {}

@@ -13,6 +13,7 @@
 local scenes = require("core.scenes")
 local font   = require("ui.font")
 local save   = require("game.save")
+local padtype = require("ui.padtype")
 local S = { hd_menu = true }
 
 S.NAME_MAX = 16
@@ -53,6 +54,10 @@ function S:update_typing()
         return
     end
     if input.pressed("Backspace") then self.name = self.name:sub(1, -2); return end
+    if padtype.active() then                       -- a controller: letters by wheel
+        self.name = padtype.update(self.name, S.NAME_MAX, padtype.CHARS .. " ") or self.name
+        return
+    end
     if #self.name >= S.NAME_MAX then return end
     if input.pressed("Space") then self.name = self.name .. " "; return end
     for _, k in ipairs(KEYS) do

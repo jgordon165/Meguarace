@@ -79,7 +79,11 @@ std::string join(const std::string& a, const std::string& b) {
     if (a.empty()) return b;
     if (b.empty()) return a;
     if (isSep(a.back())) return a + b;
+#ifdef _WIN32
+    return a + "\\" + b;      // as std::filesystem::path joins there
+#else
     return a + "/" + b;
+#endif
 }
 
 std::string filename(const std::string& p) {
