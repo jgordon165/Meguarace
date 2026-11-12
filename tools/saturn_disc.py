@@ -2,7 +2,7 @@
 """Builds a Sega Saturn disc image of Meguarace from your own MegaRace CD.
 
 No game data comes with the Saturn build. This tool puts the Saturn
-program (IP.BIN and A.BIN, from the `saturn` workflow's zip or your own
+program (IP.BIN and A.BIN, from meguarace-saturn-<version>.zip or your own
 `make` in platform/saturn) together with MEGARACE.DAT from your copy of the
 game, and writes a disc image:
 

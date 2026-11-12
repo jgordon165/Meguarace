@@ -6,8 +6,8 @@
 #
 # The build dir is platform/saturn/build (A.BIN, IP.BIN). The work dir gets
 # the test disc, the screenshots and the audio. Without a Yabause checkout,
-# one is cloned into the work dir (github.com/libretro/yabause), patched
-# (tests/saturn/patch_yabause.py) and built.
+# one is fetched into the work dir (github.com/libretro/yabause, at the
+# commit below), patched (tests/saturn/patch_yabause.py) and built.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -15,9 +15,14 @@ build=$(cd "$1" && pwd)
 mkdir -p "$2"
 work=$(cd "$2" && pwd)
 yab=${3:-$work/yabause}
+YABAUSE_COMMIT=${YABAUSE_COMMIT:-8926b0c6c347f8c5c755911ddb0ac695420ffbf8}
 
 if [ ! -f "$yab/yabause/src/libretro/yabause_libretro.so" ]; then
-    [ -d "$yab" ] || git clone --depth 1 https://github.com/libretro/yabause.git "$yab"
+    if [ ! -d "$yab" ]; then
+        git init -q "$yab"
+        (cd "$yab" && git remote add origin https://github.com/libretro/yabause.git \
+            && git fetch -q --depth 1 origin "$YABAUSE_COMMIT" && git checkout -q FETCH_HEAD)
+    fi
     python3 "$here/patch_yabause.py" "$yab/yabause/src/cs2.c"
     make -C "$yab/yabause/src/libretro" -j"$(nproc 2>/dev/null || echo 2)" HAVE_SSE=0 >/dev/null
 fi

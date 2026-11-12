@@ -51,7 +51,7 @@ IP.BIN (the system area), A.BIN (the program, the first file) and the
 player's `MEGARACE.DAT` (and `RACEPRG.EXE` if present, for the game later).
 It runs on the emulators, on optical drive emulators, and burned to a CD-R
 for a console that boots CD-Rs. `platform/saturn/README-saturn.txt` is the
-player's guide; it ships in `meguarace-saturn.zip` (the `saturn` workflow).
+player's guide; it ships in `meguarace-saturn-<version>.zip` (below).
 
 ## Building
 
@@ -59,12 +59,39 @@ player's guide; it ships in `meguarace-saturn.zip` (the `saturn` workflow).
 platform/saturn/toolchain/build-toolchain.sh      # once: GCC + binutils + libyaul into /opt/tool-chains/sh2eb-elf
 source ~/.yaul.env
 make -C platform/saturn                           # build/A.BIN, build/IP.BIN
+make -C platform/saturn test                      # boot it in an emulator on synthetic data and check it
+make -C platform/saturn package                   # dist/meguarace-saturn-<version>.zip, what releases ship
+make -C platform/saturn disc DATA=/mnt/d          # megarace.iso + .cue from your own CD (LUA_TEST=1 adds the Lua tests)
 ```
 
 The tool-chain script builds the same versions as libyaul's own
 crosstool-ng configuration (GCC 14.3.0, binutils 2.44, no C library:
-libyaul has its own) and pins libyaul to the commit the port was tested
-with. On Windows, libyaul's MSYS2 packages work too.
+libyaul has its own), into `$PREFIX` (default `/opt/tool-chains/sh2eb-elf`),
+and pins libyaul to the commit the port was tested with. It needs a C/C++
+compiler, make, texinfo, flex, bison, xorriso and the GMP, MPFR and MPC
+headers (Ubuntu: `build-essential texinfo flex bison xorriso libgmp-dev
+libmpfr-dev libmpc-dev`; `python3-numpy python3-pil` for `make test`), and
+takes about half an hour. `make` fetches the third-party code itself
+(`deps.sh`).
+
+On Windows, build in WSL (Ubuntu): the same commands. The disc builder
+itself runs on Windows' own Python, so only the build needs WSL. libyaul's
+MSYS2 packages work too, for the build without `make test`.
+
+### The pipeline
+
+| Workflow | What it does for the Saturn |
+|---|---|
+| `CI-build` (job `saturn`) | every push; or manually, platform `saturn`. Tool-chain, build, `make test` (emulator), `make package`. Keeps the zip, and the emulator's screenshots and sound for a failed test. |
+| `release-saturn` | manual, or from `release-all`. The same, with the release's version: `meguarace-saturn-<version>.zip`. |
+
+Two composite actions hold the shared steps:
+`.github/actions/setup-saturn` (host packages; the tool-chain, cached by
+the hash of `build-toolchain.sh`, so it's built once, about 25 minutes,
+and restored in seconds after that; the third-party code, cached by
+`deps.sh`) and `.github/actions/test-saturn` (Yabause, pinned, patched
+and cached; `make test`). Changing a version means editing the script
+that pins it: the caches follow.
 
 Lua needs more C library than libyaul has. `platform/saturn/libc/` fills
 the gaps: `setjmp`/`longjmp` in SH-2 assembly; `strtod`/`strtof`; the "C"
@@ -100,7 +127,7 @@ with the RAM cartridge when one is plugged in.
 ## Testing without the game or a BIOS
 
 ```
-tests/saturn/run_emulator_test.sh platform/saturn/build /tmp/saturn-test
+make -C platform/saturn test        # = tests/saturn/run_emulator_test.sh build test-run
 ```
 
 1. `tests/saturn/make_test_dat.py` writes a synthetic `MEGARACE.DAT`: test

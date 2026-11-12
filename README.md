@@ -169,9 +169,9 @@ python tools/saturn_disc.py --data D:\ --build platform/saturn/build --out megar
 ```
 
 then play `megarace.cue` in an emulator, from an optical drive emulator, or
-burned to a CD-R (a Saturn that boots CD-Rs). The `saturn` workflow builds
-it, boots it in an emulator on synthetic test data and uploads
-`meguarace-saturn.zip`. Status, design and roadmap: [docs/saturn.md](docs/saturn.md).
+burned to a CD-R (a Saturn that boots CD-Rs). CI builds it, boots it in an
+emulator on synthetic test data and keeps `meguarace-saturn-<version>.zip`;
+`release-saturn` makes the release zip. Status, design and roadmap: [docs/saturn.md](docs/saturn.md).
 
 ## HD videos and display modes
 
@@ -240,13 +240,13 @@ GitHub Actions (same layout as the Aleph One fork):
 
 | Workflow | When | What |
 |---|---|---|
-| `CI-build` | every push, or manually (choose all / linux / mac-osx / windows) | Linux (GCC, Clang), macOS x64 + arm64, Windows x64 + x86; build and test |
+| `CI-build` | every push, or manually (choose all / linux / mac-osx / windows / saturn) | Linux (GCC, Clang), macOS x64 + arm64, Windows x64 + x86; build and test. Saturn: build, boot in an emulator on synthetic data and check picture, sound and Lua ([docs/saturn.md](docs/saturn.md)) |
 | `code-analysis` | push/PR to `master`, or manually | CodeQL security-and-quality on our C++ |
-| `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx` |
+| `release-all` | manual | runs `release-linux`, `release-windows`, `release-mac-osx`, `release-saturn` |
 | `release-*` | manual | tested build, packaged as `meguarace-<platform>-<version>` (engine, scripts, docs; no game data); Windows PDBs; universal macOS, signed and notarized if the `PROD_MACOS_*` secrets are set |
+| `release-saturn` | manual (or from `release-all`) | the Saturn build, tested as in CI-build, packaged as `meguarace-saturn-<version>.zip` (program, disc builder, Lua scripts; no game data) |
 | `hd-converter` | pushes touching the converter, or manually | `hd-conversion-utility` (the HD video converter): Linux, macOS arm64, Windows x64; build and test |
 | `release-hd-converter` | manual | the converter's own packages, `hd-conversion-utility-<platform>-<version>`, with Real-ESRGAN; never HD videos ([docs/hd.md](docs/hd.md)) |
-| `saturn` | every push to `master`/`saturn`, PRs, or manually | the Saturn build (GCC 14.3 for SH-2, libyaul), booted in an emulator on synthetic data and checked; `meguarace-saturn.zip` ([docs/saturn.md](docs/saturn.md)) |
 
 ## Status
 
