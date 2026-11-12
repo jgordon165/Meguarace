@@ -24,7 +24,9 @@ set(XENON_MACHDEP "-DXENON -m32 -maltivec -fno-pic -mpowerpc64 -mhard-float")
 # No auto-vectorising of C: xenon-gcc crashes on some of libwebp's loops
 # with it (an internal compiler error in expand_insn).
 set(CMAKE_C_FLAGS_INIT   "${XENON_MACHDEP} -fno-tree-vectorize -I${DEVKITXENON}/usr/include")
-set(CMAKE_CXX_FLAGS_INIT "${XENON_MACHDEP} -I${DEVKITXENON}/usr/include")
+# newlib's <limits.h> leaves LLONG_MAX out of C++ here, and Lua then refuses
+# 64-bit integers (luaconf.h); C sees it, so give C++ the same.
+set(CMAKE_CXX_FLAGS_INIT "${XENON_MACHDEP} -I${DEVKITXENON}/usr/include -DLLONG_MAX=__LONG_LONG_MAX__ \"-DLLONG_MIN=(-__LONG_LONG_MAX__-1LL)\" \"-DULLONG_MAX=(__LONG_LONG_MAX__*2ULL+1ULL)\"")
 set(CMAKE_EXE_LINKER_FLAGS_INIT
     "${XENON_MACHDEP} -L${DEVKITXENON}/xenon/lib/32 -L${DEVKITXENON}/usr/lib -n -T ${DEVKITXENON}/app.lds -Wl,--gc-sections")
 
