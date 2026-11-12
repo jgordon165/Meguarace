@@ -50,6 +50,7 @@ jobs:
              platform/saturn/build/ABS.TXT platform/saturn/build/BIB.TXT \
              platform/saturn/build/CPY.TXT tools/saturn_disc.py pkg/meguarace-saturn/
           cp -r scripts pkg/meguarace-saturn/scripts
+          mkdir -p pkg/meguarace-saturn/tests/lua && cp tests/lua/main.lua pkg/meguarace-saturn/tests/lua/
           cp platform/saturn/README-saturn.txt pkg/meguarace-saturn/README.txt
           cp platform/saturn/THIRD-PARTY.txt pkg/meguarace-saturn/
           (cd pkg && zip -qr ../meguarace-saturn.zip meguarace-saturn)
