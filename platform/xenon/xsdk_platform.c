@@ -32,6 +32,7 @@ static uint32_t *tile_index;       /* per linear pixel, its word in a tiled buff
 static uint32_t buffer_words;
 static int next_buffer;
 static int display_up;
+static int gpu_up;
 
 static uint64_t time_base(void)
 {
@@ -51,7 +52,8 @@ int xp_init(void)
     started = 1;
     /* xsdk's start-up has opened the log already (a second open is refused). */
     xsdk_log_write("Meguarace for the Xbox 360 (xsdk)");
-    if (!NT_SUCCESS(xsdk_gpu_open())) xsdk_log_write("gpu open failed");
+    if (NT_SUCCESS(xsdk_gpu_open())) gpu_up = 1;
+    else xsdk_log_write("gpu open failed");
     if (NT_SUCCESS(xsdk_display_open(XSDK_DISPLAY_720P, &w, &h)) && w && h) {
         tv_w = w;
         tv_h = h;
@@ -103,6 +105,23 @@ void xp_present(const uint32_t *argb, int w, int h, int pitch)
     for (i = 0; i < buffer_words; ++i) dst[i] = staging[i];
     __asm__ volatile("sync" ::: "memory");
     xsdk_display_show(xsdk_gpu_address(dst), tv_w);
+    next_buffer ^= 1;
+}
+
+/* The GPU renderer's frames: resolved by the GPU into the buffer not on
+ * screen, then shown. */
+int xp_gpu_ready(void)
+{
+    xp_init();
+    return gpu_up && display_up;
+}
+
+uint32_t xp_gpu_back_buffer(void) { return xsdk_gpu_address(buffers[next_buffer]); }
+
+void xp_gpu_show(void)
+{
+    if (!display_up) return;
+    xsdk_display_show(xsdk_gpu_address(buffers[next_buffer]), tv_w);
     next_buffer ^= 1;
 }
 
