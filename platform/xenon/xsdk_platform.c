@@ -49,7 +49,7 @@ int xp_init(void)
     uint32_t w = 0, h = 0, x, y;
     if (started) return 0;
     started = 1;
-    xsdk_log_open();
+    /* xsdk's start-up has opened the log already (a second open is refused). */
     xsdk_log_write("Meguarace for the Xbox 360 (xsdk)");
     if (!NT_SUCCESS(xsdk_gpu_open())) xsdk_log_write("gpu open failed");
     if (NT_SUCCESS(xsdk_display_open(XSDK_DISPLAY_720P, &w, &h)) && w && h) {
