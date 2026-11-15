@@ -31,6 +31,8 @@ list(APPEND xsdl_sources
     ${xsdl_dir}/SDL_xenon_filesystem.c)
 if(MEGARACE_XENON_SIM)
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xenon_platform_sim.c)
+elseif(XSDK)
+    list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xsdk_platform.c)
 else()
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xenon_platform.c)
 endif()

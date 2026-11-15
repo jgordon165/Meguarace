@@ -14,6 +14,7 @@
 #include "xenon_platform.h"
 
 static SDL_AudioDevice *xenon_device;
+static int has_feeder;     /* the platform fills the sound on a thread of its own */
 
 /* Keep about 0.15 s queued: enough to ride out a slow frame. */
 #define TARGET_QUEUED (XP_AUDIO_RATE * 4 * 15 / 100)
@@ -49,7 +50,7 @@ static void fill_one(SDL_AudioDevice *this)
     xp_audio_submit(this->work_buffer, (int)this->spec.size);
 }
 
-void XENON_AudioPump(void)
+static void XENON_AudioFill(void)
 {
     SDL_AudioDevice *this = xenon_device;
     int guard = 64;
@@ -62,6 +63,13 @@ void XENON_AudioPump(void)
     }
 }
 
+/* From the video driver's event pump and present: fills the sound unless the
+ * platform's own thread does. */
+void XENON_AudioPump(void)
+{
+    if (!has_feeder) XENON_AudioFill();
+}
+
 static int XENON_OpenDevice(SDL_AudioDevice *this, const char *devname)
 {
     (void)devname;
@@ -72,12 +80,17 @@ static int XENON_OpenDevice(SDL_AudioDevice *this, const char *devname)
     SDL_CalculateAudioSpec(&this->spec);
     xp_audio_init();
     xenon_device = this;
+    has_feeder = xp_audio_start_feeder(XENON_AudioFill);
     return 0;
 }
 
 static void XENON_CloseDevice(SDL_AudioDevice *this)
 {
-    if (xenon_device == this) xenon_device = NULL;
+    if (xenon_device == this) {
+        if (has_feeder) xp_audio_stop_feeder();
+        has_feeder = 0;
+        xenon_device = NULL;
+    }
 }
 
 static SDL_bool XENON_Init(SDL_AudioDriverImpl *impl)

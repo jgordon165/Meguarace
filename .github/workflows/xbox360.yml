@@ -1,12 +1,12 @@
-# The Xbox 360 build (LibXenon, for a console that runs XeLL: BadUpdate +
-# FreeMyXe, RGH or JTAG). Makes meguarace.elf32 and the folder to copy to a
+# The Xbox 360 builds: a .xex title (xsdk, launched from the dashboard or
+# Aurora on a console that runs unsigned code), and the LibXenon one for XeLL. Makes meguarace.elf32 and the folder to copy to a
 # USB stick (README, "Xbox 360"). The stand-in job builds the same SDL and
 # layout on Linux and runs it, to catch breakage without a console.
 name: xbox360
 
 on:
   push:
-    branches: [master, xbox360]
+    branches: [master, xbox360, xbox360-xex]
   pull_request:
   workflow_dispatch:
 
@@ -43,6 +43,67 @@ jobs:
         with:
           name: meguarace-xbox360
           path: meguarace-xbox360.zip
+
+  xex:
+    name: Xbox 360 title (xsdk, .xex)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      # openpak/x360-sdk, pinned; its toolchain is cached under ~/xsdk-gcc.
+      XSDK_REF: bcbb0e7eeff4bae59f9882209e3edf5affc96767
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: openpak/x360-sdk
+          ref: ${{ env.XSDK_REF }}
+          path: xsdk
+      - name: Build tools
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q ninja-build zip python3 \
+            libgmp-dev libmpfr-dev libmpc-dev libisl-dev texinfo bison flex
+      # Restored and saved as separate steps, so a toolchain once built is kept
+      # even when a later step of the job fails.
+      - name: Cached toolchain
+        id: gcc
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/xsdk-gcc
+          key: xsdk-gcc-${{ hashFiles('xsdk/tools/toolchain/**') }}
+      - name: Build the toolchain (GCC 15, binutils, newlib; once)
+        if: steps.gcc.outputs.cache-hit != 'true'
+        run: |
+          JOBS=$(nproc) bash xsdk/tools/toolchain/build.sh || { tail -n 80 ~/xsdk-gcc-work/logs/*.log; exit 1; }
+      - name: Keep the toolchain
+        if: steps.gcc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/xsdk-gcc
+          key: xsdk-gcc-${{ hashFiles('xsdk/tools/toolchain/**') }}
+      - name: Build libxsdk
+        run: make -C xsdk -j$(nproc) build/libxsdk.a
+      - name: Configure
+        run: |
+          cmake -S . -B build-xex -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=$PWD/xsdk/cmake/xsdk.cmake -DXSDK_TOOLCHAIN=$HOME/xsdk-gcc
+      - name: Build
+        run: cmake --build build-xex
+      - name: Package
+        run: |
+          mkdir -p pkg/meguarace
+          cp build-xex/megarace.xex pkg/meguarace/meguarace.xex
+          cp -r build-xex/scripts pkg/meguarace/scripts
+          [ -d build-xex/soundfont ] && cp -r build-xex/soundfont pkg/meguarace/soundfont || true
+          mkdir -p pkg/meguarace/data pkg/meguarace/hd
+          cp platform/xenon/README-xex.txt pkg/meguarace/README.txt
+          cp platform/xenon/README-xex.txt pkg/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
+          (cd pkg && zip -qr ../meguarace-xbox360-xex.zip meguarace)
+          ls -la build-xex/megarace.xex meguarace-xbox360-xex.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meguarace-xbox360-xex
+          path: meguarace-xbox360-xex.zip
 
   stand-in:
     name: Xbox 360 stand-in (Linux)

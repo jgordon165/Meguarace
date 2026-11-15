@@ -90,9 +90,13 @@ static int pressed(const char *name)
     const char *script = getenv("XENON_SIM_PAD"), *p;
     if (!script) return 0;
     for (p = script; *p;) {
-        long n;
+        long n, m;
         char b[16];
-        if (sscanf(p, "%ld:%15s", &n, b) == 2 && strcmp(b, name) == 0 && frames >= n && frames < n + 2) return 1;
+        if (sscanf(p, "%ld-%ld:%15s", &n, &m, b) == 3) {
+            if (strcmp(b, name) == 0 && frames >= n && frames <= m) return 1;
+        } else if (sscanf(p, "%ld:%15s", &n, b) == 2 && strcmp(b, name) == 0 && frames >= n && frames < n + 2) {
+            return 1;
+        }
         p = strchr(p, ' ');
         if (!p) break;
         ++p;
@@ -160,5 +164,16 @@ void xp_audio_submit(const void *s16le, int bytes)
     (void)s16le;
     audio_bytes_submitted += (uint64_t)bytes;
 }
+
+int xp_audio_start_feeder(void (*fill)(void))
+{
+    (void)fill;
+    return 0;    /* no threads: the game's thread fills the sound */
+}
+
+void xp_audio_stop_feeder(void) {}
+
+void xp_lock(void) {}
+void xp_unlock(void) {}
 
 void xp_log(const char *msg) { fprintf(stderr, "%s\n", msg); }
