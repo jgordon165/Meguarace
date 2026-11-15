@@ -63,9 +63,11 @@ jobs:
           sudo apt-get update -q
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q ninja-build zip python3 \
             libgmp-dev libmpfr-dev libmpc-dev libisl-dev texinfo bison flex
+      # Restored and saved as separate steps, so a toolchain once built is kept
+      # even when a later step of the job fails.
       - name: Cached toolchain
         id: gcc
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/xsdk-gcc
           key: xsdk-gcc-${{ hashFiles('xsdk/tools/toolchain/**') }}
@@ -73,6 +75,12 @@ jobs:
         if: steps.gcc.outputs.cache-hit != 'true'
         run: |
           JOBS=$(nproc) bash xsdk/tools/toolchain/build.sh || { tail -n 80 ~/xsdk-gcc-work/logs/*.log; exit 1; }
+      - name: Keep the toolchain
+        if: steps.gcc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/xsdk-gcc
+          key: xsdk-gcc-${{ hashFiles('xsdk/tools/toolchain/**') }}
       - name: Build libxsdk
         run: make -C xsdk -j$(nproc) build/libxsdk.a
       - name: Configure
