@@ -26,5 +26,5 @@ Controls
   LB                     music on/off (menu)
   Names: D-pad Up/Down change the letter, Right adds one, Left takes one off.
 
-Saves go in save/ next to meguarace.xex. A log, megarace.log, is written
-there too (send it along if something goes wrong).
+Saves go in save/ next to meguarace.xex. A log is written
+there too: meguarace.log (send it along if something goes wrong).

@@ -142,6 +142,15 @@ if(APPLE AND _megarace_archs GREATER 1)
         set(FLAG_${flag} 0 CACHE INTERNAL "")
     endforeach()
 endif()
+if(XSDK)
+    # newlib's <limits.h> leaves LLONG_MAX out of C++ here, and Lua then refuses
+    # 64-bit integers (luaconf.h); C sees it, so give C++ the same (as
+    # platform/xenon/toolchain.cmake does for LibXenon).
+    add_compile_definitions(
+        $<$<COMPILE_LANGUAGE:CXX>:LLONG_MAX=__LONG_LONG_MAX__>
+        "$<$<COMPILE_LANGUAGE:CXX>:LLONG_MIN=(-__LONG_LONG_MAX__-1LL)>"
+        "$<$<COMPILE_LANGUAGE:CXX>:ULLONG_MAX=(__LONG_LONG_MAX__*2ULL+1ULL)>")
+endif()
 if(MEGARACE_XENON_TARGET OR XSDK)
     # The 360: no threads, and libwebp's SIMD is for other CPUs.
     set(WEBP_USE_THREAD OFF CACHE BOOL "" FORCE)
