@@ -233,6 +233,55 @@ void xp_audio_submit(const void *s16le, int bytes)
     __atomic_store_n(&ring_write, w, __ATOMIC_RELEASE);
 }
 
+/* The mixer's lock: the feeder thread mixes while the game queues sounds. */
+static RTL_CRITICAL_SECTION mixer_lock;
+static int mixer_lock_ready;
+
+void xp_lock(void) { if (mixer_lock_ready) RtlEnterCriticalSection(&mixer_lock); }
+void xp_unlock(void) { if (mixer_lock_ready) RtlLeaveCriticalSection(&mixer_lock); }
+
+/* The feeder: a thread on hardware thread 2 (the game runs on 0) that tops
+ * the ring up every 2 ms, so a slow frame doesn't starve the sound. */
+static void (*feeder_fill)(void);
+static volatile int feeder_run;
+static HANDLE feeder_thread;
+
+static uint32_t feeder_main(void *context)
+{
+    (void)context;
+    while (__atomic_load_n(&feeder_run, __ATOMIC_ACQUIRE)) {
+        feeder_fill();
+        xsdk_thread_sleep(2);
+    }
+    return 0;
+}
+
+int xp_audio_start_feeder(void (*fill)(void))
+{
+    if (feeder_thread) return 1;
+    if (!mixer_lock_ready) {
+        RtlInitializeCriticalSection(&mixer_lock);
+        mixer_lock_ready = 1;
+    }
+    feeder_fill = fill;
+    __atomic_store_n(&feeder_run, 1, __ATOMIC_RELEASE);
+    if (!NT_SUCCESS(xsdk_thread_create_on(&feeder_thread, 256 * 1024, feeder_main, NULL, 2))) {
+        xsdk_log_write("audio: no feeder thread; filling between frames");
+        feeder_thread = 0;
+        return 0;
+    }
+    return 1;
+}
+
+void xp_audio_stop_feeder(void)
+{
+    if (!feeder_thread) return;
+    __atomic_store_n(&feeder_run, 0, __ATOMIC_RELEASE);
+    NtWaitForSingleObjectEx(feeder_thread, KERNEL_MODE, 0, NULL);
+    NtClose(feeder_thread);
+    feeder_thread = 0;
+}
+
 void xp_log(const char *msg) { xsdk_log_write("%s", msg); }
 
 /* ---- what newlib asks of the system and xsdk leaves out ----------------------

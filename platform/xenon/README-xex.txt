@@ -16,6 +16,13 @@ No game data is included. You need your own copy of MegaRace (the DOS CD).
    packs made with hd-conversion-utility in hd/
 3. Launch meguarace.xex.
 
+The game starts at 320x200, scaled to the TV, with everything else as on
+the PC (the ENHANCED music, track speed and colour, the new messages). The
+HD resolutions are in Options > ADVANCED > RESOLUTION, but the 360 draws
+them on the CPU, layer by layer, and they run at a few frames a second.
+The sound is mixed on a hardware thread of its own, so a slow frame doesn't
+break it up.
+
 Controls
 --------
   Left stick / D-pad     steer, move in menus

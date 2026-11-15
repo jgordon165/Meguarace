@@ -39,7 +39,11 @@ function M.defaults()
         total = 0,                 -- championship score so far
         music = true,              -- FM music on (M in the main menu)
         subtitles = "AMER",        -- subtitle language or "OFF" (S in the main menu)
-        display = nil,             -- display mode (options); nil: the largest that fits
+        -- display mode (options); nil: the largest that fits. The Xbox 360
+        -- starts at 320x200 (scaled to the TV): its HD modes are drawn by the
+        -- CPU, layer by layer, and run at a few frames a second there. They
+        -- stay in Options > ADVANCED > RESOLUTION for anyone who wants them.
+        display = sys.platform == "xenon" and "native" or nil,
         hd_style = "line_tripled", -- HD modes: "upscaled" (the packs), "line_doubled" or "line_tripled" (Options > ADVANCED)
         smoothing = 1,             -- video smoothing in the HD modes: 0 off, 1 subtle, 2 more, 3 max
         sharpen = "light",         -- after the smoothing: "off", "light" or "strong" (an unsharp mask, GPU)

@@ -47,6 +47,17 @@ void xp_delay_ms(uint32_t ms);
 void xp_audio_init(void);
 int xp_audio_free(void);                  /* bytes that can be queued now */
 void xp_audio_submit(const void *s16le, int bytes);
+/* Where the platform has threads (xsdk): calls fill() every few
+ * milliseconds on a thread of its own, so the sound keeps up however long a
+ * frame takes; returns 1. Elsewhere returns 0 and the game's thread fills
+ * the sound between frames. */
+int xp_audio_start_feeder(void (*fill)(void));
+void xp_audio_stop_feeder(void);
+
+/* The mixer's lock, for when the feeder runs (recursive; does nothing where
+ * there is no feeder). */
+void xp_lock(void);
+void xp_unlock(void);
 
 /* A line for the log (the TV console before the game starts, the UART). */
 void xp_log(const char *msg);

@@ -181,6 +181,17 @@ void xp_audio_submit(const void *s16le, int bytes)
     if (audio_started) xenon_sound_submit((void *)s16le, bytes);
 }
 
+int xp_audio_start_feeder(void (*fill)(void))
+{
+    (void)fill;
+    return 0;    /* no threads: the game's thread fills the sound */
+}
+
+void xp_audio_stop_feeder(void) {}
+
+void xp_lock(void) {}
+void xp_unlock(void) {}
+
 void xp_log(const char *msg) { printf("%s\n", msg); }
 
 /* newlib's clock() (Lua's os.clock) asks for times(), which LibXenon lacks:

@@ -141,7 +141,18 @@ local function make_title(word)
     return { w = w, h = h, rows = rows }
 end
 
--- The still background: sky, stars, sun, skyline, ground (W x 200).
+-- Depth 0 (at the bottom of the screen) .. large (at the horizon) -> row.
+local function row_at(d) return HORIZON + math.floor(87 * 1.2 / (d + 1.2)) end
+-- The grid's colour by row: the horizon blue, the bottom red.
+local function grid_colour(y)
+    return GRID + math.max(0, math.min(GRID_N - 1, (y - HORIZON) * GRID_N // (200 - HORIZON)))
+end
+-- The road's half width at a row.
+local function road_half(y) return math.floor((y - HORIZON) * 52 / 87) end
+
+-- The still background: sky, stars, sun, skyline, ground, and the parts of
+-- the grid and road that don't move (W x 200). Drawing these once, not every
+-- frame, keeps the title smooth where Lua is slow (the Xbox 360).
 local function make_background(W, x0)
     local rnd = 12345
     local function rand()
@@ -198,6 +209,34 @@ local function make_background(W, x0)
             end
             x = x + bw + math.floor(rand() * 3)
         end
+    end
+    -- gfx.line's own steps (Video::line), into px.
+    local function line(ax, ay, bx, by, c)
+        local dx, sx = math.abs(bx - ax), ax < bx and 1 or -1
+        local dy, sy = -math.abs(by - ay), ay < by and 1 or -1
+        local err = dx + dy
+        for _ = 1, 4096 do
+            put(ax, ay, c)
+            if ax == bx and ay == by then break end
+            local e2 = 2 * err
+            if e2 >= dy then err = err + dy; ax = ax + sx end
+            if e2 <= dx then err = err + dx; ay = ay + sy end
+        end
+    end
+    -- The lines to the vanishing point (from where they're apart), a segment
+    -- per row.
+    for y = HORIZON + 8, 198 do
+        local c, t1, t2 = grid_colour(y), (y - HORIZON) / 87, (y + 1 - HORIZON) / 87
+        for k = -16, 16 do
+            line(160 + math.floor(k * 34 * t1 + 0.5), y, 160 + math.floor(k * 34 * t2 + 0.5), y + 1, c)
+        end
+    end
+    -- The road, edges and all.
+    for y = HORIZON + 1, 199 do
+        local half = road_half(y)
+        for x = 160 - half, 160 + half do put(x, y, ROAD) end
+        put(160 - half, y, EDGE)
+        put(160 + half, y, EDGE)
     end
     local rows = {}
     for y = 0, 199 do
@@ -293,17 +332,12 @@ function S:update(dt)
     end
 end
 
--- Depth 0 (at the bottom of the screen) .. large (at the horizon) -> row.
-local function row_at(d) return HORIZON + math.floor(87 * 1.2 / (d + 1.2)) end
-
 function S:draw()
     local x0, W = -self.wing, self.W
     gfx.blit(x0, 0, W, 200, self.bg)
     local phase = (self.t * 1.6) % 1
-    -- The grid: lines across, coming toward you, and lines to the vanishing point.
-    local function grid_colour(y)        -- by the row: the horizon blue, the bottom red
-        return GRID + math.max(0, math.min(GRID_N - 1, (y - HORIZON) * GRID_N // (200 - HORIZON)))
-    end
+    -- The grid's lines across, coming toward you, either side of the road
+    -- (the rest is in the background).
     local last
     for n = 0, 22 do
         local d = n - phase
@@ -311,24 +345,14 @@ function S:draw()
             local y = row_at(d)
             -- Far lines would merge into a band: a clear row between, none at the horizon.
             if y - HORIZON >= 5 and (not last or last - y >= 2) then
-                gfx.line(x0, y, x0 + W - 1, y, grid_colour(y))
+                local half, c = road_half(y), grid_colour(y)
+                gfx.line(x0, y, 160 - half - 1, y, c)
+                gfx.line(160 + half + 1, y, x0 + W - 1, y, c)
                 last = y
             end
         end
     end
-    for y = HORIZON + 8, 198 do          -- lines to the vanishing point (from where they're apart), a segment per row
-        local c, t1, t2 = grid_colour(y), (y - HORIZON) / 87, (y + 1 - HORIZON) / 87
-        for k = -16, 16 do
-            gfx.line(160 + math.floor(k * 34 * t1 + 0.5), y, 160 + math.floor(k * 34 * t2 + 0.5), y + 1, c)
-        end
-    end
-    -- The road, edges and centre dashes.
-    for y = HORIZON + 1, 199 do
-        local half = math.floor((y - HORIZON) * 52 / 87)
-        gfx.line(160 - half, y, 160 + half, y, ROAD)
-        gfx.pset(160 - half, y, EDGE)
-        gfx.pset(160 + half, y, EDGE)
-    end
+    -- The road's centre dashes.
     for n = 0, 14 do
         local d = n * 1.5 - (self.t * 2.4) % 1.5
         if d > 0.05 then
