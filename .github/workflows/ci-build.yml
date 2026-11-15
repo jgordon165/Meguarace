@@ -10,7 +10,7 @@ on:
         description: Platforms to build
         type: choice
         default: all
-        options: [all, linux, mac-osx, windows]
+        options: [all, linux, mac-osx, windows, saturn]
 
 # Same rule as the Aleph One fork: build pushes, and pull requests only when
 # they come from another repository (a same-repo PR is already built by its push).
@@ -119,3 +119,27 @@ jobs:
           configurations: Release
       - name: Run Tests
         uses: ./.github/actions/run-tests
+
+  # The Sega Saturn build (libyaul): build, boot it in an emulator on
+  # synthetic data and check it, and keep the zip (docs/saturn.md).
+  saturn:
+    if: (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name) &&
+      (github.event_name != 'workflow_dispatch' ||
+      inputs.platforms == 'all' || inputs.platforms == 'saturn')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tool-chain
+        uses: ./.github/actions/setup-saturn
+      - name: Build
+        run: make -C platform/saturn
+      - name: Run Tests
+        uses: ./.github/actions/test-saturn
+      - name: Package
+        run: make -C platform/saturn package
+      - uses: actions/upload-artifact@v6
+        with:
+          name: meguarace-saturn
+          path: platform/saturn/dist/*.zip

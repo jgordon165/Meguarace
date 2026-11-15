@@ -1,0 +1,34 @@
+# The Saturn release: built, booted in an emulator and checked (as in
+# CI-build), then packaged as meguarace-saturn-<version>.zip: the program,
+# the disc builder, the Lua scripts and the guides. Players make the disc
+# from their own CD (docs/saturn.md); no game data is ever in the zip.
+name: release-saturn
+
+on: [workflow_dispatch, workflow_call]
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Tool-chain
+      uses: ./.github/actions/setup-saturn
+
+    - name: Build
+      run: make -C platform/saturn
+
+    - name: Test
+      uses: ./.github/actions/test-saturn
+
+    - name: Package
+      run: make -C platform/saturn package
+
+    - name: Upload
+      uses: actions/upload-artifact@v6
+      with:
+        name: meguarace-saturn-release
+        if-no-files-found: error
+        path: platform/saturn/dist/*.zip

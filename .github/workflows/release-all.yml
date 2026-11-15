@@ -12,3 +12,6 @@ jobs:
   mac-osx:
     uses: ./.github/workflows/release-mac-osx.yml
     secrets: inherit
+
+  saturn:
+    uses: ./.github/workflows/release-saturn.yml
