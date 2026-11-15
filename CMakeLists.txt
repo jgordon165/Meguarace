@@ -21,7 +21,9 @@ include(FetchContent)
 # console (LibXenon, run from XeLL); -DMEGARACE_XENON_SIM=ON builds the same
 # SDL and layout on a PC, to test them (platform/xenon/xenon_platform_sim.c).
 option(MEGARACE_XENON_SIM "Build the Xbox 360's SDL and layout on a PC, for testing" OFF)
-if(MEGARACE_XENON_TARGET OR MEGARACE_XENON_SIM)
+# -DCMAKE_TOOLCHAIN_FILE=<xsdk>/cmake/xsdk.cmake (openpak/x360-sdk, which sets
+# XSDK) builds the 360 as a normal title instead: meguarace.xex.
+if(MEGARACE_XENON_TARGET OR MEGARACE_XENON_SIM OR XSDK)
     set(MEGARACE_XENON ON)
     set(MEGARACE_TESTS OFF CACHE BOOL "" FORCE)
     set(MEGARACE_HD_CONVERTER OFF CACHE BOOL "" FORCE)
@@ -140,7 +142,7 @@ if(APPLE AND _megarace_archs GREATER 1)
         set(FLAG_${flag} 0 CACHE INTERNAL "")
     endforeach()
 endif()
-if(MEGARACE_XENON_TARGET)
+if(MEGARACE_XENON_TARGET OR XSDK)
     # The 360: no threads, and libwebp's SIMD is for other CPUs.
     set(WEBP_USE_THREAD OFF CACHE BOOL "" FORCE)
     set(WEBP_ENABLE_SIMD OFF CACHE BOOL "" FORCE)
@@ -279,6 +281,10 @@ if(MEGARACE_XENON_TARGET)
         COMMAND ${XENON_OBJCOPY} -O elf32-powerpc --adjust-vma 0x80000000
                 $<TARGET_FILE:megarace> $<TARGET_FILE_DIR:megarace>/meguarace.elf32
         COMMENT "meguarace.elf32 for XeLL")
+endif()
+if(XSDK)
+    # A normal title: xsdk links its start-up and library, then packs megarace.xex.
+    xsdk_add_xex(megarace)
 endif()
 megarace_warnings(megarace)
 if(MSVC)
