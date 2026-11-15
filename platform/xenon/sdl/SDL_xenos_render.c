@@ -31,7 +31,11 @@
 
 #define VERTEX_FLOATS 10                 /* x y z w, r g b a, u v */
 #define VERTEX_BYTES (VERTEX_FLOATS * 4)
-#define RING_BYTES (4 * 1024 * 1024)
+/* The vertex ring: a part per frame in flight (the presenter's three
+ * buffers), each reused once the GPU has passed that frame. */
+#define RING_PARTS 3
+#define PART_BYTES (2 * 1024 * 1024)
+#define RING_BYTES (RING_PARTS * PART_BYTES)
 #define WAIT_MS 2000
 
 typedef struct
@@ -39,7 +43,8 @@ typedef struct
     XsdkTexture tex;
     int alloc_w, alloc_h;                /* the texture's size, at least the SDL texture's */
     float u_scale, v_scale;              /* SDL's 0..1 to the allocation's */
-    Uint32 *shadow;                      /* streaming/static: the texels, for partial updates and locks */
+    Uint32 *shadow;                      /* the texels, for partial updates and locks, made when first needed */
+    SDL_bool shadow_valid;               /* the shadow holds what the texture holds */
     SDL_bool target;
     SDL_bool has_content;                /* a target resolved into at least once */
     uint32_t fence;                      /* the last frame's commands that read it */
@@ -61,7 +66,9 @@ typedef struct
 
     volatile uint32_t *ring;
     uint32_t ring_address;
-    uint32_t ring_used;
+    uint32_t ring_used;                  /* bytes into the current part */
+    int ring_part;
+    uint32_t part_fence[RING_PARTS];
 
     SDL_Texture *target;                 /* NULL: the window */
     SDL_bool bound;                      /* eDRAM set up for the current target since the last resolve */
@@ -151,13 +158,14 @@ static void target_size(XenosData *data, int *w, int *h)
 static volatile uint32_t *ring_take(XenosData *data, uint32_t bytes, uint32_t *address)
 {
     volatile uint32_t *at;
+    const uint32_t base = (uint32_t)data->ring_part * PART_BYTES;
     bytes = (bytes + 31) & ~31u;
-    if (data->ring_used + bytes > RING_BYTES) {
+    if (data->ring_used + bytes > PART_BYTES) {
         wait_fence(xsdk_gpu_fence());
         data->ring_used = 0;
     }
-    at = data->ring + data->ring_used / 4;
-    *address = data->ring_address + data->ring_used;
+    at = data->ring + (base + data->ring_used) / 4;
+    *address = data->ring_address + base + data->ring_used;
     data->ring_used += bytes;
     return at;
 }
@@ -297,24 +305,44 @@ static int XENOS_CreateTexture(SDL_Renderer *renderer, SDL_Texture *texture)
     t->u_scale = (float)texture->w / (float)t->alloc_w;
     t->v_scale = (float)texture->h / (float)t->alloc_h;
     if (!target) {
-        t->shadow = (Uint32 *)SDL_calloc((size_t)texture->w * (size_t)texture->h, 4);
-        if (!t->shadow) {
+        /* Starts transparent black, as SDL's do. */
+        Uint32 *row = (Uint32 *)SDL_calloc((size_t)texture->w, 4);
+        int y;
+        if (!row) {
             xsdk_texture_free(&t->tex);
             SDL_free(t);
             return SDL_OutOfMemory();
         }
-        xsdk_texture_upload(&t->tex, 0, t->shadow, (uint32_t)texture->w * 4);
+        for (y = 0; y < texture->h; ++y)
+            xsdk_texture_upload_rows(&t->tex, 0, (uint32_t)y, 1, row, (uint32_t)texture->w * 4);
+        SDL_free(row);
         xsdk_gpu_invalidate(t->tex.address, t->tex.size_bytes);
     }
     texture->driverdata = t;
     return 0;
 }
 
-static void upload_rows(XenosTexture *t, SDL_Texture *texture, int first, int count)
+/* The shadow, for partial updates and locks, filled from the texture if it
+ * went out of date (slow, but the game updates whole textures). */
+static SDL_bool need_shadow(XenosTexture *t, SDL_Texture *texture)
+{
+    if (!t->shadow) {
+        t->shadow = (Uint32 *)SDL_calloc((size_t)texture->w * (size_t)texture->h, 4);
+        if (!t->shadow) return SDL_FALSE;
+        t->shadow_valid = SDL_FALSE;
+    }
+    if (!t->shadow_valid) {
+        wait_fence(t->fence);
+        xsdk_texture_download_rows(&t->tex, 0, 0, (uint32_t)texture->h, t->shadow, (uint32_t)texture->w * 4);
+        t->shadow_valid = SDL_TRUE;
+    }
+    return SDL_TRUE;
+}
+
+static void upload_from(XenosTexture *t, int first, int count, const void *rows, int pitch)
 {
     wait_fence(t->fence);
-    xsdk_texture_upload_rows(&t->tex, 0, (uint32_t)first, (uint32_t)count,
-                             t->shadow + (size_t)first * (size_t)texture->w, (uint32_t)texture->w * 4);
+    xsdk_texture_upload_rows(&t->tex, 0, (uint32_t)first, (uint32_t)count, rows, (uint32_t)pitch);
     xsdk_gpu_invalidate(t->tex.address, t->tex.size_bytes);
 }
 
@@ -324,11 +352,18 @@ static int XENOS_UpdateTexture(SDL_Renderer *renderer, SDL_Texture *texture, con
     XenosTexture *t = (XenosTexture *)texture->driverdata;
     int y;
     (void)renderer;
-    if (!t->shadow) return SDL_SetError("xenos: can't update a render target");
+    if (t->target) return SDL_SetError("xenos: can't update a render target");
+    if (rect->x == 0 && rect->w == texture->w && (pitch & 3) == 0) {
+        /* Whole rows: straight to the GPU's copy, no shadow. */
+        upload_from(t, rect->y, rect->h, pixels, pitch);
+        t->shadow_valid = SDL_FALSE;
+        return 0;
+    }
+    if (!need_shadow(t, texture)) return SDL_OutOfMemory();
     for (y = 0; y < rect->h; ++y)
         SDL_memcpy(t->shadow + (size_t)(rect->y + y) * (size_t)texture->w + rect->x,
                    (const Uint8 *)pixels + (size_t)y * (size_t)pitch, (size_t)rect->w * 4);
-    upload_rows(t, texture, rect->y, rect->h);
+    upload_from(t, rect->y, rect->h, t->shadow + (size_t)rect->y * (size_t)texture->w, texture->w * 4);
     return 0;
 }
 
@@ -337,7 +372,8 @@ static int XENOS_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture, const
 {
     XenosTexture *t = (XenosTexture *)texture->driverdata;
     (void)renderer;
-    if (!t->shadow) return SDL_SetError("xenos: can't lock a render target");
+    if (t->target) return SDL_SetError("xenos: can't lock a render target");
+    if (!need_shadow(t, texture)) return SDL_OutOfMemory();
     *pixels = t->shadow + (size_t)rect->y * (size_t)texture->w + rect->x;
     *pitch = texture->w * 4;
     return 0;
@@ -346,8 +382,10 @@ static int XENOS_LockTexture(SDL_Renderer *renderer, SDL_Texture *texture, const
 static void XENOS_UnlockTexture(SDL_Renderer *renderer, SDL_Texture *texture)
 {
     XenosTexture *t = (XenosTexture *)texture->driverdata;
+    const int first = texture->locked_rect.y, count = texture->locked_rect.h;
     (void)renderer;
-    if (t && t->shadow) upload_rows(t, texture, texture->locked_rect.y, texture->locked_rect.h);
+    if (t && t->shadow)
+        upload_from(t, first, count, t->shadow + (size_t)first * (size_t)texture->w, texture->w * 4);
 }
 
 static void XENOS_SetTextureScaleMode(SDL_Renderer *renderer, SDL_Texture *texture, SDL_ScaleMode mode)
@@ -602,14 +640,23 @@ static int XENOS_RenderPresent(SDL_Renderer *renderer)
 {
     XenosData *data = (XenosData *)renderer->driverdata;
     SDL_Texture *was = data->target;
-    uint32_t fence;
+    uint32_t address;
     if (was) XENOS_SetRenderTarget(renderer, NULL);
     bind(data);
-    xsdk_gpu_resolve(xp_gpu_back_buffer(), (uint32_t)data->out_w, (uint32_t)data->out_h, 0);
-    data->bound = SDL_FALSE;
-    fence = xsdk_gpu_fence();
-    wait_fence(fence);
-    xp_gpu_show();
+    /* Waits for a buffer off screen (the TV's 60 Hz paces the game), then
+     * queues the frame to show at a vblank once the GPU has drawn it; the
+     * CPU goes on to the next frame meanwhile. */
+    address = xp_gpu_begin_frame();
+    if (address) {
+        xsdk_gpu_resolve(address, (uint32_t)data->out_w, (uint32_t)data->out_h, 0);
+        data->bound = SDL_FALSE;
+        data->part_fence[data->ring_part] = xsdk_gpu_fence();
+        xp_gpu_end_frame();
+    } else {
+        data->part_fence[data->ring_part] = xsdk_gpu_fence();
+    }
+    data->ring_part = (data->ring_part + 1) % RING_PARTS;
+    wait_fence(data->part_fence[data->ring_part]);
     data->ring_used = 0;
     data->window_drawn = SDL_FALSE;
     if (was) XENOS_SetRenderTarget(renderer, was);

@@ -2,9 +2,10 @@
  * title, a .xex launched from the dashboard, Aurora or a file manager on a
  * console that runs unsigned code (BadUpdate + FreeMyXe, RGH, JTAG).
  *
- * The picture: two 1280x720 front buffers the CPU fills in the tiled layout
- * the display reads (each pixel stored B, G, R, A), shown with
- * xsdk_display_show as xsdk's splash does. The sound: the kernel's render
+ * The picture: xsdk's presenter, three 1280x720 front buffers flipped at
+ * vblank. The GPU renderer (sdl/SDL_xenos_render.c) resolves each frame into
+ * one; without it the CPU fills one in the tiled layout the display reads
+ * (each pixel stored B, G, R, A). The sound: the kernel's render
  * driver asks for 256 frames at a time, 6 channels of floats one after the
  * other; a ring of 16-bit stereo, filled from the game's thread, feeds it.
  * Files: newlib paths from "game:\", the title's own folder. */
@@ -18,6 +19,7 @@
 #include "xsdk/gpu.h"
 #include "xsdk/kernel.h"
 #include "xsdk/log.h"
+#include "xsdk/present.h"
 #include "xsdk/thread.h"
 
 /* In libxsdk.a, declared in its private gpu_private.h: the byte offset of
@@ -26,11 +28,9 @@ extern uint32_t xsdk_tiled_2d(uint32_t x, uint32_t y, uint32_t pitch_texels, uin
 
 static int started;
 static uint32_t tv_w = 1280, tv_h = 720;
-static volatile uint32_t *buffers[2];
 static uint32_t *staging;          /* the next frame, tiled, in cached memory */
 static uint32_t *tile_index;       /* per linear pixel, its word in a tiled buffer */
 static uint32_t buffer_words;
-static int next_buffer;
 static int display_up;
 static int gpu_up;
 
@@ -54,7 +54,9 @@ int xp_init(void)
     xsdk_log_write("Meguarace for the Xbox 360 (xsdk)");
     if (NT_SUCCESS(xsdk_gpu_open())) gpu_up = 1;
     else xsdk_log_write("gpu open failed");
-    if (NT_SUCCESS(xsdk_display_open(XSDK_DISPLAY_720P, &w, &h)) && w && h) {
+    /* Three buffers, each frame shown for one vblank at least: the game runs
+     * at the TV's 60 Hz, a frame ahead while the GPU finishes the last. */
+    if (NT_SUCCESS(xsdk_present_open(XSDK_DISPLAY_720P, 3, 1, &w, &h)) && w && h) {
         tv_w = w;
         tv_h = h;
         display_up = 1;
@@ -62,11 +64,9 @@ int xp_init(void)
         xsdk_log_write("display open failed");
     }
     buffer_words = xsdk_gpu_resolve_bytes(tv_w, tv_h) / 4;
-    buffers[0] = xsdk_gpu_alloc(buffer_words * 4);
-    buffers[1] = xsdk_gpu_alloc(buffer_words * 4);
     staging = (uint32_t *)calloc(buffer_words, 4);
     tile_index = (uint32_t *)malloc(sizeof(uint32_t) * tv_w * tv_h);
-    if (!buffers[0] || !buffers[1] || !staging || !tile_index) {
+    if (!staging || !tile_index) {
         xsdk_log_write("out of memory for the picture");
         display_up = 0;
         return 0;
@@ -86,10 +86,39 @@ void xp_display_size(int *w, int *h)
     *h = (int)tv_h;
 }
 
+/* Every 10 s, the frames' pace for the log: how long a frame took on
+ * average and at worst, and the vblanks that showed no new frame. */
+static uint64_t stats_start, stats_last, stats_worst;
+static uint32_t stats_frames, stats_missed;
+
+static void frame_stats(void)
+{
+    const uint64_t now = time_base();
+    if (stats_last) {
+        const uint64_t d = now - stats_last;
+        if (d > stats_worst) stats_worst = d;
+    } else {
+        stats_start = now;
+    }
+    stats_last = now;
+    ++stats_frames;
+    if (now - stats_start >= 10ull * 49875000ull && stats_frames > 1) {
+        XsdkPresentStats ps;
+        xsdk_present_stats(&ps);
+        xsdk_log_write("frames: %u in 10 s, %.1f ms average, %.1f ms at worst; %u vblanks without a new frame",
+                       (unsigned)stats_frames, (double)(now - stats_start) / 49875.0 / (double)(stats_frames - 1),
+                       (double)stats_worst / 49875.0, (unsigned)(ps.missed - stats_missed));
+        stats_missed = ps.missed;
+        stats_start = now;
+        stats_frames = 1;
+        stats_worst = 0;
+    }
+}
+
 void xp_present(const uint32_t *argb, int w, int h, int pitch)
 {
     volatile uint32_t *dst;
-    uint32_t i;
+    uint32_t i, address;
     int y;
     if (!display_up) return;
     if (w > (int)tv_w) w = (int)tv_w;
@@ -100,29 +129,34 @@ void xp_present(const uint32_t *argb, int w, int h, int pitch)
         int x;
         for (x = 0; x < w; ++x) staging[idx[x]] = __builtin_bswap32(src[x] | 0xFF000000u);
     }
+    if (!NT_SUCCESS(xsdk_present_begin(&address, 200))) return;
     /* Write-combined memory: one pass of 32-bit stores, in order. */
-    dst = buffers[next_buffer];
+    dst = xsdk_present_pixels(address);
     for (i = 0; i < buffer_words; ++i) dst[i] = staging[i];
     __asm__ volatile("sync" ::: "memory");
-    xsdk_display_show(xsdk_gpu_address(dst), tv_w);
-    next_buffer ^= 1;
+    xsdk_present_end();
+    frame_stats();
 }
 
-/* The GPU renderer's frames: resolved by the GPU into the buffer not on
- * screen, then shown. */
+/* The GPU renderer's frames: a front buffer off screen to resolve into, then
+ * queued to show at a vblank once the GPU has finished it. */
 int xp_gpu_ready(void)
 {
     xp_init();
     return gpu_up && display_up;
 }
 
-uint32_t xp_gpu_back_buffer(void) { return xsdk_gpu_address(buffers[next_buffer]); }
-
-void xp_gpu_show(void)
+uint32_t xp_gpu_begin_frame(void)
 {
-    if (!display_up) return;
-    xsdk_display_show(xsdk_gpu_address(buffers[next_buffer]), tv_w);
-    next_buffer ^= 1;
+    uint32_t address = 0;
+    if (!display_up || !NT_SUCCESS(xsdk_present_begin(&address, 200))) return 0;
+    return address;
+}
+
+void xp_gpu_end_frame(void)
+{
+    xsdk_present_end();
+    frame_stats();
 }
 
 static xp_pad pads[4];
