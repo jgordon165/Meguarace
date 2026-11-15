@@ -237,8 +237,17 @@ void xp_audio_submit(const void *s16le, int bytes)
 static RTL_CRITICAL_SECTION mixer_lock;
 static int mixer_lock_ready;
 
-void xp_lock(void) { if (mixer_lock_ready) RtlEnterCriticalSection(&mixer_lock); }
-void xp_unlock(void) { if (mixer_lock_ready) RtlLeaveCriticalSection(&mixer_lock); }
+/* Made on first use, which is on the game's thread before the feeder starts,
+ * so every unlock has its lock. */
+static void mixer_lock_init(void)
+{
+    if (mixer_lock_ready) return;
+    RtlInitializeCriticalSection(&mixer_lock);
+    mixer_lock_ready = 1;
+}
+
+void xp_lock(void) { mixer_lock_init(); RtlEnterCriticalSection(&mixer_lock); }
+void xp_unlock(void) { RtlLeaveCriticalSection(&mixer_lock); }
 
 /* The feeder: a thread on hardware thread 2 (the game runs on 0) that tops
  * the ring up every 2 ms, so a slow frame doesn't starve the sound. */
@@ -259,10 +268,7 @@ static uint32_t feeder_main(void *context)
 int xp_audio_start_feeder(void (*fill)(void))
 {
     if (feeder_thread) return 1;
-    if (!mixer_lock_ready) {
-        RtlInitializeCriticalSection(&mixer_lock);
-        mixer_lock_ready = 1;
-    }
+    mixer_lock_init();
     feeder_fill = fill;
     __atomic_store_n(&feeder_run, 1, __ATOMIC_RELEASE);
     if (!NT_SUCCESS(xsdk_thread_create_on(&feeder_thread, 256 * 1024, feeder_main, NULL, 2))) {
