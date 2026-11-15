@@ -60,11 +60,12 @@ void xp_lock(void);
 void xp_unlock(void);
 
 /* xsdk only, for the GPU renderer (sdl/SDL_xenos_render.c): whether the GPU
- * and display started; the GPU address of the front buffer not on screen, to
- * resolve the next frame into; and showing it once the GPU has finished. */
+ * and display started; the GPU address of a front buffer off screen to
+ * resolve the next frame into (waiting for one; 0 if none came); and queuing
+ * it to show at a vblank once the GPU has finished it. */
 int xp_gpu_ready(void);
-uint32_t xp_gpu_back_buffer(void);
-void xp_gpu_show(void);
+uint32_t xp_gpu_begin_frame(void);
+void xp_gpu_end_frame(void);
 
 /* A line for the log (the TV console before the game starts, the UART). */
 void xp_log(const char *msg);
