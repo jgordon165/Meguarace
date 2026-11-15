@@ -234,3 +234,44 @@ void xp_audio_submit(const void *s16le, int bytes)
 }
 
 void xp_log(const char *msg) { xsdk_log_write("%s", msg); }
+
+/* ---- what newlib asks of the system and xsdk leaves out ----------------------
+ * system() (Lua's os.execute) wants fork, execve and wait: there are no
+ * processes, so they fail. clock() (Lua's os.clock) wants times(): the time
+ * base, counted as processor time. */
+#include <errno.h>
+#include <sys/times.h>
+#include <sys/types.h>
+#include <time.h>
+
+pid_t fork(void)
+{
+    errno = ENOSYS;
+    return -1;
+}
+
+int execve(const char *path, char *const argv[], char *const envp[])
+{
+    (void)path; (void)argv; (void)envp;
+    errno = ENOSYS;
+    return -1;
+}
+
+pid_t wait(int *status)
+{
+    (void)status;
+    errno = ECHILD;
+    return -1;
+}
+
+clock_t times(struct tms *t)
+{
+    const clock_t c = (clock_t)(time_base() / (49875000ull / CLOCKS_PER_SEC));
+    if (t) {
+        t->tms_utime = c;
+        t->tms_stime = 0;
+        t->tms_cutime = 0;
+        t->tms_cstime = 0;
+    }
+    return c;
+}
