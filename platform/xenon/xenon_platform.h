@@ -59,6 +59,13 @@ void xp_audio_stop_feeder(void);
 void xp_lock(void);
 void xp_unlock(void);
 
+/* xsdk only, for the GPU renderer (sdl/SDL_xenos_render.c): whether the GPU
+ * and display started; the GPU address of the front buffer not on screen, to
+ * resolve the next frame into; and showing it once the GPU has finished. */
+int xp_gpu_ready(void);
+uint32_t xp_gpu_back_buffer(void);
+void xp_gpu_show(void);
+
 /* A line for the log (the TV console before the game starts, the UART). */
 void xp_log(const char *msg);
 
