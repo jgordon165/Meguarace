@@ -14,9 +14,10 @@ function M.label(name, _, _, hd)
 end
 
 -- TRACK SPEED (Options > ADVANCED): the track video's speed in races.
-M.TRACK_SPEED_ORDER = { "normal", "fast", "faster", "fastest" }
-M.TRACK_SPEEDS = { normal = 1.0, fast = 1.25, faster = 1.33, fastest = 1.5 }
-M.TRACK_SPEED_LABELS = { normal = "NORMAL", fast = "FAST +25%", faster = "FASTER +33%", fastest = "FASTEST +50%" }
+M.TRACK_SPEED_ORDER = { "normal", "fast", "faster", "fastest", "max" }
+M.TRACK_SPEEDS = { normal = 1.0, fast = 1.25, faster = 1.33, fastest = 1.5, max = 1.75 }
+M.TRACK_SPEED_LABELS = { normal = "NORMAL", fast = "FAST +25%", faster = "FASTER +33%", fastest = "FASTEST +50%",
+                         max = "MAX +75%" }
 
 -- SHARPEN (Options > ADVANCED): after the smoothing.
 M.SHARPEN_ORDER = { "off", "light", "strong" }
@@ -35,7 +36,7 @@ M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
     music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off", messages = "classic",
     dashboard = "original", menus = "original", menu_status = "strip",
-    voice_filter = false, lance_smoother = false, crossfade = false,
+    voice_filter = false, lance_smoother = false, crossfade = false, anti_alias = false,
 }
 
 -- The settings in effect: the saved ones, or with --classic those over a copy.
@@ -68,6 +69,7 @@ function M.apply_saved(state)
     require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 2
     require("scenes.race").big_messages = state.messages ~= "classic"
     require("scenes.race").crossfade = state.crossfade ~= false
+    if gfx.anti_alias then gfx.anti_alias(state.anti_alias ~= false) end
     require("formats.cars").hd_dashboard = state.dashboard ~= "original"
     gfx.hd_menus(state.menus ~= "original")
     if sys.display_arg ~= "" or not state.display then return end

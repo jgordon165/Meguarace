@@ -188,11 +188,13 @@ FASTER (+33%), CROSSFADE and TRACK COLOR INTENSE:
   (the default), or SAME
 - HD FOLDER: where the packs go (the default is your user folder)
 - MUSIC: ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default, a dance remix) ([docs/music.md](docs/music.md))
-- TRACK SPEED: NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how much
+- TRACK SPEED: NORMAL, FAST (+25%), FASTER (+33%), FASTEST (+50%) or MAX (+75%): how much
   faster the track video scrolls in races
 - CROSSFADE: ON (the default) or OFF: in races the track video's next frame
   is mixed in as you move toward it, so the scenery glides instead of
   stepping at the video's 12.5 frames a second (a dissolve, not new motion)
+- ANTI-ALIAS (Xbox 360): ON (the default) or OFF: the track video scaled
+  up on the GPU with its diagonal edges smoothed instead of in square steps
 - TRACK COLOR: OFF, VIVID (the default) or INTENSE: more colour and contrast
   on the track video in races (the cars, HUD and text untouched)
 - MESSAGES: ENHANCED (the race's messages as big as LAPS and the score,

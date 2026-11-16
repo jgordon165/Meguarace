@@ -37,13 +37,20 @@
 --                 ENHANCED, the default (a dance remix on that SoundFont:
 --                 layered synths, dance drums with a four-on-the-floor kick,
 --                 sidechain pumping, a delay in time with the song).
---   TRACK SPEED   NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how
+--   TRACK SPEED   NORMAL, FAST (+25%), FASTER (+33%), FASTEST (+50%) or MAX
+--                 (+75%): how
 --                 much faster the track video scrolls in races (the race goes
 --                 by quicker; the rest is unchanged).
 --   CROSSFADE     ON or OFF: in races, the track video's next frame mixed in
 --                 as the race moves toward it, so the scenery glides between
 --                 the video's 12.5 frames a second instead of stepping (a
 --                 dissolve, not new motion: fast edges can ghost a little).
+--   ANTI-ALIAS    ON or OFF, where the GPU has the shader (the Xbox 360):
+--                 the track video scaled up with its diagonal edges smoothed
+--                 (each pixel interpolated along the edge it sits on, kept
+--                 crisp across it) instead of in square steps. In the HD
+--                 resolutions; it takes over from SMOOTHING and SHARPEN for
+--                 the video.
 --   TRACK COLOR   OFF, VIVID or INTENSE: more colour and contrast on the
 --                 track video in races (the cars, HUD and text untouched).
 --   MESSAGES      ENHANCED (the race's messages, SKID, ENERGY + and so on, as
@@ -71,14 +78,19 @@ local display = require("game.display")
 
 local S = { overlay = true, hd_menu = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "crossfade", "color", "messages", "menus", "status", "dashboard", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "crossfade", "aa", "color", "messages", "menus", "status", "dashboard", "voice" }
+-- ANTI-ALIAS only where the renderer has it (the Xbox 360's GPU).
+if not (gfx.anti_alias_available and gfx.anti_alias_available()) then
+    for i, v in ipairs(ITEMS) do if v == "aa" then table.remove(ITEMS, i) break end end
+end
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", crossfade = "CROSSFADE", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", menus = "MENUS", status = "MENU STATUS", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", crossfade = "CROSSFADE", aa = "ANTI-ALIAS", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", menus = "MENUS", status = "MENU STATUS", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
 local TOP, H = 16, 174
-local TITLE_Y, FIRST_Y, STEP = 21, 32, 9
+local TITLE_Y, FIRST_Y = 21, 32
+local STEP = #ITEMS > 17 and 8 or 9          -- rows closer when there are more, so they fit the box
 
 -- The box: as wide as the screen allows (16:9 adds the wings).
 local function box()
@@ -128,6 +140,7 @@ function S:value(what)
     elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "crossfade" then return display.effective(self.state).crossfade == false and "OFF" or "ON"
+    elseif what == "aa" then return display.effective(self.state).anti_alias == false and "OFF" or "ON"
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
     elseif what == "messages" then return display.effective(self.state).messages == "classic" and "CLASSIC" or "ENHANCED"
     elseif what == "status" then return (display.effective(self.state).menu_status or "plate"):upper()
@@ -188,6 +201,9 @@ function S:change(what, dir)
         for k, v in ipairs(order) do if v == st.track_speed then i = k end end
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
+    elseif what == "aa" then
+        st.anti_alias = st.anti_alias == false
+        gfx.anti_alias(st.anti_alias)
     elseif what == "crossfade" then
         st.crossfade = st.crossfade == false
         require("scenes.race").crossfade = st.crossfade

@@ -20,7 +20,10 @@ The game draws on the 360's GPU (Xenos), so it starts in its HD mode,
 scaled to the TV, with everything as on the PC (smoothing, sharpen, the 16:9
 sides, the ENHANCED music). If the GPU won't start, it draws on the CPU
 instead and starts at 320x200 (the HD modes are too slow that way); the log
-says which. The sound is mixed on a hardware thread of its own.
+says which. Frames flip at the TV's vblank (60 Hz, three buffers); the log has the
+frame times every 10 s. Options > ADVANCED > ANTI-ALIAS (on by default)
+smooths the track video's diagonal edges on the GPU.
+The sound is mixed on a hardware thread of its own.
 
 Controls
 --------
