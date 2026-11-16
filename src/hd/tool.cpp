@@ -94,6 +94,20 @@ static std::string upper(std::string s) {
     return s;
 }
 
+// dir (which exists) as the file system lists it: found among its parent's
+// entries, so the path is one the system gave, absolute and normal.
+static std::string listedFolder(const std::string& dir) {
+    std::error_code ec;
+    fs::path p = fs::absolute(fs::path(dir), ec).lexically_normal();
+    if (ec) return {};
+    if (p.filename().empty()) p = p.parent_path();   // a trailing separator
+    const fs::path parent = p.parent_path();
+    if (parent.empty() || parent == p) return fs::is_directory(p, ec) ? p.string() : std::string();   // a root
+    for (const auto& e : fs::directory_iterator(parent, ec))
+        if (e.path().filename() == p.filename() && e.is_directory(ec)) return e.path().string();
+    return {};
+}
+
 static std::string exeDir() {
     char* b = SDL_GetBasePath();
     std::string r = b ? b : "";
@@ -226,10 +240,14 @@ int main(int argc, char** argv) {
 
     const std::string user = outArg.empty() ? userDir() : std::string();
     if (outArg.empty() && user.empty()) { std::fprintf(stderr, "no user folder: %s\n", SDL_GetError()); return 1; }
-    const std::string out = outArg.empty() ? hd::packFolder(user) : outArg;
+    const std::string asked = outArg.empty() ? hd::packFolder(user) : outArg;
     std::error_code ec;
-    fs::create_directories(out, ec);
-    if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", out.c_str(), ec.message().c_str()); return 1; }
+    fs::create_directories(asked, ec);
+    if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", asked.c_str(), ec.message().c_str()); return 1; }
+    // Every path below is built on the folder as its parent's listing names
+    // it: an existing folder, absolute and without "..".
+    const std::string out = listedFolder(asked);
+    if (out.empty()) { std::fprintf(stderr, "cannot find %s\n", asked.c_str()); return 1; }
     opt.tempDir = (fs::path(out) / ".work").string();
     {
         std::ofstream note(fs::path(out) / "README.txt");
