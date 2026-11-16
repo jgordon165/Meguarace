@@ -104,7 +104,8 @@ Settings, progress and high scores are saved in your user preferences folder
 (`meguarace.sav`). Options → Save and Load keep named saves there as well,
 as the original does.
 
-In a race: Up accelerates, Down brakes, Left/Right steer, Space fires (F1
+In a race: Up accelerates, Down brakes, Left/Right steer, Space fires, P or
+Pause pauses (PAUSED shows, the sound holds; press again to go on; F1
 shows a debug line). Options → Keyboard sets your own keys, on the
 original's key setup screen.
 The dashboard is each car's own: speed, energy and armour (SP/EN/DM)
@@ -146,7 +147,7 @@ the LibXenon (Free60) toolchain and uploads `meguarace-xbox360.zip`.
 3. Start XeLL and load `meguarace/meguarace.elf32` from the stick.
 
 Controls: left stick or D-pad steers and moves in menus, RT accelerates, LT
-brakes, X or RB fires, A or START chooses, B or BACK goes back, Y turns HD
+brakes, X or RB fires, A or START chooses (START pauses a race), B or BACK goes back, Y turns HD
 pictures on and off, LB turns the menu music on and off. Names (Hall of
 Fame, saves) are typed with the D-pad: Up/Down change the letter, Right adds
 one, Left takes one off. Saves go in `meguarace/save/`.

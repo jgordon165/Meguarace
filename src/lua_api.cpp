@@ -348,6 +348,8 @@ static int audio_song_volume(lua_State* L) { E(L).audio.setSongVolume(static_cas
 
 static int audio_stop(lua_State* L) { E(L).audio.stopVoice(ci(L, 1)); return 0; }
 static int audio_stop_all(lua_State* L) { E(L).audio.stopAll(); return 0; }
+// audio.pause(on): everything held where it is, silence until audio.pause(false).
+static int audio_pause(lua_State* L) { E(L).audio.setPaused(lua_toboolean(L, 1)); return 0; }
 
 // ------------------------------------------------------------- input ------
 
@@ -962,7 +964,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
     static const luaL_Reg audio[] = {
         {"music", audio_music}, {"stop_music", audio_stop_music},
         {"music_playing", audio_music_playing}, {"music_volume", audio_music_volume},
-        {"pcm", audio_pcm}, {"stop", audio_stop}, {"stop_all", audio_stop_all},
+        {"pcm", audio_pcm}, {"stop", audio_stop}, {"stop_all", audio_stop_all}, {"pause", audio_pause},
         {"stream_reset", audio_stream_reset}, {"stream_push", audio_stream_push},
         {"stream_queued", audio_stream_queued}, {"stream_played", audio_stream_played},
         {"stream_voice_filter", audio_stream_voice_filter}, {"stream_voice_bypass", audio_stream_voice_bypass},

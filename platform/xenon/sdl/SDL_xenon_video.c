@@ -19,10 +19,10 @@ extern void XENON_AudioPump(void);
 
 /* Controller -> keys. The game knows keys only, so each button stands for
  * the key that does the same job on a PC (README: "Xbox 360"). */
-enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_RETURN, K_ESCAPE, K_SPACE, K_F10, K_M, K_BACKSPACE, K_COUNT };
+enum { K_UP, K_DOWN, K_LEFT, K_RIGHT, K_RETURN, K_ESCAPE, K_SPACE, K_F10, K_M, K_BACKSPACE, K_P, K_COUNT };
 static const SDL_Scancode key_code[K_COUNT] = {
     SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_RETURN,
-    SDL_SCANCODE_ESCAPE, SDL_SCANCODE_SPACE, SDL_SCANCODE_F10, SDL_SCANCODE_M, SDL_SCANCODE_BACKSPACE,
+    SDL_SCANCODE_ESCAPE, SDL_SCANCODE_SPACE, SDL_SCANCODE_F10, SDL_SCANCODE_M, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_P,
 };
 static int key_down[K_COUNT];
 
@@ -41,6 +41,7 @@ static void key_map(const xp_pad *p, int *k)
     k[K_F10] |= p->y;                                             /* HD on/off */
     k[K_M] |= p->lb;                                              /* music on/off in the menu */
     k[K_BACKSPACE] |= p->rs;
+    k[K_P] |= p->start;                                          /* pause in races (START is RETURN too) */
 }
 
 static void XENON_PumpEvents(_THIS)
