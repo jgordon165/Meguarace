@@ -79,6 +79,11 @@ public:
     bool enableHd(int picW, int picH);
     void disableHd();          // no packs any more: back to native if in an HD mode
     bool hdAvailable() const { return picW_ > 0; }
+    // Whether the renderer draws on a GPU (not SDL's software renderer).
+    bool accelerated() const {
+        SDL_RendererInfo info{};
+        return renderer_ && SDL_GetRendererInfo(renderer_, &info) == 0 && (info.flags & SDL_RENDERER_ACCELERATED);
+    }
     int  hdPictureW() const { return picW_; }
     int  hdPictureH() const { return picH_; }
     bool setMode(const std::string& name);          // false: unknown or not available

@@ -32,7 +32,8 @@ list(APPEND xsdl_sources
 if(MEGARACE_XENON_SIM)
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xenon_platform_sim.c)
 elseif(XSDK)
-    list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xsdk_platform.c)
+    # The GPU renderer, in SDL's VITA_GXM driver slot (see the file).
+    list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xsdk_platform.c ${xsdl_dir}/SDL_xenos_render.c)
 else()
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xenon_platform.c)
 endif()
@@ -43,6 +44,9 @@ target_include_directories(sdl2_xenon PRIVATE ${SDL2_SRC}/src)
 # Turns SDL's dynamic API off (src/dynapi/SDL_dynapi.h can only be told so
 # this way); on GCC it changes nothing else.
 target_compile_definitions(sdl2_xenon PRIVATE SDL_THREAD_SAFETY_ANALYSIS=1)
+if(XSDK)
+    target_compile_definitions(sdl2_xenon PRIVATE SDL_VIDEO_RENDER_VITA_GXM=1)
+endif()
 if(NOT MSVC)
     target_compile_options(sdl2_xenon PRIVATE -w)
 endif()

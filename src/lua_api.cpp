@@ -1042,5 +1042,9 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, "pc");
 #endif
     lua_setfield(L, -2, "platform");
+    // Whether the pictures are drawn on a GPU (on the Xbox 360, Xenos; else
+    // SDL's software renderer, too slow there for the HD modes).
+    lua_pushboolean(L, e.video.accelerated());
+    lua_setfield(L, -2, "gpu");
     lua_pop(L, 1);
 }
