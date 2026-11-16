@@ -36,6 +36,10 @@ S.track_color = 2
 -- the big race font with an outline and no box (true), or the original's
 -- small text on a black box.
 S.big_messages = true
+-- Options > ADVANCED > CROSSFADE: the next track video frame mixed in as the
+-- race moves toward it, so the scenery glides between the video's 12.5
+-- frames a second instead of stepping (a dissolve, not new motion).
+S.crossfade = true
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
@@ -54,6 +58,7 @@ function S:enter(name, opts)
     gfx.video_grade(S.track_color)
     ui.install()
     self.T = track.open(name)
+    self.ahead = nil                          -- CROSSFADE's look-ahead on the video
     self.rules = rules.new(opts.car or "JO")
     self.pos = 0.0
     self.carx, self.view, self.steer = 160, 0, 0
@@ -99,7 +104,7 @@ function S:enter(name, opts)
     music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
-function S:leave() gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
+function S:leave() self.ahead = nil; gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
 function S:pause() gfx.video_grade(0) end
 function S:resume() gfx.video_grade(S.track_color) end
 
@@ -593,6 +598,27 @@ function S:draw_shot()
     end
 end
 
+-- CROSSFADE: frame f + 1, from a second handle on the video (decoding runs
+-- forward, so the race's own stays on f), over frame f by how far the race
+-- is between them. Not across a palette change (a cut or a flash).
+function S:blend_ahead(f)
+    local T = self.T
+    local t = self.pos - f
+    if t <= 0.01 or f + 1 >= T.frames then return end
+    if self.ahead == nil then
+        self.ahead = hnm.open(T.name .. ".HNM") or false
+        self.ahead_frame, self.ahead_ok = -1, false
+    end
+    if not self.ahead then return end
+    if self.ahead_frame ~= f + 1 then
+        local first = self.ahead_frame < 0     -- a new handle's first frame always brings its palette
+        local info = self.ahead:decode(f + 1)
+        self.ahead_frame = f + 1
+        self.ahead_ok = info ~= nil and info.video and (first or not info.palette_changed)
+    end
+    if self.ahead_ok then self.ahead:blend(0, track.VIDEO_Y, t) end
+end
+
 function S:draw()
     local T, s = self.T, self.rules
     local f = math.floor(self.pos)
@@ -608,6 +634,7 @@ function S:draw()
     end
     gfx.clear(0)
     T.video:draw(0, track.VIDEO_Y)
+    if S.crossfade then self:blend_ahead(f) end
     if not self.boom then
         gfx.setcolor(C_TEXT, 235, 235, 240)
         gfx.setcolor(C_WARN, 255, 80, 60)

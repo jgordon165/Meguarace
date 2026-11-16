@@ -148,6 +148,12 @@ public:
     // index) show the original pixel instead. Returns how many did.
     long blitHd(int ox, int oy, int fx, int fy, int w, int h, const uint8_t* src, size_t len,
                 int transparent, const uint32_t* pic, int picW, int picH, const uint8_t* baked);
+    // CROSSFADE (Options > ADVANCED): the next video frame, `t` (0..1) of the
+    // way over the one drawn this frame. blendVideo takes its pixels (in the
+    // current palette) for the video pixels; blendHd its HD picture, mixed
+    // into the HD layer where the frame's rectangle is. Until clear().
+    void blendVideo(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent, float t);
+    void blendHd(int ox, int oy, int fx, int fy, int w, int h, const uint32_t* pic, int picW, int picH, float t);
     // sprite() at scale 1, also drawn into the HD layer from its HD image
     // (hd::SpriteImage: hdW x hdH, 0xAARRGGBB; `indexed`: the palette index in
     // RR, coloured from the current palette now). What's under it in the HD
@@ -174,6 +180,11 @@ private:
     SDL_Texture*  texture_  = nullptr;
     int w_ = 320, h_ = 200;
     std::vector<uint8_t> fb_;
+    // blendVideo's frame: 0x100 | its palette index, 0 where none; blendT_ of 256.
+    std::vector<uint16_t> blend_;
+    bool blendOn_ = false;
+    uint32_t blendT_ = 0;
+    uint32_t blended(size_t i, uint32_t c, const uint32_t* pal) const;
     std::array<uint32_t, 256> pal_{};
     std::vector<uint32_t> rgba_;
     std::vector<std::vector<int>> clip_;
