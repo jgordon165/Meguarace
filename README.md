@@ -169,7 +169,7 @@ content. It upscales the menu graphics too. Run `hd-conversion-utility --data V:
 once, then use **Options > ADVANCED** (Down past QUIT). By default the game
 starts at the largest resolution that fits, in 16:9 with SPACE sides, LINE
 TRIPLED, SMOOTHING SUBTLE with SHARPEN LIGHT, ENHANCED music, TRACK SPEED
-FASTER (+33%) and TRACK COLOR INTENSE:
+FASTER (+33%), CROSSFADE and TRACK COLOR INTENSE:
 - RESOLUTION: 800×600, 1024×768 or 1920×1080, or 320×200 for the original
   (also `--display`)
 - ASPECT: 4:3 or 16:9 (the videos stay 4:3 in the middle; the race dashboard
@@ -189,6 +189,9 @@ FASTER (+33%) and TRACK COLOR INTENSE:
 - MUSIC: ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default, a dance remix) ([docs/music.md](docs/music.md))
 - TRACK SPEED: NORMAL, FAST (+25%), FASTER (+33%) or FASTEST (+50%): how much
   faster the track video scrolls in races
+- CROSSFADE: ON (the default) or OFF: in races the track video's next frame
+  is mixed in as you move toward it, so the scenery glides instead of
+  stepping at the video's 12.5 frames a second (a dissolve, not new motion)
 - TRACK COLOR: OFF, VIVID (the default) or INTENSE: more colour and contrast
   on the track video in races (the cars, HUD and text untouched)
 - MESSAGES: ENHANCED (the race's messages as big as LAPS and the score,

@@ -50,6 +50,7 @@ function M.defaults()
         aspect = "16:9",           -- HD modes: "4:3" or "16:9" (wings either side of the game's screen)
         sides = "space",           -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
         lance_smoother = false,    -- Lance's clips one smoothing level softer than the other videos (SAME: no)
+        crossfade = true,          -- the track video's frames mixed into each other in races (CROSSFADE)
         track_speed = "faster",    -- track video speed in races: "normal", "fast" (+25%), "faster" (+33%), "fastest" (+50%)
         track_color = "intense",   -- track video in races: "off", "vivid" or "intense" (more colour and contrast)
         music_style = "enhanced",  -- "original" (OPL2), "stereo" (FM), "soundfont" or "enhanced" (the EDM remix; Options > ADVANCED)

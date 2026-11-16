@@ -257,8 +257,10 @@ static int gfx_nearest(lua_State* L) {
     return 1;
 }
 
+// gfx.screenshot(path [, as_shown]): the screen as a BMP; as_shown: the
+// window as drawn (HD modes: every layer, scaled), else the 320x200 screen.
 static int gfx_screenshot(lua_State* L) {
-    lua_pushboolean(L, E(L).video.saveBmp(luaL_checkstring(L, 1)));
+    lua_pushboolean(L, E(L).video.saveBmp(luaL_checkstring(L, 1), lua_toboolean(L, 2)));
     return 1;
 }
 
@@ -653,6 +655,24 @@ static int hnm_draw(lua_State* L) {
     return 0;
 }
 
+// v:blend(x, y, t): CROSSFADE. This video's decoded frame mixed t (0..1) of
+// the way over the frame drawn this frame (another handle on the same video
+// drew it), in the video pixels it covers; in the HD layer too when that
+// shows. Drawn at x, y like :draw. Until gfx.clear.
+static int hnm_blend(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    const auto& f = h->frame;
+    if (!f.hasVideo) return 0;
+    int ox = int(luaL_optinteger(L, 2, 0)), oy = int(luaL_optinteger(L, 3, 0));
+    float t = float(luaL_checknumber(L, 4));
+    Video& v = h->eng->video;
+    v.blendVideo(ox + f.x, oy + f.y, f.w, f.h, f.pixels.data(), f.pixels.size(), f.overlay ? 0 : -1, t);
+    if (h->pack && v.hdOn())
+        if (const auto* pic = h->pack->frame(h->index))
+            v.blendHd(ox, oy, f.x, f.y, f.w, f.h, pic->data(), h->pack->hdWidth(), h->pack->hdHeight(), t);
+    return 0;
+}
+
 // v:blit(i, x, y, w, h, pixels [, key]): gfx.blit for frame i of this video,
 // decoded earlier (the player decodes ahead and draws later). x, y are the
 // frame's own position (decode's info.x, info.y). Uses the HD pack like :draw.
@@ -963,7 +983,7 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {nullptr, nullptr}};
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
-        {"draw", hnm_draw}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
+        {"draw", hnm_draw}, {"blend", hnm_blend}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
         {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {"blit", hnm_blit}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},

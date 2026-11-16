@@ -14,7 +14,7 @@ press Enter. Everything there is saved as it changes, and Esc goes back.
 The defaults: the largest resolution that fits the desktop (1920×1080 on a
 1080p screen), 16:9 with SPACE sides, LINE TRIPLED, SMOOTHING SUBTLE with
 SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, TRACK SPEED FASTER
-(+33%), TRACK COLOR INTENSE and the voice filter on. Without packs the game starts in
+(+33%), CROSSFADE, TRACK COLOR INTENSE and the voice filter on. Without packs the game starts in
 320×200, where only the voice filter applies.
 
 | Setting | |
@@ -29,6 +29,7 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 | HD FOLDER | where the packs are (Enter edits it; see below) |
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%) or **FASTEST** (+50%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 18.75), so the race goes by quicker. Menus, videos and effects are unchanged. |
+| CROSSFADE | **ON** (the default) or OFF: in races, the track video's next frame mixed over the one showing by how far the race has moved toward it, so the scenery glides instead of stepping at the video's 12.5 frames a second. A second handle on the video decodes one frame ahead; the mix is on the video pixels only (cars, HUD and text stay sharp), in every style: the original pixels, line doubled or tripled, and the HD pictures. Not across a palette change (a cut or a flash). It's a dissolve, not new motion, so fast edges can ghost a little. Works in 320×200 too. `--classic`: off. |
 | TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
 | MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. GET READY, GO and the end-of-race result (ALL OPPONENTS DESTROYED, QUALIFIED, PRESS ENTER) are drawn the same way. **CLASSIC**: the original's small text on black boxes. |
 | MENUS | **HD** (the default): the menu screens (main menu, options, Hall of Fame, the key and save panels) from their HD packs whatever HD STYLE says, and never smoothed. **ORIGINAL**: they follow HD STYLE. |
