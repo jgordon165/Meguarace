@@ -47,6 +47,9 @@ public:
                  float volume, bool loop);
     void stopVoice(int id);
     void stopAll();
+    // Holds everything where it is (songs, music, sounds, the stream) and
+    // plays silence until unpaused: the race's pause.
+    void setPaused(bool on);
 
     // Streamed PCM (video soundtracks): push per-frame audio as it decodes.
     void streamReset();
@@ -79,6 +82,7 @@ private:
     SDL_AudioDeviceID dev_ = 0;
     SDL_AudioSpec spec_{};
     compat::Mutex mtx_;
+    bool paused_ = false;
     Source music_;
     std::unique_ptr<FmMusic> song_;
     MusicStyle style_ = MusicStyle::Original;

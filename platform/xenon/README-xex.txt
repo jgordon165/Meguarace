@@ -29,6 +29,7 @@ Controls
   Right trigger          accelerate          Left trigger    brake
   X or RB                fire
   A or START             choose / continue   B or BACK       back / quit
+  START (in a race)      pause / go on
   Y                      HD pictures on/off (with HD packs)
   LB                     music on/off (menu)
   Names: D-pad Up/Down change the letter, Right adds one, Left takes one off.

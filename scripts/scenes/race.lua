@@ -93,6 +93,7 @@ function S:enter(name, opts)
     self.clock = -COUNTDOWN
     self.last_section = nil
     self.finished = false
+    self.paused = false
     self.spin, self.spin_t = 0, 0
     self.frame = -1
     -- Everything else a race leaves behind starts clear, so a race after a
@@ -104,7 +105,7 @@ function S:enter(name, opts)
     music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
-function S:leave() self.ahead = nil; gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
+function S:leave() self.ahead = nil; self.paused = false; audio.pause(false); gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
 function S:pause() gfx.video_grade(0) end
 function S:resume() gfx.video_grade(S.track_color) end
 
@@ -126,6 +127,13 @@ function S:update(dt)
         return
     end
     if input.pressed("F1") then self.debug = not self.debug end
+    -- P or Pause (START on a controller) holds the race, the sound with it,
+    -- until pressed again. ESC still gives up.
+    if not self.finished and not self.demo and (input.pressed("P") or input.pressed("Pause")) then
+        self.paused = not self.paused
+        audio.pause(self.paused)
+    end
+    if self.paused then return end
     self.clock = self.clock + dt
     if not self.sfx_ready then self.sfx_ready = sfx.prepare_step() end   -- ENHANCED sounds, one a frame (the countdown)
     if self.finished then
@@ -744,7 +752,13 @@ function S:draw()
     local function big(t, y, colour)
         font.draw_outlined(160 - font.width(t) // 2, y, t, colour, gfx.nearest(0, 0, 0))
     end
-    if self.clock < 0 and not self.finished then
+    if self.paused then
+        if S.big_messages then big("PAUSED", 70, C_TEXT)
+        else
+            gfx.fill(124, 70, 72, 13, 0)
+            gfx.text(160 - 6 * 2, 74, "PAUSED", C_TEXT)
+        end
+    elseif self.clock < 0 and not self.finished then
         local t = "GET READY"
         if S.big_messages then
             big(t, 70, C_TEXT)

@@ -158,6 +158,11 @@ void Audio::stopVoice(int id) {
     for (auto& v : voices_) if (v.id == id) v.active = false;
 }
 
+void Audio::setPaused(bool on) {
+    compat::Lock lk(mtx_);
+    paused_ = on;
+}
+
 void Audio::stopAll() {
     compat::Lock lk(mtx_);
     for (auto& v : voices_) v.active = false;
@@ -250,6 +255,10 @@ void Audio::callback(void* user, Uint8* stream, int len) {
 void Audio::mix(int16_t* out, int frames) {
     compat::Lock lk(mtx_);
     const size_t n = static_cast<size_t>(frames) * 2;
+    if (paused_) {
+        std::fill(out, out + n, int16_t(0));
+        return;
+    }
     std::vector<int32_t> acc(n, 0);
     auto add = [&](Source& s) {
         if (!s.active || s.samples.empty()) return;
