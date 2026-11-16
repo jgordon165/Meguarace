@@ -40,6 +40,12 @@ S.big_messages = true
 -- race moves toward it, so the scenery glides between the video's 12.5
 -- frames a second instead of stepping (a dissolve, not new motion).
 S.crossfade = true
+-- Options > ADVANCED > SMOOTH MOTION: the track's motion pack (made by
+-- hd-conversion-utility --motion: in-between frames drawn by RIFE) shown
+-- between the video's frames, so the scenery moves at up to 60 frames a
+-- second. With CROSSFADE, mixed between those too. Off, or no pack: the
+-- original frames (and CROSSFADE's dissolve).
+S.motion = true
 
 local TRACK_FPS = 12.5      -- sections per second while moving (the videos' rate)
 local PLAYER_AHEAD = 1      -- sections between the camera and your car
@@ -642,7 +648,10 @@ function S:draw()
     end
     gfx.clear(0)
     T.video:draw(0, track.VIDEO_Y)
-    if S.crossfade then self:blend_ahead(f) end
+    local moved = S.motion and T.video:draw_motion(0, track.VIDEO_Y, self.pos, S.crossfade)
+    -- CROSSFADE's own dissolve: without motion pictures, and for the HD
+    -- pictures (the motion pack is at the original size).
+    if S.crossfade and (not moved or T.video:hd_shown()) then self:blend_ahead(f) end
     if not self.boom then
         gfx.setcolor(C_TEXT, 235, 235, 240)
         gfx.setcolor(C_WARN, 255, 80, 60)

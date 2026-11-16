@@ -463,6 +463,179 @@ bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
     return true;
 }
 
+// ---- motion packs (SMOOTH MOTION) ---------------------------------------------
+
+// A pair of frames the interpolator mustn't bridge: so different that it's a
+// cut (or a flash, or the palette changing), not motion. The mean difference
+// per channel, out of 255.
+static bool cutBetween(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b) {
+    uint64_t sum = 0;
+    for (size_t i = 0; i < a.size(); ++i) {
+        const uint32_t x = a[i], y = b[i];
+        sum += uint64_t(std::abs(int(x >> 16 & 0xFF) - int(y >> 16 & 0xFF)) + std::abs(int(x >> 8 & 0xFF) - int(y >> 8 & 0xFF)) +
+                        std::abs(int(x & 0xFF) - int(y & 0xFF)));
+    }
+    return a.empty() || double(sum) / double(a.size() * 3) > 40.0;
+}
+
+// RIFE over frames (all 320x200): `steps` pictures per frame from the first
+// to the last but one, out[f * steps + k] (k = 0 the frame itself, unused).
+static bool interpolateRife(const std::vector<std::vector<uint32_t>>& frames, const MotionOptions& opt,
+                            std::vector<std::vector<uint32_t>>& out, std::string& err) {
+    fs::path base = opt.tempDir.empty() ? fs::temp_directory_path() / "hd-conversion-utility" : fs::path(opt.tempDir);
+    fs::path in = base / "rife-in", outDir = base / "rife-out";
+    std::error_code ec;
+    fs::remove_all(in, ec);
+    fs::remove_all(outDir, ec);
+    fs::create_directories(in, ec);
+    fs::create_directories(outDir, ec);
+    if (ec) { err = "cannot make scratch folder " + base.string(); return false; }
+    for (size_t i = 0; i < frames.size(); ++i) {
+        auto rgb = argbToRgb(frames[i]);
+        char name[32];
+        std::snprintf(name, sizeof name, "%06zu.png", i);
+        if (!stbi_write_png((in / name).string().c_str(), kW, kH, 3, rgb.data(), kW * 3)) {
+            err = "cannot write scratch frame";
+            return false;
+        }
+    }
+    // Directory mode: output i (named i + 1) is i / steps of the way along
+    // the input frames, so frame f's in-betweens are f * steps + k.
+    const int count = int(frames.size()), total = count * opt.steps;
+    std::vector<std::string> args = {"-i", in.string(), "-o", outDir.string(), "-n", std::to_string(total),
+                                     "-m", opt.rifeModel, "-f", "png"};
+    int rc = runProgram(opt.rife, args);
+    if (rc != 0) {
+        err = rc < 0 ? "RIFE could not be started (" + opt.rife + ")" : "RIFE failed (exit code " + std::to_string(rc) + ")";
+        return false;
+    }
+    out.assign(size_t(total), {});
+    for (int f = 0; f + 1 < count; ++f)
+        for (int k = 1; k < opt.steps; ++k) {
+            const int i = f * opt.steps + k;
+            char name[32];
+            std::snprintf(name, sizeof name, "%08d.png", i + 1);
+            int w = 0, h = 0, n = 0;
+            uint8_t* px = stbi_load((outDir / name).string().c_str(), &w, &h, &n, 3);
+            if (!px) { err = "RIFE wrote no " + std::string(name); return false; }
+            if (w != kW || h != kH) {
+                stbi_image_free(px);
+                err = "RIFE's output is " + std::to_string(w) + "x" + std::to_string(h);
+                return false;
+            }
+            out[size_t(i)] = rgbToArgb(px, size_t(w) * size_t(h));
+            stbi_image_free(px);
+        }
+    fs::remove_all(in, ec);
+    fs::remove_all(outDir, ec);
+    return true;
+}
+
+static std::vector<uint32_t> mixPictures(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, float t) {
+    std::vector<uint32_t> r(a.size());
+    const uint32_t T = uint32_t(t * 256.0f + 0.5f), U = 256 - T;
+    for (size_t i = 0; i < a.size(); ++i) {
+        const uint32_t x = a[i], y = b[i];
+        const uint32_t rb = (((x & 0x00FF00FFu) * U + (y & 0x00FF00FFu) * T) >> 8) & 0x00FF00FFu;
+        const uint32_t g = (((x & 0x0000FF00u) * U + (y & 0x0000FF00u) * T) >> 8) & 0x0000FF00u;
+        r[i] = 0xFF000000u | rb | g;
+    }
+    return r;
+}
+
+bool convertMotion(const std::vector<uint8_t>& hnm, const std::string& outPath, const MotionOptions& opt,
+                   std::string& err) {
+    HnmVideo probe;
+    if (!probe.load(hnm)) { err = "not an HNM video"; return false; }
+    if (opt.steps < 2 || opt.steps > 16) { err = "steps must be 2..16"; return false; }
+    const int total = probe.frameCount(), steps = opt.steps;
+
+    PackHeader h;
+    h.pictureW = kW;
+    h.pictureH = kH;
+    h.frames = uint32_t(total * steps);
+    h.sourceCrc = crc32(hnm.data(), hnm.size());
+    h.motionSteps = steps;
+    const std::string part = outPath + ".part";
+    PackWriter w;
+    if (!w.open(part, h)) { err = w.error(); return false; }
+
+    // Batches of frames, the last of one the first of the next, so every
+    // pair is in a batch. same[i]: frame i shows what frame i - 1 did.
+    std::vector<std::vector<uint32_t>> frames;
+    std::vector<bool> same;
+    int first = 0;   // frame number of frames[0]
+    std::vector<uint32_t> last;
+
+    // Writes frames[0 .. n-2]'s entries (each frame's and its in-betweens);
+    // with `end`, the final frame's too.
+    auto flush = [&](bool end) -> bool {
+        const int n = int(frames.size());
+        if (n == 0) return true;
+        std::vector<std::vector<uint32_t>> mids;
+        std::vector<bool> bridge(size_t(n), false);   // pair i, i+1 gets in-betweens
+        bool any = false;
+        for (int i = 0; i + 1 < n; ++i) {
+            bridge[size_t(i)] = !same[size_t(i + 1)] && !cutBetween(frames[size_t(i)], frames[size_t(i + 1)]);
+            any = any || bridge[size_t(i)];
+        }
+        if (any && n > 1) {
+            if (opt.interpolator == MotionOptions::Interpolator::Rife) {
+                if (!interpolateRife(frames, opt, mids, err)) return false;
+            } else {
+                mids.assign(size_t(n * steps), {});
+                for (int i = 0; i + 1 < n; ++i)
+                    for (int k = 1; k < steps; ++k)
+                        mids[size_t(i * steps + k)] = mixPictures(frames[size_t(i)], frames[size_t(i + 1)], float(k) / float(steps));
+            }
+        }
+        const int upto = end ? n : n - 1;
+        // Encode in parallel, write in order.
+        std::vector<std::vector<uint8_t>> webp(size_t(upto * steps));
+        parallelFor(upto * steps, opt.jobs, [&](int e) {
+            const int i = e / steps, k = e % steps;
+            if (k == 0) {
+                if (!same[size_t(i)]) webp[size_t(e)] = encodeWebp(frames[size_t(i)].data(), kW, kH, opt.quality);
+            } else if (i + 1 < n && bridge[size_t(i)] && !mids.empty() && !mids[size_t(e)].empty()) {
+                webp[size_t(e)] = encodeWebp(mids[size_t(e)].data(), kW, kH, opt.quality);
+            }
+        });
+        for (auto& p : webp) {
+            bool ok = p.empty() ? w.addRepeat() : w.addFrame(p);
+            if (!ok) { err = w.error(); return false; }
+        }
+        first += upto;
+        if (opt.progress) opt.progress(first, total);
+        // Keep the last frame: the next batch starts with it.
+        if (!end) {
+            std::vector<uint32_t> keep = std::move(frames.back());
+            bool keepSame = same.back();
+            frames.clear();
+            same.clear();
+            frames.push_back(std::move(keep));
+            same.push_back(keepSame);
+        }
+        return true;
+    };
+
+    bool ok = compositeFrames(hnm, [&](int, const std::vector<uint32_t>* pic) {
+        if (pic) last = *pic;
+        frames.push_back(last);
+        same.push_back(!pic);
+        if (int(frames.size()) > std::max(2, opt.batch)) return flush(false);
+        return true;
+    }, err);
+    if (ok) ok = flush(true);
+    if (ok && !w.finish()) { err = w.error(); ok = false; }
+
+    std::error_code ec;
+    if (!ok) { fs::remove(part, ec); return false; }
+    fs::remove(outPath, ec);
+    fs::rename(part, outPath, ec);
+    if (ec) { err = "cannot rename " + part + ": " + ec.message(); return false; }
+    return true;
+}
+
 // ---- menu sprites ------------------------------------------------------------
 
 const char* const kMenuSprites[] = {"PANEL2", "KONTROL", "KONTROL6", "CONTROL2", "CONTROL4",

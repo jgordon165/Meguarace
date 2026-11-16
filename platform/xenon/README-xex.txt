@@ -23,6 +23,11 @@ instead and starts at 320x200 (the HD modes are too slow that way); the log
 says which. Frames flip at the TV's vblank (60 Hz, three buffers); the log has the
 frame times every 10 s. Options > ADVANCED > ANTI-ALIAS (on by default)
 smooths the track video's diagonal edges on the GPU.
+
+SMOOTH MOTION: the race tracks' in-between frames, so the scenery moves at
+up to 60 frames a second. Make them on a PC with
+  hd-conversion-utility --data <your CD> --motion-only --out <folder>
+and copy the .hdm files into the hd folder next to meguarace.xex.
 The sound is mixed on a hardware thread of its own.
 
 Controls

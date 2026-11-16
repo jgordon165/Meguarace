@@ -100,6 +100,10 @@ void Video::clear(uint8_t idx) {
         std::fill(blend_.begin(), blend_.end(), uint16_t(0));
         blendOn_ = false;
     }
+    if (pictureOn_) {
+        std::fill(picture_.begin(), picture_.end(), 0u);
+        pictureOn_ = false;
+    }
     // src_: 0 in the game's screen; 3 (empty, the ambient fill) in the wings.
     for (int y = 0; y < h_; ++y) {
         uint8_t* row = &src_[size_t(y) * size_t(cw_)];
@@ -469,6 +473,29 @@ void Video::blendVideo(int x, int y, int w, int h, const uint8_t* src, size_t le
         }
     blendT_ = T;
     blendOn_ = true;
+}
+
+void Video::videoPicture(int x, int y, const uint32_t* a, const uint32_t* b, float t, int picW, int picH) {
+    if (!a) return;
+    const uint32_t T = b ? uint32_t(std::clamp(t, 0.0f, 1.0f) * 256.0f + 0.5f) : 0, U = 256 - T;
+    if (picture_.size() != fb_.size()) picture_.assign(fb_.size(), 0u);
+    for (int Y = std::max(0, y); Y < std::min(h_, y + picH); ++Y) {
+        const uint32_t* ra = a + size_t(Y - y) * size_t(picW);
+        const uint32_t* rb = b ? b + size_t(Y - y) * size_t(picW) : nullptr;
+        for (int px = 0; px < picW; ++px) {
+            const int X = x + px + ox_;
+            if (X < 0 || X >= cw_) continue;
+            uint32_t c = ra[px];
+            if (T) {
+                const uint32_t n = rb[px];
+                const uint32_t q = (((c & 0x00FF00FFu) * U + (n & 0x00FF00FFu) * T) >> 8) & 0x00FF00FFu;
+                const uint32_t g = (((c & 0x0000FF00u) * U + (n & 0x0000FF00u) * T) >> 8) & 0x0000FF00u;
+                c = q | g;
+            }
+            picture_[size_t(Y) * size_t(cw_) + size_t(X)] = 0xFF000000u | c;
+        }
+    }
+    pictureOn_ = true;
 }
 
 // A video pixel's colour c with the next frame's mixed in (pal: the palette
@@ -996,13 +1023,15 @@ void Video::gradePalette() {
 void Video::convert() {
     if (!grade_) {
         for (size_t i = 0; i < fb_.size(); ++i)
-            rgba_[i] = blendOn_ && src_[i] == 2 ? blended(i, pal_[fb_[i]], pal_.data()) : pal_[fb_[i]];
+            rgba_[i] = pictureOn_ && src_[i] == 2 && picture_[i] ? picture_[i]
+                       : blendOn_ && src_[i] == 2 ? blended(i, pal_[fb_[i]], pal_.data()) : pal_[fb_[i]];
         return;
     }
     gradePalette();
     for (size_t i = 0; i < fb_.size(); ++i)
-        rgba_[i] = src_[i] == 2 ? (blendOn_ ? blended(i, palGraded_[fb_[i]], palGraded_.data()) : palGraded_[fb_[i]])
-                                : pal_[fb_[i]];
+        rgba_[i] = src_[i] != 2 ? pal_[fb_[i]]
+                   : pictureOn_ && picture_[i] ? grade(picture_[i])
+                   : blendOn_ ? blended(i, palGraded_[fb_[i]], palGraded_.data()) : palGraded_[fb_[i]];
 }
 
 bool Video::hdShown() const {
@@ -1043,7 +1072,8 @@ void Video::render(bool showHd) {
         if (l == 4 && !hud) l = 0;                           // nothing to be over
         layer_[i] = l == 0 ? c : (c & 0x00FFFFFFu);
         videoLayer_[i] = l == 2 ? (grade_ ? palGraded_[fb_[i]] : c) : (c & 0x00FFFFFFu);
-        if (l == 2 && blendOn_) videoLayer_[i] = blended(i, videoLayer_[i], grade_ ? palGraded_.data() : pal_.data());
+        if (l == 2 && pictureOn_ && picture_[i]) videoLayer_[i] = grade_ ? grade(picture_[i]) : picture_[i];
+        else if (l == 2 && blendOn_) videoLayer_[i] = blended(i, videoLayer_[i], grade_ ? palGraded_.data() : pal_.data());
         if (hud) postLayer_[i] = l == 4 ? c : (c & 0x00FFFFFFu);
         anyVideo |= l == 2;
         anyPost |= l == 4;

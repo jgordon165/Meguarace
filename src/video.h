@@ -169,6 +169,10 @@ public:
     // into the HD layer where the frame's rectangle is. Until clear().
     void blendVideo(int x, int y, int w, int h, const uint8_t* src, size_t len, int transparent, float t);
     void blendHd(int ox, int oy, int fx, int fy, int w, int h, const uint32_t* pic, int picW, int picH, float t);
+    // SMOOTH MOTION: the video pixels' colours from a motion pack's pictures
+    // (picW x picH, drawn at x, y like the video): a, mixed t of the way to
+    // b (b may be null). Over CROSSFADE's mix. Until clear().
+    void videoPicture(int x, int y, const uint32_t* a, const uint32_t* b, float t, int picW, int picH);
     // sprite() at scale 1, also drawn into the HD layer from its HD image
     // (hd::SpriteImage: hdW x hdH, 0xAARRGGBB; `indexed`: the palette index in
     // RR, coloured from the current palette now). What's under it in the HD
@@ -197,6 +201,8 @@ private:
     std::vector<uint8_t> fb_;
     // blendVideo's frame: 0x100 | its palette index, 0 where none; blendT_ of 256.
     std::vector<uint16_t> blend_;
+    std::vector<uint32_t> picture_;     // videoPicture's colours, alpha 0 where none
+    bool pictureOn_ = false;
     bool blendOn_ = false;
     uint32_t blendT_ = 0;
     uint32_t blended(size_t i, uint32_t c, const uint32_t* pal) const;

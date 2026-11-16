@@ -28,6 +28,10 @@ jobs:
       uses: ./.github/actions/bundle-realesrgan
       with:
         platform: ubuntu
+    - name: Bundle RIFE
+      uses: ./.github/actions/bundle-rife
+      with:
+        platform: ubuntu
     - name: Build archive
       uses: ./.github/actions/package
       with:
@@ -63,6 +67,10 @@ jobs:
       uses: ./.github/actions/bundle-realesrgan
       with:
         platform: windows
+    - name: Bundle RIFE
+      uses: ./.github/actions/bundle-rife
+      with:
+        platform: windows
     - name: Build archive
       uses: ./.github/actions/package
       with:
@@ -93,6 +101,10 @@ jobs:
       uses: ./.github/actions/bundle-realesrgan
       with:
         platform: macos
+    - name: Bundle RIFE
+      uses: ./.github/actions/bundle-rife
+      with:
+        platform: macos
     # Signing and notarization run only when the signing secrets are set
     # (the same ones release-mac-osx uses); otherwise the package is unsigned.
     - name: Codesign
@@ -110,7 +122,8 @@ jobs:
         security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
         for f in stage/Meguarace/hd-conversion-utility stage/Meguarace/realesrgan/realesrgan-ncnn-vulkan \
-                 $(find stage/Meguarace/realesrgan -name '*.dylib'); do
+                 stage/Meguarace/rife/rife-ncnn-vulkan \
+                 $(find stage/Meguarace/realesrgan stage/Meguarace/rife -name '*.dylib'); do
           /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime "$f" -v
         done
     - name: Notarize

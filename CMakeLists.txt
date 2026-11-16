@@ -189,6 +189,32 @@ if(MEGARACE_HD_CONVERTER)
         endif()
     endif()
 
+    # RIFE ncnn-vulkan (MIT), for --motion (SMOOTH MOTION's in-between
+    # frames), copied next to hd-conversion-utility as rife/ with its v4.6
+    # model. Off by default: the upstream archive is 430 MB (every model);
+    # the release packages bundle it (.github/actions/bundle-rife).
+    option(MEGARACE_FETCH_RIFE "Download RIFE next to hd-conversion-utility (--motion)" OFF)
+    if(MEGARACE_FETCH_RIFE)
+        if(WIN32)
+            set(rife_platform windows)
+        elseif(APPLE)
+            set(rife_platform macos)
+        else()
+            set(rife_platform ubuntu)
+        endif()
+        FetchContent_Declare(rife
+            URL https://github.com/nihui/rife-ncnn-vulkan/releases/download/20221029/rife-ncnn-vulkan-20221029-${rife_platform}.zip
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+        FetchContent_GetProperties(rife)
+        if(NOT rife_POPULATED)
+            FetchContent_Populate(rife)
+        endif()
+        if(NOT WIN32 AND EXISTS "${rife_SOURCE_DIR}/rife-ncnn-vulkan")
+            file(CHMOD "${rife_SOURCE_DIR}/rife-ncnn-vulkan"
+                 PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+        endif()
+    endif()
+
     # Header-only; pinned to a commit (stb has no release tags).
     FetchContent_Declare(stb
         GIT_REPOSITORY https://github.com/nothings/stb.git
@@ -262,6 +288,15 @@ if(MEGARACE_HD_CONVERTER)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${esrgan_models} $<TARGET_FILE_DIR:hd-conversion-utility>/realesrgan/models
             COMMENT "Real-ESRGAN next to hd-conversion-utility")
         add_dependencies(copy_realesrgan hd-conversion-utility)
+    endif()
+    if(MEGARACE_FETCH_RIFE)
+        file(GLOB rife_files "${rife_SOURCE_DIR}/rife-ncnn-vulkan*" "${rife_SOURCE_DIR}/*.dll" "${rife_SOURCE_DIR}/*.dylib")
+        add_custom_target(copy_rife ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:hd-conversion-utility>/rife
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${rife_files} $<TARGET_FILE_DIR:hd-conversion-utility>/rife
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${rife_SOURCE_DIR}/rife-v4.6 $<TARGET_FILE_DIR:hd-conversion-utility>/rife/rife-v4.6
+            COMMENT "RIFE next to hd-conversion-utility")
+        add_dependencies(copy_rife hd-conversion-utility)
     endif()
 endif()
 

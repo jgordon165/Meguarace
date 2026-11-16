@@ -36,7 +36,7 @@ M.CLASSIC = {
     hd_style = "line_doubled", smoothing = 0, video_repeat = 0, sides = "black", aspect = "4:3",
     music_style = "original", track_speed = "normal", track_color = "off", sharpen = "off", messages = "classic",
     dashboard = "original", menus = "original", menu_status = "strip",
-    voice_filter = false, lance_smoother = false, crossfade = false, anti_alias = false,
+    voice_filter = false, lance_smoother = false, crossfade = false, anti_alias = false, motion = false,
 }
 
 -- The settings in effect: the saved ones, or with --classic those over a copy.
@@ -69,6 +69,7 @@ function M.apply_saved(state)
     require("scenes.race").track_color = M.TRACK_COLORS[state.track_color] or 2
     require("scenes.race").big_messages = state.messages ~= "classic"
     require("scenes.race").crossfade = state.crossfade ~= false
+    require("scenes.race").motion = state.motion ~= false
     if gfx.anti_alias then gfx.anti_alias(state.anti_alias ~= false) end
     require("formats.cars").hd_dashboard = state.dashboard ~= "original"
     gfx.hd_menus(state.menus ~= "original")

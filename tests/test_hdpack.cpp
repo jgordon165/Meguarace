@@ -101,8 +101,33 @@ static void testPack() {
     CHECK(!short_.finish());               // frame count mismatch
 }
 
+// Motion packs (.hdm): the steps ride in the flags; an HD pack has none.
+static void testMotionHeader() {
+    std::vector<uint32_t> a(320 * 200, 0xFF102030u);
+    hd::PackHeader h;
+    h.pictureW = 320;
+    h.pictureH = 200;
+    h.frames = 4;
+    h.sourceCrc = 0x5678;
+    h.motionSteps = 4;
+    h.sharpened = true;
+    const std::string path = scratch("m.hdm").string();
+    hd::PackWriter w;
+    CHECK(w.open(path, h));
+    CHECK(w.addFrame(hd::encodeWebp(a.data(), 320, 200, 101)));
+    for (int i = 0; i < 3; ++i) CHECK(w.addRepeat());   // a cut: the in-betweens repeat the frame
+    CHECK(w.finish());
+    hd::Pack m;
+    CHECK(m.open(path, 0x5678));
+    CHECK(m.header().motionSteps == 4 && m.header().sharpened && m.header().upscaler == hd::kUpscalerUnknown);
+    const auto* f3 = m.frame(3);
+    CHECK(f3 && *f3 == a);
+    hd::PackHeader plain;
+    CHECK(hd::Pack::peek(scratch("pack.hdv").string(), plain) && plain.motionSteps == 0);
+}
+
 int main() {
-    for (auto* t : {testConfig, testCrc, testWebpLossless, testPack}) t();
+    for (auto* t : {testConfig, testCrc, testWebpLossless, testPack, testMotionHeader}) t();
     std::error_code ec;
     fs::remove_all(fs::temp_directory_path() / "megarace_hdpack_tests", ec);
     std::printf("%d checks, %d failures\n", g_checks, g_failures);

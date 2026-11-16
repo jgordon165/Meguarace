@@ -79,6 +79,26 @@ bool menuVideo(const std::string& stem);
 bool convertSprites(const std::vector<uint8_t>& stored, const std::string& outPath,
                     const ConvertOptions& opt, std::string& kind, std::string& err);
 
+// SMOOTH MOTION: a race track's video with in-between frames (a motion pack,
+// .hdm; see hdpack.h). RIFE (rife-ncnn-vulkan, MIT, on the GPU through
+// Vulkan) makes `steps - 1` pictures between each pair of frames, at the
+// original 320x200, so the game shows the scenery moving at up to
+// 12.5 x steps frames a second. Blend: a plain dissolve instead, for trying
+// the pipeline without RIFE.
+struct MotionOptions {
+    int steps = 4;              // pictures per frame (the original and steps - 1 in-betweens)
+    int quality = 90;           // WebP quality
+    enum class Interpolator { Rife, Blend } interpolator = Interpolator::Rife;
+    std::string rife;           // the bundled rife-ncnn-vulkan(.exe) (see tool.cpp)
+    std::string rifeModel;      // its model folder (a rife-v4 one: they take any timestep)
+    std::string tempDir;        // scratch folder for RIFE's batches
+    int jobs = 0;               // worker threads for encoding; 0 = all cores
+    int batch = 150;            // original frames per RIFE batch
+    std::function<void(int done, int total)> progress;
+};
+bool convertMotion(const std::vector<uint8_t>& hnm, const std::string& outPath, const MotionOptions& opt,
+                   std::string& err);
+
 // Converts one HNM file (its bytes) into an HD pack at outPath.
 bool convertVideo(const std::vector<uint8_t>& hnm, const std::string& outPath,
                   const ConvertOptions& opt, std::string& err);

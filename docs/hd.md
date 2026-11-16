@@ -30,6 +30,7 @@ SHARPEN LIGHT (Lance's clips the SAME), the default HD folder, ENHANCED music, T
 | MUSIC | ORIGINAL, STEREO FM, SOUNDFONT or ENHANCED (the default: a dance remix of the songs): see [music.md](music.md) |
 | TRACK SPEED | NORMAL, **FAST** (+25%), **FASTER** (+33%), **FASTEST** (+50%) or **MAX** (+75%): in races the track video scrolls that much faster (12.5 frames a second while you move, up to 21.9), so the race goes by quicker. Menus, videos and effects are unchanged. |
 | CROSSFADE | **ON** (the default) or OFF: in races, the track video's next frame mixed over the one showing by how far the race has moved toward it, so the scenery glides instead of stepping at the video's 12.5 frames a second. A second handle on the video decodes one frame ahead; the mix is on the video pixels only (cars, HUD and text stay sharp), in every style: the original pixels, line doubled or tripled, and the HD pictures. Not across a palette change (a cut or a flash). It's a dissolve, not new motion, so fast edges can ghost a little. Works in 320×200 too. `--classic`: off. |
+| SMOOTH MOTION | **ON** (the default) or OFF. In races, the track's motion pack (`<NAME>.hdm` in the HD folder, made by `hd-conversion-utility --motion`; see [Smooth motion](#smooth-motion)) gives in-between frames between the video's own, so the scenery moves at 12.5 × steps frames a second: with the default 4, 50 at TRACK SPEED NORMAL and 60 (the TV's rate) from FAST up. With CROSSFADE, the in-betweens are mixed into each other too. The colours go through TRACK COLOR; the cars, HUD and text are untouched. They're at the original size, so they show with the original pixels (320×200, line doubled or tripled, ANTI-ALIAS on the 360); with the upscaled HD pictures, CROSSFADE does the HD layer. No pack for a track: its original frames. `--classic`: off. |
 | ANTI-ALIAS | Xbox 360 only (the row shows where the renderer has the shader): **ON** (the default) or OFF. The video layer is drawn straight from its 320×200 pixels with the GPU's edge shader (`platform/xenon/gpu/edge.frag`): each screen pixel sits in a square of four texels, split along whichever diagonal joins the more alike pair, and is interpolated within its triangle with weights sharpened toward the texels, so staircases along diagonals become lines and flat edges stay crisp. In the HD resolutions; it replaces SMOOTHING and SHARPEN for the video. `--classic`: off. |
 | TRACK COLOR | OFF, **VIVID** (the default) or **INTENSE**: a colour grade on the track video in races. Saturation goes up (×1.35 / ×1.7), contrast goes up about a low pivot (the tracks are dark), and a gamma lifts the darks so the contrast doesn't crush them. It's applied to the video pixels only, through a graded copy of the palette, so cars, the HUD and text are untouched, and HD packs still see the real palette. HD pictures get the same grade as they're drawn. Off outside races. |
 | MESSAGES | **ENHANCED** (the default): the race's messages (SKID, ENERGY +, POINTS -10…) in the race's 8×12 font, as big as LAPS and the score, with a 1-pixel dark outline and no box, so the track shows through. `+` and `-` aren't in the font, so they're drawn in its style. GET READY, GO and the end-of-race result (ALL OPPONENTS DESTROYED, QUALIFIED, PRESS ENTER) are drawn the same way. **CLASSIC**: the original's small text on black boxes. |
@@ -144,6 +145,10 @@ playing, so there's only one set of packs.
 | `--quality Q\|lossless` | WebP quality (default 90). |
 | `--only PATTERN` | Only some videos, e.g. `--only 'N*.HNM'`. |
 | `--list` | List the videos and their frame counts. |
+| `--motion` | Also make the race tracks' motion packs (SMOOTH MOTION; [below](#smooth-motion)). |
+| `--motion-only` | Only the motion packs. |
+| `--motion-steps N` | Pictures per original frame, 2–16 (default 4: three in-betweens). |
+| `--interpolator rife\|blend` | RIFE (the default) draws the in-betweens; `blend` makes plain dissolves, to try the pipeline without RIFE. |
 
 The disc holds 109 videos and 65,234 frames. Measured on the US v1.0.1 disc
 with the built-in upscaler: the 1440×1080 packs come to roughly 3.5–4 GB
@@ -151,6 +156,30 @@ with the built-in upscaler: the 1440×1080 packs come to roughly 3.5–4 GB
 cores and made 1.4 GB; 1440×1080 takes a few times longer per frame, and a
 desktop with more cores goes proportionally faster. Real-ESRGAN's speed
 depends on the GPU.
+
+## Smooth motion
+
+The track videos run at 12.5 frames a second (up to 21.9 at TRACK SPEED
+MAX), however fast the game draws. `hd-conversion-utility --motion` makes a
+motion pack for each race track (the videos with a lane grid, `<NAME>.ZNN`,
+in the archive): RIFE ([rife-ncnn-vulkan](https://github.com/nihui/rife-ncnn-vulkan),
+MIT, on the GPU through Vulkan, with the rife-v4.6 model) draws `steps - 1`
+pictures between each pair of frames, at the original 320×200, from the
+frames as the game shows them. A pair that differs too much (a cut, a flash)
+gets none; the game shows its frames as they are.
+
+- Converter packages bundle RIFE as `rife/` next to `hd-conversion-utility`
+  (`rife-ncnn-vulkan` and `rife-v4.6/`); in a build from source, configure
+  with `-DMEGARACE_FETCH_RIFE=ON` (the upstream archive is 430 MB: every
+  model), or put them there yourself.
+- Size: about 30 MB per 1,000 frames at the default 4 steps; the 30 tracks
+  (38,000 frames) come to roughly 1.1 GB. `--only 'NS*.HNM' --motion-only`
+  makes a few.
+- Time: RIFE at 320×200 is quick on a GPU (a few minutes a track); on a CPU
+  through a software Vulkan driver it's about a second a picture.
+- The game reads them from the HD folder whether or not HD packs are there,
+  in every display mode, and on the Xbox 360 (copy them into its `hd`
+  folder).
 
 ## Playing
 

@@ -50,6 +50,7 @@ function M.defaults()
         sides = "space",           -- 16:9 wings: "ambient" (blurred picture), "black", "carbon", "space" or "cyberpunk"
         lance_smoother = false,    -- Lance's clips one smoothing level softer than the other videos (SAME: no)
         crossfade = true,
+        motion = true,             -- the tracks' motion packs, where made (SMOOTH MOTION)
         anti_alias = true,         -- the track video's edges smoothed, where the GPU can (ANTI-ALIAS)          -- the track video's frames mixed into each other in races (CROSSFADE)
         track_speed = "faster",    -- track video speed in races: "normal", "fast" (+25%), "faster" (+33%), "fastest" (+50%)
         track_color = "intense",   -- track video in races: "off", "vivid" or "intense" (more colour and contrast)

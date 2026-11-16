@@ -391,9 +391,12 @@ static std::string userDir() {
 
 bool loadHd(Engine& e) {
     e.hdDir.clear();
+    e.motionDir.clear();
     std::string user = userDir();
-    if (e.hdOff || (user.empty() && e.hdArg.empty())) { e.video.disableHd(); return false; }
+    if (user.empty() && e.hdArg.empty()) { e.video.disableHd(); return false; }
     std::string dir = !e.hdArg.empty() ? e.hdArg : hd::packFolder(user);   // --hd first
+    if (fsx::isDir(dir)) e.motionDir = dir;      // motion packs: whatever the HD packs do
+    if (e.hdOff) { e.video.disableHd(); return false; }
     bool old = false;
     if (fsx::isDir(dir)) {
         auto entries = fsx::list(dir);
@@ -590,6 +593,11 @@ struct HnmUd {
     int index = -1;                 // last decoded frame
     std::unique_ptr<hd::Pack> pack; // HD pack for this video, if the player made one
     std::string name;
+    // SMOOTH MOTION: the motion pack (.hdm), and two of its pictures decoded.
+    std::unique_ptr<hd::Pack> motion;
+    int motionSteps = 0;
+    std::vector<uint32_t> motionPic[2];
+    int motionAt[2] = {-1, -1};
     // Frames drawn from the pack, pixels of those shown original because the
     // game had changed their colour, frames without a picture (MEGARACE_HD_STATS=1).
     long hdDraws = 0, recoloured = 0, pictureMisses = 0;
@@ -680,6 +688,55 @@ static int hnm_blend(lua_State* L) {
     return 0;
 }
 
+// v:motion_steps(): SMOOTH MOTION's pictures per frame (0: no motion pack).
+static int hnm_motion_steps(lua_State* L) {
+    lua_pushinteger(L, checkHnm(L)->motionSteps);
+    return 1;
+}
+
+// v:hd_shown(): whether this video's HD pictures are what shows.
+static int hnm_hd_shown(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    lua_pushboolean(L, h->pack != nullptr && h->eng->video.hdOn());
+    return 1;
+}
+
+// v:draw_motion(x, y, pos [, blend]): SMOOTH MOTION. The video pixels drawn
+// this frame (:draw of frame floor(pos)) coloured from the motion pack's
+// picture at pos (a frame number with a fraction); blend: mixed toward the
+// next picture by the fraction left (CROSSFADE). False without a pack.
+static int hnm_draw_motion(lua_State* L) {
+    HnmUd* h = checkHnm(L);
+    if (!h->motion) { lua_pushboolean(L, 0); return 1; }
+    int ox = int(luaL_optinteger(L, 2, 0)), oy = int(luaL_optinteger(L, 3, 0));
+    const double p = luaL_checknumber(L, 4) * h->motionSteps;
+    const bool blend = lua_toboolean(L, 5);
+    const int last = int(h->motion->header().frames) - 1;
+    const int j = std::clamp(int(std::floor(p)), 0, last);
+    const float t = float(p - std::floor(p));
+    // Two pictures kept: j, and j + 1 when blending (next time's j). A slot
+    // is reused only if it doesn't hold the other one this call needs.
+    auto load = [&](int idx) -> int {
+        for (int s = 0; s < 2; ++s)
+            if (h->motionAt[s] == idx) return s;
+        const int keep = idx == j ? j + 1 : j;
+        const int s = h->motionAt[0] == keep ? 1 : 0;
+        const auto* pic = h->motion->frame(idx);
+        if (!pic) return -1;
+        h->motionPic[s] = *pic;
+        h->motionAt[s] = idx;
+        return s;
+    };
+    const int sa = load(j);
+    if (sa < 0) { lua_pushboolean(L, 0); return 1; }
+    const int sb = blend && j < last && t > 0.01f ? load(j + 1) : -1;
+    const std::vector<uint32_t>* a = &h->motionPic[sa];
+    const std::vector<uint32_t>* b = sb >= 0 ? &h->motionPic[sb] : nullptr;
+    h->eng->video.videoPicture(ox, oy, a->data(), b ? b->data() : nullptr, t, 320, 200);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // v:blit(i, x, y, w, h, pixels [, key]): gfx.blit for frame i of this video,
 // decoded earlier (the player decodes ahead and draws later). x, y are the
 // frame's own position (decode's info.x, info.y). Uses the HD pack like :draw.
@@ -754,6 +811,24 @@ static int hnm_open(lua_State* L) {
             else {
                 h->pack = std::move(pack);
                 h->name = stem;
+            }
+        }
+    }
+    // <hd folder>/<NAME>.hdm: SMOOTH MOTION's in-between frames (any display
+    // mode: they're at the original size).
+    if (!e.motionDir.empty() && !stem.empty()) {
+        const std::string p = fsx::join(e.motionDir, stem + ".hdm");
+        if (fsx::exists(p)) {
+            auto m = std::make_unique<hd::Pack>();
+            const auto& mh = m->header();
+            if (!m->open(p, crc))
+                std::fprintf(stderr, "motion pack %s ignored: %s\n", p.c_str(), m->error().c_str());
+            else if (mh.motionSteps < 2 || mh.pictureW != 320 || mh.pictureH != 200 ||
+                     int(mh.frames) != h->video.frameCount() * mh.motionSteps)
+                std::fprintf(stderr, "motion pack %s ignored: not a motion pack for this video\n", p.c_str());
+            else {
+                h->motionSteps = mh.motionSteps;
+                h->motion = std::move(m);
             }
         }
     }
@@ -990,7 +1065,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {nullptr, nullptr}};
     static const luaL_Reg hnmMethods[] = {
         {"frames", hnm_frames}, {"sound_rate", hnm_rate}, {"decode", hnm_decode},
-        {"draw", hnm_draw}, {"blend", hnm_blend}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
+        {"draw", hnm_draw}, {"blend", hnm_blend}, {"draw_motion", hnm_draw_motion},
+        {"motion_steps", hnm_motion_steps}, {"hd_shown", hnm_hd_shown}, {"apply_palette", hnm_apply_palette}, {"pixels", hnm_pixels},
         {"sound", hnm_sound}, {"chunks", hnm_chunks}, {"hd", hnm_hd}, {"blit", hnm_blit}, {nullptr, nullptr}};
     static const luaL_Reg input[] = {
         {"down", input_down}, {"pressed", input_pressed}, {"released", input_released},

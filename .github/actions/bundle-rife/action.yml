@@ -1,0 +1,46 @@
+name: bundle-rife
+description: >
+  Put RIFE ncnn-vulkan (MIT program; the rife-v4.6 model) into the staged HD
+  build as rife/, for hd-conversion-utility --motion to find. Tools only: no
+  game content goes into any build.
+
+inputs:
+  platform:
+    description: windows, ubuntu or macos (the upstream archive names)
+    required: true
+  stage:
+    description: staged install folder
+    required: false
+    default: stage/Meguarace
+
+runs:
+  using: "composite"
+  steps:
+    - name: Download and stage RIFE
+      shell: bash
+      env:
+        # Pinned upstream release (nihui/rife-ncnn-vulkan 20221029).
+        RELEASE: https://github.com/nihui/rife-ncnn-vulkan/releases/download/20221029
+        BUILD: "20221029"
+      run: |
+        set -euo pipefail
+        name="rife-ncnn-vulkan-$BUILD-${{inputs.platform}}.zip"
+        curl -fsSL -o "$RUNNER_TEMP/$name" "$RELEASE/$name"
+        rm -rf "$RUNNER_TEMP/rife" && mkdir -p "$RUNNER_TEMP/rife"
+        unzip -q "$RUNNER_TEMP/$name" -d "$RUNNER_TEMP/rife"
+        exe=$(find "$RUNNER_TEMP/rife" -type f \( -name rife-ncnn-vulkan -o -name rife-ncnn-vulkan.exe \) | head -n 1)
+        [ -n "$exe" ] || { echo "rife-ncnn-vulkan not found in $name"; exit 1; }
+        src=$(dirname "$exe")
+        dest="${{inputs.stage}}/rife"
+        mkdir -p "$dest"
+        cp "$exe" "$dest/"
+        chmod +x "$dest/$(basename "$exe")"
+        find "$src" -maxdepth 1 -type f \( -name '*.dll' -o -name '*.dylib' -o -name '*.so*' \) -exec cp {} "$dest/" \;
+        # Only the v4.6 model: v4 models take any timestep (the in-betweens).
+        cp -R "$src/rife-v4.6" "$dest/rife-v4.6"
+        cat > "$dest/LICENSES.txt" <<'TXT'
+        RIFE ncnn-vulkan: https://github.com/nihui/rife-ncnn-vulkan (MIT)
+        RIFE and its v4.6 model: https://github.com/hzwer/Practical-RIFE (MIT)
+        Downloaded unmodified from https://github.com/nihui/rife-ncnn-vulkan/releases/tag/20221029
+        TXT
+        ls -lR "$dest"
