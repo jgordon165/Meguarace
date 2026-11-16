@@ -227,6 +227,11 @@ static int gfx_video_repeat(lua_State* L) {
 // gfx.sharpen([level]) -> the sharpening after the smoothing (0 off,
 // 1 light, 2 strong), after setting it if given; and whether this renderer
 // can do it.
+// gfx.anti_alias(on): ANTI-ALIAS (Video::setAntiAlias); does nothing
+// without gfx.anti_alias_available() (only the Xbox 360's GPU has it).
+static int gfx_anti_alias(lua_State* L) { E(L).video.setAntiAlias(lua_toboolean(L, 1)); return 0; }
+static int gfx_anti_alias_available(lua_State* L) { lua_pushboolean(L, E(L).video.antiAliasAvailable()); return 1; }
+
 static int gfx_sharpen(lua_State* L) {
     Video& v = E(L).video;
     if (!lua_isnoneornil(L, 1)) v.setSharpen(int(luaL_checkinteger(L, 1)));

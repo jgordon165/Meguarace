@@ -26,7 +26,7 @@ local font   = require("ui.rawfont")
 local music  = require("game.music")
 local S = {}
 -- Options > ADVANCED > TRACK SPEED: how much faster than the original the
--- track video scrolls (1.0; FAST 1.25, FASTER 1.33, FASTEST 1.5). Set from
+-- track video scrolls (1.0; FAST 1.25, FASTER 1.33, FASTEST 1.5, MAX 1.75). Set from
 -- the settings (game/display.lua).
 S.track_speed = 1.33
 -- Options > ADVANCED > TRACK COLOR: the grade on the track video (0 off,

@@ -133,6 +133,16 @@ public:
     // 0 off, 1 light, 2 strong. All on the GPU (custom blend modes: add and
     // reverse-subtract); renderers without them (the software one) skip it.
     void setSharpen(int level);
+    // ANTI-ALIAS: the video layer drawn straight from its pixels with the
+    // renderer's edge-smoothing scale (SDL_ScaleModeBest, which the Xbox
+    // 360's GPU renderer draws with its edge shader), in place of SMOOTHING
+    // and SHARPEN for it. Only where the renderer has that shader.
+    void setAntiAlias(bool on) { antiAlias_ = on; }
+    bool antiAliasAvailable() const {
+        SDL_RendererInfo info{};
+        return renderer_ && SDL_GetRendererInfo(renderer_, &info) == 0 && info.name &&
+               SDL_strcmp(info.name, "xenos") == 0;
+    }
     int sharpen() const { return sharpen_; }
     bool sharpenSupported() const { return sharpenOk_; }
     int videoGrade() const { return grade_; }
@@ -265,6 +275,7 @@ private:
     void drawSharpened(SDL_Texture* layer);
     void createSharpenTextures();
     int sharpen_ = 0;
+    bool antiAlias_ = false;
     bool sharpenOk_ = false;
     SDL_Texture* shA_ = nullptr;      // the layer at picture size
     SDL_Texture* shSmall_ = nullptr;  // it, a third the size (the blur)

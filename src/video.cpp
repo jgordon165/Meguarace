@@ -1052,7 +1052,15 @@ void Video::render(bool showHd) {
     //    a smaller whole-number size first, so the seams blend wider).
     if (anyVideo && videoTexture_) {
         SDL_UpdateTexture(videoTexture_, nullptr, videoLayer_.data(), cw_ * 4);
-        drawThrough(videoTexture_, videoScaled_, true);
+        if (antiAlias_ && antiAliasAvailable()) {
+            SDL_ScaleMode was = SDL_ScaleModeNearest;
+            SDL_GetTextureScaleMode(videoTexture_, &was);
+            SDL_SetTextureScaleMode(videoTexture_, SDL_ScaleModeBest);
+            SDL_RenderCopy(renderer_, videoTexture_, nullptr, nullptr);
+            SDL_SetTextureScaleMode(videoTexture_, was);
+        } else {
+            drawThrough(videoTexture_, videoScaled_, true);
+        }
     }
     // 3. Game layer: everything else the game draws, always sharp.
     SDL_UpdateTexture(gameTexture_, nullptr, layer_.data(), cw_ * 4);

@@ -29,7 +29,7 @@
 #include "xsdk/shader.h"
 #include "xsdk/texture.h"
 
-#define VERTEX_FLOATS 10                 /* x y z w, r g b a, u v */
+#define VERTEX_FLOATS 12                 /* x y z w, r g b a, u v, the texture's w h (edge.frag) */
 #define VERTEX_BYTES (VERTEX_FLOATS * 4)
 /* The vertex ring: a part per frame in flight (the presenter's three
  * buffers), each reused once the GPU has passed that frame. */
@@ -55,6 +55,9 @@ typedef struct
     int out_w, out_h;                    /* the window */
     uint32_t window_tiles;
     XsdkShader vs, ps;
+    XsdkShader edge_vs, edge_ps;         /* ANTI-ALIAS: textures at SDL_ScaleModeBest */
+    SDL_bool edge_ok;
+    SDL_bool edge_on;                    /* the edge pair is the one set */
     XsdkSamplerState point, linear;
     XsdkDepthStencilState depth_off;
     XsdkRasterState raster;
@@ -170,6 +173,8 @@ static volatile uint32_t *ring_take(XenosData *data, uint32_t bytes, uint32_t *a
     return at;
 }
 
+static float vertex_size_w, vertex_size_h;   /* the texture's size, for the vertices being written */
+
 static void put_vertex(volatile uint32_t *at, float x, float y, const float *c, float u, float v)
 {
     union { float f; uint32_t u; } w[VERTEX_FLOATS];
@@ -177,6 +182,7 @@ static void put_vertex(volatile uint32_t *at, float x, float y, const float *c, 
     w[0].f = x; w[1].f = y; w[2].f = 0.0f; w[3].f = 1.0f;
     w[4].f = c[0]; w[5].f = c[1]; w[6].f = c[2]; w[7].f = c[3];
     w[8].f = u; w[9].f = v;
+    w[10].f = vertex_size_w; w[11].f = vertex_size_h;
     for (i = 0; i < VERTEX_FLOATS; ++i) at[i] = w[i].u;
 }
 
@@ -192,7 +198,13 @@ static void draw_quad(XenosData *data, const XsdkTexture *tex, const XsdkSampler
 {
     int tw, th;
     uint32_t address;
-    volatile uint32_t *v = ring_take(data, 6 * VERTEX_BYTES, &address);
+    volatile uint32_t *v;
+    if (data->edge_on) {
+        xsdk_gpu_set_shaders(&data->vs, &data->ps);
+        data->edge_on = SDL_FALSE;
+    }
+    vertex_size_w = vertex_size_h = 1.0f;
+    v = ring_take(data, 6 * VERTEX_BYTES, &address);
     target_size(data, &tw, &th);
     put_pixel_vertex(v + 0 * VERTEX_FLOATS, tw, th, x0, y0, c, 0.0f, 0.0f);
     put_pixel_vertex(v + 1 * VERTEX_FLOATS, tw, th, x1, y0, c, u1, 0.0f);
@@ -228,6 +240,7 @@ static void bind(XenosData *data)
         xsdk_gpu_set_target_at((uint32_t)tw, (uint32_t)th, 0, 0);
     }
     xsdk_gpu_set_shaders(&data->vs, &data->ps);
+    data->edge_on = SDL_FALSE;
     xsdk_gpu_set_depth_stencil(&data->depth_off);
     xsdk_gpu_set_raster(&data->raster);
     data->bound = SDL_TRUE;
@@ -559,11 +572,26 @@ static void run_triangles(XenosData *data, const SDL_RenderCommand *cmd, const v
     volatile uint32_t *dst;
     int tw, th;
     if (!count) return;
+    const SDL_bool edge = t && data->edge_ok && texture->scaleMode == SDL_ScaleModeBest;
     if (!make_blend(cmd->data.draw.blend, &blend)) make_blend(SDL_BLENDMODE_BLEND, &blend);
     bind(data);
     target_size(data, &tw, &th);
     apply_scissor(data);
     xsdk_gpu_set_blend(&blend);
+    /* ANTI-ALIAS (SDL_ScaleModeBest): the edge-smoothing pair, its literals
+     * uploaded; the quad pair back for everything else. */
+    if (edge && !data->edge_on) {
+        int k;
+        xsdk_gpu_set_shaders(&data->edge_vs, &data->edge_ps);
+        for (k = 0; k < EDGE_PIXEL_LITERALS; ++k)
+            xsdk_gpu_set_pixel_constants((uint32_t)edge_pixel_literals[k][0], &edge_pixel_literals[k][1], 1);
+        data->edge_on = SDL_TRUE;
+    } else if (!edge && data->edge_on) {
+        xsdk_gpu_set_shaders(&data->vs, &data->ps);
+        data->edge_on = SDL_FALSE;
+    }
+    vertex_size_w = t ? (float)t->alloc_w : 1.0f;
+    vertex_size_h = t ? (float)t->alloc_h : 1.0f;
     dst = ring_take(data, count * VERTEX_BYTES, &address);
     for (i = 0; i < count; ++i, src += QV_FLOATS, dst += VERTEX_FLOATS)
         put_pixel_vertex(dst, tw, th, (float)data->viewport.x + src[0], (float)data->viewport.y + src[1], src + 2,
@@ -572,7 +600,7 @@ static void run_triangles(XenosData *data, const SDL_RenderCommand *cmd, const v
     xsdk_gpu_invalidate(address, count * VERTEX_BYTES);
     xsdk_gpu_set_vertices(0, address, count * VERTEX_BYTES);
     xsdk_gpu_set_texture(0, t ? &t->tex : &data->white,
-                         t && texture->scaleMode != SDL_ScaleModeNearest ? &data->linear : &data->point);
+                         t && !edge && texture->scaleMode != SDL_ScaleModeNearest ? &data->linear : &data->point);
     xsdk_gpu_draw(XSDK_PRIMITIVE_TRIANGLE_LIST, count);
     mark_drawn(data);
     if (texture && *nused < 64) used[(*nused)++] = texture;
@@ -689,6 +717,10 @@ static void XENOS_DestroyRenderer(SDL_Renderer *renderer)
         if (data->ring) xsdk_gpu_free(data->ring);
         xsdk_shader_free(&data->vs);
         xsdk_shader_free(&data->ps);
+        if (data->edge_ok) {
+            xsdk_shader_free(&data->edge_vs);
+            xsdk_shader_free(&data->edge_ps);
+        }
         SDL_free(data);
     }
     SDL_free(renderer);
@@ -706,6 +738,7 @@ static SDL_Renderer *XENOS_CreateRenderer(SDL_Window *window, Uint32 flags)
         { .usage = XSDK_USAGE_POSITION, .usage_index = 0, .format = XSDK_VERTEX_FLOAT4, .offset_bytes = 0 },
         { .usage = XSDK_USAGE_COLOR, .usage_index = 0, .format = XSDK_VERTEX_FLOAT4, .offset_bytes = 16 },
         { .usage = XSDK_USAGE_TEXCOORD, .usage_index = 0, .format = XSDK_VERTEX_FLOAT2, .offset_bytes = 32 },
+        { .usage = XSDK_USAGE_TEXCOORD, .usage_index = 1, .format = XSDK_VERTEX_FLOAT2, .offset_bytes = 40 },
     };
     const uint32_t stride = VERTEX_BYTES;
     const XsdkSampler point = { XSDK_FILTER_POINT, XSDK_FILTER_POINT, XSDK_FILTER_POINT, XSDK_ADDRESS_CLAMP,
@@ -734,7 +767,7 @@ static SDL_Renderer *XENOS_CreateRenderer(SDL_Window *window, Uint32 flags)
     xp_display_size(&data->out_w, &data->out_h);
     data->window_tiles = xsdk_gpu_color_target_tiles((uint32_t)data->out_w, (uint32_t)data->out_h, XSDK_TARGET_8_8_8_8);
     if (!NT_SUCCESS(xsdk_shader_load(&data->vs, quad_vertex_shader, sizeof quad_vertex_shader)) ||
-        !NT_SUCCESS(xsdk_shader_set_vertex_layout(&data->vs, layout, 3, &stride)) ||
+        !NT_SUCCESS(xsdk_shader_set_vertex_layout(&data->vs, layout, 4, &stride)) ||
         !NT_SUCCESS(xsdk_shader_load(&data->ps, quad_pixel_shader, sizeof quad_pixel_shader))) {
         xsdk_log_write("xenos: the shaders didn't load");
         SDL_free(data);
@@ -742,6 +775,11 @@ static SDL_Renderer *XENOS_CreateRenderer(SDL_Window *window, Uint32 flags)
         SDL_SetError("xenos: shaders");
         return NULL;
     }
+    /* ANTI-ALIAS's pair; without it, those textures are drawn linear. */
+    data->edge_ok = NT_SUCCESS(xsdk_shader_load(&data->edge_vs, edge_vertex_shader, sizeof edge_vertex_shader)) &&
+                    NT_SUCCESS(xsdk_shader_set_vertex_layout(&data->edge_vs, layout, 4, &stride)) &&
+                    NT_SUCCESS(xsdk_shader_load(&data->edge_ps, edge_pixel_shader, sizeof edge_pixel_shader));
+    if (!data->edge_ok) xsdk_log_write("xenos: the anti-alias shaders didn't load; drawing those linear");
     xsdk_texture_sampler_state(&data->point, &point);
     xsdk_texture_sampler_state(&data->linear, &linear);
     xsdk_gpu_depth_stencil_state(&data->depth_off, &off);
