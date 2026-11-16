@@ -25,6 +25,7 @@ struct Engine {
     // from the player's own videos (the Options > HD FOLDER setting, hd.cfg);
     // empty when HD is off or there are none.
     std::string hdDir;
+    std::string motionDir;   // the HD folder, for motion packs (.hdm) even without HD packs
     bool hdOff = false;       // --no-hd
     std::string hdArg;        // --hd <folder>: the packs' folder this session (overrides hd.cfg, not saved)
     std::string hdUpscaler;   // what made the packs: "REAL-ESRGAN", "SHARP", "SMOOTH" or ""

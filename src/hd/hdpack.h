@@ -21,11 +21,19 @@
 //           video it was made from)
 //   u32     flags: bits 0-1, the upscaler that made it (kUpscaler*; 0 unknown);
 //           bit 2, sharpened after it; bit 3, the original pixels' grain
-//           mixed back in (the menu screens)
+//           mixed back in (the menu screens); bits 8-15, a motion pack's
+//           steps (below; 0 for an HD pack)
 //   frame count x { u32 offset, u32 size }   size 0: same picture as the
 //                                            previous frame (no video chunk)
 //   WebP images, each picture width x height: the whole composited screen
 //   after that frame, as the original shows it with the video's palette.
+//
+// Motion packs (.hdm), for the race tracks' videos (SMOOTH MOTION): the same
+// layout at the original size (picture 320x200), with `steps` pictures per
+// HNM frame: entry f * steps + k is the screen k / steps of the way from
+// frame f to frame f + 1, k = 0 the original. The in-betweens are made by a
+// frame interpolator (RIFE) from the original frames; across a cut, and
+// after the last frame, they repeat the frame before (size 0).
 
 #include <cstdint>
 #include <fstream>
@@ -58,6 +66,7 @@ struct PackHeader {
     uint32_t upscaler = kUpscalerUnknown;
     bool sharpened = false;                     // flags bit 2: an unsharp mask after the upscale
     bool grained = false;                       // flags bit 3: the original pixels mixed back in
+    int motionSteps = 0;                        // flags bits 8-15: a motion pack's pictures per frame
 };
 
 class PackWriter {

@@ -58,7 +58,17 @@ static const char* kUsage =
     "  --force               remake packs that are already up to date\n"
     "  --list                list the videos and exit\n"
     "  --out FOLDER          make the packs there (then start the game with\n"
-    "                        --hd FOLDER, or set it as its HD FOLDER)\n";
+    "                        --hd FOLDER, or set it as its HD FOLDER)\n"
+    "  --motion              also make motion packs for the race tracks (SMOOTH\n"
+    "                        MOTION in the game): RIFE draws in-between frames, so\n"
+    "                        the scenery moves at up to 60 frames a second.\n"
+    "                        Needs rife-ncnn-vulkan and a rife-v4 model folder in\n"
+    "                        rife/ next to this program\n"
+    "  --motion-only         just the motion packs\n"
+    "  --motion-steps N      pictures per original frame, 2..16 (default 4: 50 a\n"
+    "                        second at TRACK SPEED NORMAL)\n"
+    "  --interpolator I      rife (the default) or blend (a plain dissolve, to try\n"
+    "                        it without RIFE)\n";
 
 static bool globMatch(const char* p, const char* s) {
     for (; *p; ++p, ++s) {
@@ -84,6 +94,20 @@ static std::string upper(std::string s) {
     return s;
 }
 
+// dir (which exists) as the file system lists it: found among its parent's
+// entries, so the path is one the system gave, absolute and normal.
+static std::string listedFolder(const std::string& dir) {
+    std::error_code ec;
+    fs::path p = fs::absolute(fs::path(dir), ec).lexically_normal();
+    if (ec) return {};
+    if (p.filename().empty()) p = p.parent_path();   // a trailing separator
+    const fs::path parent = p.parent_path();
+    if (parent.empty() || parent == p) return fs::is_directory(p, ec) ? p.string() : std::string();   // a root
+    for (const auto& e : fs::directory_iterator(parent, ec))
+        if (e.path().filename() == p.filename() && e.is_directory(ec)) return e.path().string();
+    return {};
+}
+
 static std::string exeDir() {
     char* b = SDL_GetBasePath();
     std::string r = b ? b : "";
@@ -105,7 +129,9 @@ static constexpr float kMenuSharpen = 1.0f, kMenuGrain = 0.5f;
 int main(int argc, char** argv) {
     std::string data, only, upscaler, realesrgan, outArg;
     hd::ConvertOptions opt;
-    bool force = false, list = false;
+    hd::MotionOptions mopt;
+    bool force = false, list = false, motion = false, motionOnly = false;
+    std::string interpolator = "rife";
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -123,10 +149,19 @@ int main(int argc, char** argv) {
         else if (a == "--force")      force = true;
         else if (a == "--list")       list = true;
         else if (a == "--out" || a == "--hd") outArg = next();
+        else if (a == "--motion")     motion = true;
+        else if (a == "--motion-only") motion = motionOnly = true;
+        else if (a == "--motion-steps") { mopt.steps = std::atoi(next().c_str()); motion = true; }
+        else if (a == "--interpolator") interpolator = next();
         else { std::fputs(kUsage, a == "--help" || a == "-h" ? stdout : stderr); return a == "--help" || a == "-h" ? 0 : 2; }
     }
     if (data.empty()) { std::fputs(kUsage, stderr); return 2; }
     if (opt.quality < 1) { std::fprintf(stderr, "--quality must be 1..100 or lossless\n"); return 2; }
+    if (mopt.steps < 2 || mopt.steps > 16) { std::fprintf(stderr, "--motion-steps must be 2..16\n"); return 2; }
+    if (interpolator != "rife" && interpolator != "blend") {
+        std::fprintf(stderr, "--interpolator must be rife or blend\n");
+        return 2;
+    }
 
     Vfs vfs;
     if (!vfs.mount(data)) { std::fprintf(stderr, "no such folder: %s\n", data.c_str()); return 1; }
@@ -205,10 +240,14 @@ int main(int argc, char** argv) {
 
     const std::string user = outArg.empty() ? userDir() : std::string();
     if (outArg.empty() && user.empty()) { std::fprintf(stderr, "no user folder: %s\n", SDL_GetError()); return 1; }
-    const std::string out = outArg.empty() ? hd::packFolder(user) : outArg;
+    const std::string asked = outArg.empty() ? hd::packFolder(user) : outArg;
     std::error_code ec;
-    fs::create_directories(out, ec);
-    if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", out.c_str(), ec.message().c_str()); return 1; }
+    fs::create_directories(asked, ec);
+    if (ec) { std::fprintf(stderr, "cannot make %s: %s\n", asked.c_str(), ec.message().c_str()); return 1; }
+    // Every path below is built on the folder as its parent's listing names
+    // it: an existing folder, absolute and without "..".
+    const std::string out = listedFolder(asked);
+    if (out.empty()) { std::fprintf(stderr, "cannot find %s\n", asked.c_str()); return 1; }
     opt.tempDir = (fs::path(out) / ".work").string();
     {
         std::ofstream note(fs::path(out) / "README.txt");
@@ -229,7 +268,9 @@ int main(int argc, char** argv) {
             std::printf("(this enlarges the original pixels but adds no detail; Real-ESRGAN, the default, does)\n");
     }
     int failed = 0, skipped = 0, n = 0;
-    for (const auto& v : videos) {
+    const std::vector<Video> hdVideos = motionOnly ? std::vector<Video>{} : videos;
+    if (motionOnly) sprites.clear();
+    for (const auto& v : hdVideos) {
         ++n;
         auto d = v.inDat ? dat.read(v.name) : vfs.read(v.name);
         if (!d) { std::fprintf(stderr, "%s: unreadable\n", v.name.c_str()); ++failed; continue; }
@@ -245,7 +286,7 @@ int main(int argc, char** argv) {
         }
         auto t0 = std::chrono::steady_clock::now();
         opt.progress = [&](int done, int total) {
-            std::printf("\r[%d/%zu] %-12s %5d/%d frames", n, videos.size(), v.name.c_str(), done, total);
+            std::printf("\r[%d/%zu] %-12s %5d/%d frames", n, hdVideos.size(), v.name.c_str(), done, total);
             std::fflush(stdout);
         };
         std::string err;
@@ -260,7 +301,73 @@ int main(int argc, char** argv) {
         double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         std::printf("  %.1fs, %.1f MB\n", s, double(fs::file_size(packPath, ec)) / 1e6);
     }
-    const size_t videosMade = videos.size() - size_t(skipped + failed);
+    const size_t videosMade = hdVideos.size() - size_t(skipped + failed);
+
+    // Motion packs (--motion): the race tracks' videos, those with a lane
+    // grid (<name>.ZNN) beside them in the archive.
+    int mMade = 0, mFailed = 0, mSkipped = 0;
+    if (motion) {
+        if (interpolator == "rife") {
+#ifdef _WIN32
+            const char* rifeName = "rife-ncnn-vulkan.exe";
+#else
+            const char* rifeName = "rife-ncnn-vulkan";
+#endif
+            fs::path dir = fs::path(exeDir()) / "rife";
+            if (fs::exists(dir / rifeName)) mopt.rife = (dir / rifeName).string();
+            // The newest rife-v4 model folder (any timestep; the older ones only halve).
+            std::error_code dec;
+            for (const auto& e : fs::directory_iterator(dir, dec)) {
+                const std::string n = e.path().filename().string();
+                if (e.is_directory(dec) && n.rfind("rife-v4", 0) == 0 && (mopt.rifeModel.empty() ||
+                                                                         n > fs::path(mopt.rifeModel).filename().string()))
+                    mopt.rifeModel = e.path().string();
+            }
+            if (mopt.rife.empty() || mopt.rifeModel.empty()) {
+                std::fprintf(stderr, "RIFE not found: put rife-ncnn-vulkan and a rife-v4 model folder (rife-v4.6)\n"
+                                     "in %s, or use --interpolator blend\n", dir.string().c_str());
+                return 2;
+            }
+        } else {
+            mopt.interpolator = hd::MotionOptions::Interpolator::Blend;
+        }
+        mopt.tempDir = opt.tempDir;
+        mopt.jobs = opt.jobs;
+        std::vector<const Video*> tracks;
+        for (const auto& v : videos)
+            if (v.inDat && dat.read(v.stem + ".ZNN")) tracks.push_back(&v);
+        std::printf("%zu race tracks -> motion packs, %d pictures a frame (%s)\n", tracks.size(), mopt.steps,
+                    interpolator == "rife" ? fs::path(mopt.rifeModel).filename().string().c_str() : "blend");
+        int k = 0;
+        for (const Video* v : tracks) {
+            ++k;
+            auto d = dat.read(v->name);
+            if (!d) { ++mFailed; continue; }
+            fs::path packPath = fs::path(out) / (v->stem + ".hdm");
+            if (!force) {
+                hd::Pack existing;
+                if (existing.open(packPath.string(), hd::crc32(d->data(), d->size())) &&
+                    existing.header().motionSteps == mopt.steps) {
+                    ++mSkipped;
+                    continue;
+                }
+            }
+            auto t0 = std::chrono::steady_clock::now();
+            mopt.progress = [&](int done, int total) {
+                std::printf("\r[%d/%zu] %-12s %5d/%d frames", k, tracks.size(), v->name.c_str(), done, total);
+                std::fflush(stdout);
+            };
+            std::string err;
+            if (!hd::convertMotion(*d, packPath.string(), mopt, err)) {
+                std::fprintf(stderr, "\n%s: %s\n", v->name.c_str(), err.c_str());
+                ++mFailed;
+                continue;
+            }
+            ++mMade;
+            double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            std::printf("  %.1fs, %.1f MB\n", s, double(fs::file_size(packPath, ec)) / 1e6);
+        }
+    }
 
     // Sprite sets (menus, dashboards): small, a few seconds in all.
     int sFailed = 0, sSkipped = 0;
@@ -301,5 +408,7 @@ int main(int argc, char** argv) {
     fs::remove_all(opt.tempDir, ec);
     std::printf("done: %zu videos made, %d up to date, %d failed; %zu sprite sets made, %d up to date, %d failed\n",
                 videosMade, skipped, failed, sprites.size() - size_t(sSkipped + sFailed), sSkipped, sFailed);
-    return failed || sFailed ? 1 : 0;
+    if (motion)
+        std::printf("      %d motion packs made, %d up to date, %d failed\n", mMade, mSkipped, mFailed);
+    return failed || sFailed || mFailed ? 1 : 0;
 }

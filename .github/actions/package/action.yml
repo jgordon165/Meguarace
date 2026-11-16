@@ -38,7 +38,7 @@ runs:
     # like game data or an HD pack (derived game content) got staged.
     - name: Check for game content
       run: |
-        bad=$(find stage -type f \( -iname '*.hdv' -o -iname '*.hnm' -o -iname '*.dat' -o -iname '*.hsq' -o -iname '*.exe' -a ! -iname 'megarace.exe' -a ! -iname 'hd-conversion-utility.exe' -a ! -iname 'realesrgan-ncnn-vulkan.exe' \) )
+        bad=$(find stage -type f \( -iname '*.hdv' -o -iname '*.hdm' -o -iname '*.hds' -o -iname '*.hnm' -o -iname '*.dat' -o -iname '*.hsq' -o -iname '*.exe' -a ! -iname 'megarace.exe' -a ! -iname 'hd-conversion-utility.exe' -a ! -iname 'realesrgan-ncnn-vulkan.exe' -a ! -iname 'rife-ncnn-vulkan.exe' \) )
         if [ -n "$bad" ]; then echo "game content in the package:"; echo "$bad"; exit 1; fi
       shell: bash
 

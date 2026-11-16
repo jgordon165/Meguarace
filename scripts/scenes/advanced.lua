@@ -45,6 +45,11 @@
 --                 as the race moves toward it, so the scenery glides between
 --                 the video's 12.5 frames a second instead of stepping (a
 --                 dissolve, not new motion: fast edges can ghost a little).
+--   SMOOTH MOTION ON or OFF: in races, the track's in-between frames (a
+--                 motion pack: hd-conversion-utility --motion draws them with
+--                 RIFE) between the video's own, so the scenery moves at up to
+--                 60 frames a second. With CROSSFADE, mixed between those too.
+--                 No pack for a track: its original frames.
 --   ANTI-ALIAS    ON or OFF, where the GPU has the shader (the Xbox 360):
 --                 the track video scaled up with its diagonal edges smoothed
 --                 (each pixel interpolated along the edge it sits on, kept
@@ -78,13 +83,13 @@ local display = require("game.display")
 
 local S = { overlay = true, hd_menu = true }
 
-local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "crossfade", "aa", "color", "messages", "menus", "status", "dashboard", "voice" }
+local ITEMS = { "resolution", "aspect", "sides", "style", "smoothing", "sharpen", "lance", "folder", "music", "track", "crossfade", "motion", "aa", "color", "messages", "menus", "status", "dashboard", "voice" }
 -- ANTI-ALIAS only where the renderer has it (the Xbox 360's GPU).
 if not (gfx.anti_alias_available and gfx.anti_alias_available()) then
     for i, v in ipairs(ITEMS) do if v == "aa" then table.remove(ITEMS, i) break end end
 end
 local LABELS = { resolution = "RESOLUTION", aspect = "ASPECT", sides = "SIDES", style = "HD STYLE",
-                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", crossfade = "CROSSFADE", aa = "ANTI-ALIAS", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", menus = "MENUS", status = "MENU STATUS", folder = "HD FOLDER", voice = "VOICE FILTER" }
+                 smoothing = "SMOOTHING", sharpen = "SHARPEN", lance = "LANCE VIDEOS", music = "MUSIC", track = "TRACK SPEED", crossfade = "CROSSFADE", motion = "SMOOTH MOTION", aa = "ANTI-ALIAS", color = "TRACK COLOR", messages = "MESSAGES", dashboard = "DASHBOARD", menus = "MENUS", status = "MENU STATUS", folder = "HD FOLDER", voice = "VOICE FILTER" }
 local SIDES = { "ambient", "black", "carbon", "space", "cyberpunk" }
 local SMOOTHING = { [0] = "OFF", "SUBTLE", "MORE", "MAX" }
 local STYLES = { "upscaled", "line_doubled", "line_tripled" }
@@ -140,6 +145,7 @@ function S:value(what)
     elseif what == "lance" then return display.effective(self.state).lance_smoother == false and "SAME" or "1 SMOOTHER"
     elseif what == "music" then return require("game.music").LABELS[audio.music_style()]
     elseif what == "crossfade" then return display.effective(self.state).crossfade == false and "OFF" or "ON"
+    elseif what == "motion" then return display.effective(self.state).motion == false and "OFF" or "ON"
     elseif what == "aa" then return display.effective(self.state).anti_alias == false and "OFF" or "ON"
     elseif what == "track" then return display.TRACK_SPEED_LABELS[display.effective(self.state).track_speed] or "NORMAL"
     elseif what == "messages" then return display.effective(self.state).messages == "classic" and "CLASSIC" or "ENHANCED"
@@ -201,6 +207,9 @@ function S:change(what, dir)
         for k, v in ipairs(order) do if v == st.track_speed then i = k end end
         st.track_speed = order[(i - 1 + dir) % #order + 1]
         require("scenes.race").track_speed = display.TRACK_SPEEDS[st.track_speed]
+    elseif what == "motion" then
+        st.motion = st.motion == false
+        require("scenes.race").motion = st.motion
     elseif what == "aa" then
         st.anti_alias = st.anti_alias == false
         gfx.anti_alias(st.anti_alias)
