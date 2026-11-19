@@ -1,6 +1,20 @@
 name: release-linux
 
-on: [workflow_dispatch, workflow_call]
+on:
+  workflow_dispatch:
+  workflow_call:
+    # Meguarace_Builds (a private repo) calls these with Meguarace's own
+    # source: the checkouts take it, and the local actions come with it.
+    inputs:
+      source_repository:
+        description: repository to build (default this one)
+        type: string
+        default: ""
+      source_ref:
+        description: branch, tag or commit (default the default branch)
+        type: string
+        default: ""
+
 
 jobs:
   release:
@@ -10,6 +24,8 @@ jobs:
     - uses: actions/checkout@v5
       with:
         fetch-depth: 0
+        repository: ${{ inputs.source_repository || github.repository }}
+        ref: ${{ inputs.source_ref }}
 
     - name: Configure
       uses: ./.github/actions/configure-linux
