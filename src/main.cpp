@@ -94,6 +94,19 @@ int main(int argc, char** argv) {
         std::printf("data: %s\n", eng.dataArg.c_str());
     }
 #endif
+#ifndef MEGARACE_XENON_LAYOUT
+    // A package with the game inside (release-with-game): data/ and hd/
+    // beside the program come first, before the folder it's started from.
+    {
+        char* base = SDL_GetBasePath();
+        const std::string root = base ? base : "";
+        SDL_free(base);
+        if (!root.empty()) {
+            if (eng.dataArg.empty() && fsx::isDir(fsx::join(root, "data"))) eng.dataArg = fsx::join(root, "data");
+            if (eng.hdArg.empty() && fsx::isDir(fsx::join(root, "hd"))) eng.hdArg = fsx::join(root, "hd");
+        }
+    }
+#endif
     if (eng.dataArg.empty()) eng.dataArg = "data";
     // --classic: the original's 320x200 (unless --display says otherwise).
     if (eng.classic && eng.displayArg.empty()) eng.displayArg = "native";

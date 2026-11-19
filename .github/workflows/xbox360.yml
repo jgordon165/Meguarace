@@ -9,6 +9,18 @@ on:
     branches: [master, xbox360, xbox360-xex]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    # Meguarace_Builds (a private repo) calls these with Meguarace's own
+    # source: the checkouts take it, and the local actions come with it.
+    inputs:
+      source_repository:
+        description: repository to build (default this one)
+        type: string
+        default: ""
+      source_ref:
+        description: branch, tag or commit (default the default branch)
+        type: string
+        default: ""
 
 jobs:
   xenon:
@@ -21,6 +33,9 @@ jobs:
           apt-get update -q
           DEBIAN_FRONTEND=noninteractive apt-get install -y -q cmake ninja-build git zip python3
       - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.source_repository || github.repository }}
+          ref: ${{ inputs.source_ref }}
       - name: Configure
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -53,6 +68,9 @@ jobs:
       XSDK_REF: bcbb0e7eeff4bae59f9882209e3edf5affc96767
     steps:
       - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.source_repository || github.repository }}
+          ref: ${{ inputs.source_ref }}
       - uses: actions/checkout@v5
         with:
           repository: openpak/x360-sdk
@@ -110,6 +128,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.source_repository || github.repository }}
+          ref: ${{ inputs.source_ref }}
       - run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build
       - name: Build
         run: |
