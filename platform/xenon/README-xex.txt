@@ -23,6 +23,18 @@ instead and starts at 320x200 (the HD modes are too slow that way); the log
 says which. Frames flip at the TV's vblank (60 Hz, three buffers); the log has the
 frame times every 10 s. Options > ADVANCED > ANTI-ALIAS (on by default)
 smooths the track video's diagonal edges on the GPU.
+To leave: Options > QUIT. After Lance's farewell and the credits (B or
+BACK skips them) the title stops its sound, shows a black frame and ends:
+the console goes to its default dashboard (Aurora or FreeStyle if DashLaunch
+makes it the default).
+
+Dashboard artwork: aurora/ has the port's own (an original design, no game
+art) in the Xbox 360 dashboards' sizes: icon.png 64x64, banner.png 420x96,
+boxart.png 900x600 (back, spine, front) and background.png 1280x720. The
+.xex's Title ID is 4D475241, so Aurora keeps them for this title only. To
+use them, add them with Aurora Asset Editor on a PC (it saves to Aurora
+over FTP), or pick them in Aurora's own artwork options.
+
 The sound is mixed on a hardware thread of its own.
 
 Controls

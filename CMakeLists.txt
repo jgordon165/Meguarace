@@ -294,6 +294,15 @@ endif()
 if(XSDK)
     # A normal title: xsdk links its start-up and library, then packs megarace.xex.
     xsdk_add_xex(megarace)
+    # Packed again with the port's own Title ID: xsdk's default is shared by
+    # every xsdk title, and Aurora keeps artwork per Title ID
+    # (platform/xenon/aurora/). "MGRA".
+    set(MEGARACE_TITLE_ID "4D475241" CACHE STRING "The .xex's Title ID (hex)")
+    add_custom_command(TARGET megarace POST_BUILD
+        COMMAND python3 "${XSDK_ROOT}/tools/elf2xex.py" "$<TARGET_FILE:megarace>"
+                "$<TARGET_FILE_DIR:megarace>/megarace.xex" --title-id ${MEGARACE_TITLE_ID}
+        COMMENT "megarace.xex, Title ID ${MEGARACE_TITLE_ID}"
+        VERBATIM)
 endif()
 megarace_warnings(megarace)
 if(MSVC)

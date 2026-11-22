@@ -341,6 +341,18 @@ void xp_audio_stop_feeder(void)
     feeder_thread = 0;
 }
 
+void xp_exit(int status)
+{
+    uint32_t d;
+    xsdk_log_write("exit: back to the dashboard");
+    /* Nothing left running into the dashboard: the feeder stopped, then the
+     * render driver unregistered (its callback reads the ring). */
+    xp_audio_stop_feeder();
+    d = __atomic_exchange_n(&driver, 0u, __ATOMIC_ACQ_REL);
+    if (d) XAudioUnregisterRenderDriverClient(d);
+    exit(status);
+}
+
 void xp_log(const char *msg) { xsdk_log_write("%s", msg); }
 
 /* ---- what newlib asks of the system and xsdk leaves out ----------------------

@@ -97,6 +97,7 @@ jobs:
           [ -d build-xex/soundfont ] && cp -r build-xex/soundfont pkg/meguarace/soundfont || true
           mkdir -p pkg/meguarace/data pkg/meguarace/hd
           cp platform/xenon/README-xex.txt pkg/meguarace/README.txt
+          cp -r platform/xenon/aurora pkg/meguarace/aurora
           cp platform/xenon/README-xex.txt pkg/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
           (cd pkg && zip -qr ../meguarace-xbox360-xex.zip meguarace)
           ls -la build-xex/megarace.xex meguarace-xbox360-xex.zip
