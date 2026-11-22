@@ -24,9 +24,17 @@ says which. Frames flip at the TV's vblank (60 Hz, three buffers); the log has t
 frame times every 10 s. Options > ADVANCED > ANTI-ALIAS (on by default)
 smooths the track video's diagonal edges on the GPU.
 To leave: Options > QUIT. After Lance's farewell and the credits (B or
-BACK skips them) the title stops its sound, shows a black frame and ends:
-the console goes to its default dashboard (Aurora or FreeStyle if DashLaunch
-makes it the default).
+BACK skips them) the title stops its sound, shows a black frame and ends.
+Where it goes is up to exit.txt beside meguarace.xex (copy
+exit.txt.example and edit it):
+  default                       the console's default dashboard (also with
+                                no exit.txt; Aurora or FreeStyle if
+                                DashLaunch makes it the default)
+  Usb:\Aurora\default.xex       a .xex on the first USB drive (Usb1:,
+                                Usb2: the others)
+  Hdd:\Aurora\default.xex       on the hard drive
+  \Device\Mass0\...\x.xex       a kernel path as it is
+If that .xex isn't there, the log says so and the default dashboard is used.
 
 Dashboard artwork: aurora/ has the port's own (an original design, no game
 art) in the Xbox 360 dashboards' sizes: icon.png 64x64, banner.png 420x96,

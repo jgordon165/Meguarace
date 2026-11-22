@@ -1,0 +1,5 @@
+# XAM functions the .xex imports beyond xsdk's own (imports/imports.txt
+# there), in its format: library, ordinal, name. tools/gen_imports.py from
+# xsdk turns each into a thunk (sdl2_xenon.cmake). Ordinals from
+# xenia:src/xenia/kernel/xam/xam_table.inc.
+xam.xex       0x1A4  XamLoaderLaunchTitle
