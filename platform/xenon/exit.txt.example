@@ -1,0 +1,15 @@
+# Where Options > QUIT takes the Xbox 360 (.xex build).
+#
+# Copy this file to exit.txt beside meguarace.xex and change the line below.
+# The first line that isn't blank or a comment counts:
+#
+#   default                           the console's default dashboard
+#   Usb:\Aurora\default.xex           a .xex on the first USB drive (Usb0: too)
+#   Usb1:\FreeStyle\default.xex       the second USB drive (Usb2: the third)
+#   Hdd:\Aurora\default.xex           the hard drive's content partition
+#   \Device\Mass0\Aurora\default.xex  a kernel path, used as it is
+#
+# '/' works as '\'. If the file isn't there, the game logs it (meguarace.log)
+# and goes to the default dashboard. No exit.txt: the default dashboard.
+
+default

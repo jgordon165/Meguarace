@@ -34,6 +34,17 @@ if(MEGARACE_XENON_SIM)
 elseif(XSDK)
     # The GPU renderer, in SDL's VITA_GXM driver slot (see the file).
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xsdk_platform.c ${xsdl_dir}/SDL_xenos_render.c)
+    # XAM imports beyond xsdk's (xsdk_imports.txt: XamLoaderLaunchTitle, for
+    # exit.txt), as thunks made by xsdk's own generator.
+    enable_language(ASM)
+    set(xsdk_imports_dir ${CMAKE_BINARY_DIR}/xsdk-imports)
+    set(xsdk_import_sources ${xsdk_imports_dir}/XamLoaderLaunchTitle.S)
+    add_custom_command(OUTPUT ${xsdk_import_sources}
+        COMMAND python3 "${XSDK_ROOT}/tools/gen_imports.py" "${CMAKE_CURRENT_LIST_DIR}/xsdk_imports.txt" "${xsdk_imports_dir}"
+        DEPENDS "${CMAKE_CURRENT_LIST_DIR}/xsdk_imports.txt" "${XSDK_ROOT}/tools/gen_imports.py"
+        COMMENT "XAM imports (xsdk_imports.txt)" VERBATIM)
+    set_source_files_properties(${xsdk_import_sources} PROPERTIES GENERATED TRUE COMPILE_OPTIONS "-mcpu=cell;-Wa,-mregnames")
+    list(APPEND xsdl_sources ${xsdk_import_sources})
 else()
     list(APPEND xsdl_sources ${CMAKE_CURRENT_LIST_DIR}/xenon_platform.c)
 endif()

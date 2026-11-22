@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
 
 #include "xsdk/display.h"
 #include "xsdk/gpu.h"
@@ -341,15 +343,88 @@ void xp_audio_stop_feeder(void)
     feeder_thread = 0;
 }
 
+/* XAM's launcher (xam.xex ordinal 0x1A4, imported by xsdk_imports.txt):
+ * ends this title and starts the .xex at path, a kernel path. Doesn't
+ * return when it works. */
+void XamLoaderLaunchTitle(const char *path, uint32_t flags);
+
+/* exit.txt beside the .xex: where QUIT goes. Its first line that isn't
+ * blank or a comment (# or ;): "default" (or no file) for the console's
+ * default dashboard, or the .xex to start, such as
+ *   Usb:\Aurora\default.xex          the first USB drive (Usb0: too)
+ *   Usb1:\FreeStyle\default.xex      the second (Usb2: the third)
+ *   Hdd:\Aurora\default.xex          the hard drive's content partition
+ *   \Device\Mass0\Aurora\default.xex a kernel path, as it is
+ * '/' works as '\'. A missing file is logged and the default used. */
+static const struct { const char *alias, *device; } drives[] = {
+    { "usb:", "\\Device\\Mass0" },  { "usb0:", "\\Device\\Mass0" },
+    { "usb1:", "\\Device\\Mass1" }, { "usb2:", "\\Device\\Mass2" },
+    { "hdd:", "\\Device\\Harddisk0\\Partition1" },
+    { "hdd1:", "\\Device\\Harddisk0\\Partition1" },
+};
+
+/* The kernel path exit.txt names, in out (empty: the default dashboard). */
+static void exit_target(char *out, size_t size)
+{
+    char line[512], path[512];
+    FILE *f = fopen("game:/exit.txt", "r");
+    size_t i, n;
+    out[0] = '\0';
+    if (!f) return;
+    path[0] = '\0';
+    while (fgets(line, sizeof line, f)) {
+        char *s = line, *e;
+        while (*s == ' ' || *s == '\t') ++s;
+        e = s + strlen(s);
+        while (e > s && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) *--e = '\0';
+        if (!*s || *s == '#' || *s == ';') continue;
+        if (*s == '"' && e > s + 1 && e[-1] == '"') { ++s; *--e = '\0'; }
+        snprintf(path, sizeof path, "%s", s);
+        break;
+    }
+    fclose(f);
+    for (i = 0; path[i]; ++i)
+        if (path[i] == '/') path[i] = '\\';
+    if (!path[0] || strcasecmp(path, "default") == 0) return;
+    for (i = 0; i < sizeof drives / sizeof drives[0]; ++i) {
+        n = strlen(drives[i].alias);
+        if (strncasecmp(path, drives[i].alias, n) == 0) {
+            const char *rest = path + n;
+            snprintf(out, size, "%s%s%s", drives[i].device, *rest == '\\' ? "" : "\\", rest);
+            return;
+        }
+    }
+    snprintf(out, size, "%s", path);
+}
+
 void xp_exit(int status)
 {
+    char target[512];
+    struct stat st;
     uint32_t d;
-    xsdk_log_write("exit: back to the dashboard");
-    /* Nothing left running into the dashboard: the feeder stopped, then the
+    exit_target(target, sizeof target);
+    if (target[0] && stat(target, &st) != 0) {
+        xsdk_log_write("exit: %s isn't there (exit.txt); the default dashboard", target);
+        target[0] = '\0';
+    }
+    /* Nothing left running into the next title: the feeder stopped, then the
      * render driver unregistered (its callback reads the ring). */
     xp_audio_stop_feeder();
     d = __atomic_exchange_n(&driver, 0u, __ATOMIC_ACQ_REL);
     if (d) XAudioUnregisterRenderDriverClient(d);
+    if (target[0]) {
+        /* As xsdk's _exit does: the vblank callback, the display and the GPU
+         * back to XAM before the title goes. */
+        xsdk_log_write("exit: starting %s", target);
+        xsdk_present_close();
+        xsdk_display_close();
+        (void)xsdk_gpu_close();
+        xsdk_log_close();
+        XamLoaderLaunchTitle(target, 0);
+        XamLoaderTerminateTitle();   /* if it ever comes back */
+        for (;;) (void)xsdk_thread_sleep(1000);
+    }
+    xsdk_log_write("exit: back to the dashboard");
     exit(status);
 }
 
