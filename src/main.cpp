@@ -18,6 +18,9 @@ extern "C" {
 }
 
 #include <SDL.h>
+#ifdef MEGARACE_XENON_LAYOUT
+extern "C" void xp_exit(int status);   // platform/xenon: ends the title (back to the dashboard)
+#endif
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -201,6 +204,13 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "screenshot failed: %s\n", SDL_GetError());
 
     callLua(L, "shutdown", 0, false);
+#ifdef MEGARACE_XENON_LAYOUT
+    // The 360: a black frame, then the title ends with the sound stopped and
+    // given back, not torn down under the presenter and GPU (xp_exit).
+    eng.audio.setPaused(true);
+    eng.video.presentBlack();
+    xp_exit(eng.exitCode);
+#endif
     lua_close(L);
     eng.audio.shutdown();
     eng.video.shutdown();

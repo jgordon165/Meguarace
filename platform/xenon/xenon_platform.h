@@ -67,6 +67,13 @@ int xp_gpu_ready(void);
 uint32_t xp_gpu_begin_frame(void);
 void xp_gpu_end_frame(void);
 
+/* Ends the title, the game having quit: the sound stopped and its driver
+ * given back first. xsdk: back to the console's default dashboard (Aurora
+ * or FreeStyle when DashLaunch makes it the default) through newlib's exit,
+ * whose _exit closes the display and GPU and calls XamLoaderTerminateTitle.
+ * LibXenon and the stand-in: exit. Doesn't return. */
+void xp_exit(int status);
+
 /* A line for the log (the TV console before the game starts, the UART). */
 void xp_log(const char *msg);
 

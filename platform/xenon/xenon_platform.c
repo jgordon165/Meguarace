@@ -192,6 +192,8 @@ void xp_audio_stop_feeder(void) {}
 void xp_lock(void) {}
 void xp_unlock(void) {}
 
+void xp_exit(int status) { exit(status); }
+
 void xp_log(const char *msg) { printf("%s\n", msg); }
 
 /* newlib's clock() (Lua's os.clock) asks for times(), which LibXenon lacks:

@@ -79,6 +79,14 @@ public:
     bool enableHd(int picW, int picH);
     void disableHd();          // no packs any more: back to native if in an HD mode
     bool hdAvailable() const { return picW_ > 0; }
+    // A black frame on screen (before the title ends on the 360).
+    void presentBlack() {
+        if (!renderer_) return;
+        SDL_SetRenderTarget(renderer_, nullptr);
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+        SDL_RenderClear(renderer_);
+        SDL_RenderPresent(renderer_);
+    }
     // Whether the renderer draws on a GPU (not SDL's software renderer).
     bool accelerated() const {
         SDL_RendererInfo info{};
