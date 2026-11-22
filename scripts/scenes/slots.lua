@@ -11,12 +11,13 @@
 local scenes = require("core.scenes")
 local slots  = require("game.slots")
 local font   = require("ui.font")
-local padtype = require("ui.padtype")
+local osk = require("ui.osk")
 local S = { overlay = true, hd_menu = true }
 
 S.ROWS = 6
 
 function S:enter(mode, state, done)
+    self.keyboard = nil                          -- ui.osk's, made on the first frame of typing
     self.mode, self.state, self.done = mode, state, done
     self.panel = spr.open("CONTROL4")
     self.fonts = { font.open("FONTOPT", 8), font.open("FONTOPT2", 8) }
@@ -60,9 +61,16 @@ end
 
 function S:update()
     if self.mode == "save" then
-        if padtype.active() then                   -- a controller: letters by wheel
-            local n = padtype.update(self.name, slots.MAX_NAME)
-            if n then self.name = n; return end
+        if osk.active() then                       -- a controller: the on-screen keyboard
+            self.keyboard = self.keyboard or osk.new(slots.MAX_NAME)
+            local name, what = self.keyboard:update(self.name)
+            self.name = name
+            if what == "cancel" then return self:finish(false) end
+            if what == "done" then
+                if #self.name == 0 then return end
+                return self:finish(slots.store(self.state, self.name))
+            end
+            return
         end
         local k = input.key()
         if not k then return end
@@ -91,6 +99,7 @@ function S:draw()
         local s = self.name
         if #s < slots.MAX_NAME then s = s .. "_" end
         draw_text(self.fonts[1], 128, 98, s)
+        if self.keyboard then self.keyboard:draw(self.fonts[1]) end
         return
     end
     if self.panel then panel(self.panel, 0, 100) end

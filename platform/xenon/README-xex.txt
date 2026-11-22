@@ -54,7 +54,9 @@ Controls
   START (in a race)      pause / go on
   Y                      HD pictures on/off (with HD packs)
   LB                     music on/off (menu)
-  Names: D-pad Up/Down change the letter, Right adds one, Left takes one off.
+  Names (Hall of Fame, saves): an on-screen keyboard. D-pad moves between
+  the keys, A types one (or SPACE / DEL / DONE), B rubs out a letter (with
+  nothing typed, it leaves), X a space, START done.
 
 Saves go in save/ next to meguarace.xex. A log is written
 there too: meguarace.log (send it along if something goes wrong).
