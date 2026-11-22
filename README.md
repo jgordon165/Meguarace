@@ -149,8 +149,9 @@ the LibXenon (Free60) toolchain and uploads `meguarace-xbox360.zip`.
 Controls: left stick or D-pad steers and moves in menus, RT accelerates, LT
 brakes, X or RB fires, A or START chooses (START pauses a race), B or BACK goes back, Y turns HD
 pictures on and off, LB turns the menu music on and off. Names (Hall of
-Fame, saves) are typed with the D-pad: Up/Down change the letter, Right adds
-one, Left takes one off. Saves go in `meguarace/save/`.
+Fame, saves) are typed on an on-screen keyboard: the D-pad moves between the
+keys, A types one (or SPACE, DEL, DONE), B rubs out a letter (with nothing
+typed, it leaves), X types a space, START is done. Saves go in `meguarace/save/`.
 
 How it works: the 360 has no SDL, so `platform/xenon/` builds SDL2's own
 platform-neutral code (with its software renderer) and adds small drivers

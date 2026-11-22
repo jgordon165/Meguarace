@@ -13,7 +13,7 @@
 local scenes = require("core.scenes")
 local font   = require("ui.font")
 local save   = require("game.save")
-local padtype = require("ui.padtype")
+local osk    = require("ui.osk")
 local S = { hd_menu = true }
 
 S.NAME_MAX = 16
@@ -35,6 +35,8 @@ function S:enter(state, highlight, on_done, entry)
     self.t = 0
     self.typing = entry and S.qualifies(state.hall or {}, entry.score) or false
     self.name = ""
+    -- A controller (the Xbox 360): the on-screen keyboard (ui.osk).
+    self.keyboard = self.typing and osk.active() and osk.new(S.NAME_MAX, osk.LETTERS .. " ") or nil
     if entry then state.last_run = entry end                   -- the 8th line (0x693C)
 end
 
@@ -42,22 +44,25 @@ local KEYS = {}
 for c = string.byte("A"), string.byte("Z") do KEYS[#KEYS + 1] = string.char(c) end
 for c = string.byte("0"), string.byte("9") do KEYS[#KEYS + 1] = string.char(c) end
 
+function S:keep_name()
+    if #self.name == 0 then return end
+    self.entry.name = self.name
+    self.highlight = save.add_score(self.state, self.entry)
+    save.store(self.state)
+    self.typing = false
+end
+
 function S:update_typing()
+    if self.keyboard then
+        local name, what = self.keyboard:update(self.name)
+        self.name = name
+        if what == "done" then self:keep_name()
+        elseif what == "cancel" then self.typing = false end
+        return
+    end
     if input.pressed("Escape") then self.typing = false; return end
-    if input.pressed("Return") then
-        if #self.name > 0 then
-            self.entry.name = self.name
-            self.highlight = save.add_score(self.state, self.entry)
-            save.store(self.state)
-            self.typing = false
-        end
-        return
-    end
+    if input.pressed("Return") then return self:keep_name() end
     if input.pressed("Backspace") then self.name = self.name:sub(1, -2); return end
-    if padtype.active() then                       -- a controller: letters by wheel
-        self.name = padtype.update(self.name, S.NAME_MAX, padtype.CHARS .. " ") or self.name
-        return
-    end
     if #self.name >= S.NAME_MAX then return end
     if input.pressed("Space") then self.name = self.name .. " "; return end
     for _, k in ipairs(KEYS) do
@@ -106,6 +111,7 @@ function S:draw()
         local tf = self.typing_font or f
         local shown = self.name .. (((self.t * 3) % 1 < 0.6) and "_" or "")
         tf:draw(96, 98, shown)
+        if self.keyboard then self.keyboard:draw(tf) end
     end
 end
 
