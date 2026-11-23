@@ -102,6 +102,7 @@ jobs:
           cp platform/xenon/README-xex.txt pkg/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
           (cd pkg && zip -qr ../meguarace-xbox360-xex.zip meguarace)
           ls -la build-xex/megarace.xex meguarace-xbox360-xex.zip
+          python3 tools/xex_info.py build-xex/megarace.xex pkg/meguarace/meguarace.xex
       - uses: actions/upload-artifact@v4
         with:
           name: meguarace-xbox360-xex
