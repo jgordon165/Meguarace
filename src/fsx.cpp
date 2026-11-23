@@ -1,6 +1,7 @@
 #include "fsx.h"
 
-#ifndef XENON
+// The consoles (newlib's dirent and stat) have no std::filesystem.
+#if !defined(XENON) && !defined(__WIIU__)
 #include <filesystem>
 namespace fs = std::filesystem;
 #else
@@ -11,7 +12,7 @@ namespace fs = std::filesystem;
 
 namespace fsx {
 
-#ifndef XENON
+#if !defined(XENON) && !defined(__WIIU__)
 bool isDir(const std::string& p) { std::error_code ec; return fs::is_directory(p, ec); }
 bool exists(const std::string& p) { std::error_code ec; return fs::exists(p, ec); }
 std::optional<uint64_t> fileSize(const std::string& p) {

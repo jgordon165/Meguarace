@@ -18,7 +18,7 @@ M.COLS = 10
 M.LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 -- Whether this machine types with a controller.
-function M.active() return sys.platform == "xenon" end
+function M.active() return sys.platform == "xenon" or sys.platform == "wiiu" end
 
 -- The keys for `chars` (the characters a name takes; default A-Z and 0-9):
 -- rows of up to COLS characters, then the special row.

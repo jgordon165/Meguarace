@@ -10,6 +10,7 @@
 
 #include "engine.h"
 #include "lua_api.h"
+#include "paths.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -79,11 +80,14 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (scripts.empty()) {
-        char* base = SDL_GetBasePath();
-        scripts = (base ? std::string(base) : std::string("./")) + "scripts";
-        SDL_free(base);
-    }
+    if (scripts.empty()) scripts = paths::base() + "scripts";
+#ifdef MEGARACE_WIIU_LAYOUT
+    // The Wii U starts with no arguments: the CD's files in data/ and the HD
+    // packs in hd/, in the port's folder on the SD card (paths.h).
+    if (eng.dataArg.empty()) eng.dataArg = paths::root() + "data";
+    if (eng.hdArg.empty() && fsx::isDir(paths::root() + "hd")) eng.hdArg = paths::root() + "hd";
+    std::printf("data: %s\n", eng.dataArg.c_str());
+#endif
 #ifdef MEGARACE_XENON_LAYOUT
     // The Xbox 360 starts with no arguments: everything is in the port's
     // folder on the USB stick (README, "Xbox 360"): data/ the CD's files,
@@ -106,14 +110,11 @@ int main(int argc, char** argv) {
     {
         // The SoundFont music style's .sf2: next to the game (the bundled
         // GeneralUser GS), the user folder's soundfont/, or the --music folder.
-        char* base = SDL_GetBasePath();
-        char* pref = SDL_GetPrefPath("Meguarace", "Meguarace");
+        const std::string pref = paths::pref();
         eng.audio.setSoundFontDirs({
-            fsx::join(base ? base : "./", "soundfont"),
-            pref ? fsx::join(pref, "soundfont") : std::string(),
+            fsx::join(paths::base(), "soundfont"),
+            pref.empty() ? std::string() : fsx::join(pref, "soundfont"),
             eng.musicArg});
-        SDL_free(base);
-        SDL_free(pref);
     }
 
     const bool headless = maxFrames >= 0;
@@ -125,6 +126,13 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
+#ifndef MEGARACE_XENON_LAYOUT
+    // Controllers (Input maps them to keys). Optional: a build without
+    // joystick support just has the keyboard. (The Xbox 360's pads are keys
+    // already, from its own video driver.)
+    if (!headless && SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0)
+        std::fprintf(stderr, "controllers unavailable: %s\n", SDL_GetError());
+#endif
     eng.hdOff = noHd;
     if (!eng.video.init(320, 200, scale, headless)) return 1;
     // SDL starts with text input on; the game only wants it while a text
@@ -181,12 +189,12 @@ int main(int argc, char** argv) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) eng.quit = true;
-            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat &&
-                eng.video.hdAvailable() && eng.video.mode().hd) {
-                eng.video.setHdOn(!eng.video.hdOn());
-                std::printf("HD %s\n", eng.video.hdOn() ? "on" : "off");
-            }
             eng.input.handle(ev);
+        }
+        // F10 (Y on a controller): HD pictures on/off.
+        if (eng.input.pressed("F10") && eng.video.hdAvailable() && eng.video.mode().hd) {
+            eng.video.setHdOn(!eng.video.hdOn());
+            std::printf("HD %s\n", eng.video.hdOn() ? "on" : "off");
         }
         Uint64 now = SDL_GetPerformanceCounter();
         double dt = headless ? 1.0 / 70.0 : (now - last) / freq;

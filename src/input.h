@@ -5,6 +5,10 @@
 
 // Keyboard state with edge detection. Keys are named the SDL way
 // ("Left", "Return", "Space", "A", ...); names are case-insensitive.
+//
+// Game controllers (the Wii U GamePad and Pro Controller, or any pad SDL
+// knows on a PC) arrive as the keys that do the same job, as on the Xbox 360
+// (README, "Controllers"): the game itself knows keys only.
 class Input {
 public:
     void beginFrame();              // call before polling events
@@ -21,7 +25,10 @@ public:
     const std::string& text() const { return text_; }
 
 private:
-    std::array<bool, SDL_NUM_SCANCODES> cur_{}, prev_{};
+    using Keys = std::array<bool, SDL_NUM_SCANCODES>;
+    Keys kb_{}, pad_{};      // held on the keyboard, held on a controller
+    Keys cur_{}, prev_{};    // either, now and last frame
+    void readPads();
     std::string text_;
     static SDL_Scancode lookup(const std::string& key);
 };

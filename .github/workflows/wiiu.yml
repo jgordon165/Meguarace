@@ -1,0 +1,59 @@
+# The Wii U build: meguarace.wuhb, a homebrew bundle for the Aroma
+# environment (devkitPro's devkitPPC, wut and wiiu-sdl2), and the zip to copy
+# to the SD card (README, "Wii U"). No game data: the player's own CD goes on
+# the card.
+name: wiiu
+
+on:
+  push:
+    branches: [master, wiiu-aroma]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: The repository to build (for builds started from another repository)
+        type: string
+        default: ''
+      source_ref:
+        description: The branch, tag or commit to build
+        type: string
+        default: ''
+
+jobs:
+  wiiu:
+    name: Wii U (Aroma, .wuhb)
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkitppc:latest
+    steps:
+      - name: Build tools
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q cmake ninja-build git zip python3
+          # wut and the SDL2 port (the image has most of them; this makes sure).
+          dkp-pacman -Sy --noconfirm --needed wiiu-dev wiiu-sdl2 wiiu-cmake wiiu-pkg-config || true
+          ls /opt/devkitpro/portlibs/wiiu/lib/libSDL2.a /opt/devkitpro/tools/bin/wuhbtool
+      - uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.source_repository || github.repository }}
+          ref: ${{ inputs.source_ref || '' }}
+      - name: Configure
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cmake -S . -B build-wiiu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/WiiU.cmake
+      - name: Build
+        run: cmake --build build-wiiu
+      - name: Package
+        run: |
+          ls -la build-wiiu/*.rpx build-wiiu/*.wuhb
+          mkdir -p pkg/wiiu/apps/meguarace/data pkg/wiiu/apps/meguarace/hd
+          cp build-wiiu/meguarace.wuhb pkg/wiiu/apps/
+          cp platform/wiiu/README-wiiu.txt pkg/README.txt
+          cp platform/wiiu/README-wiiu.txt pkg/wiiu/apps/meguarace/data/PUT-YOUR-MEGARACE-CD-FILES-HERE.txt
+          (cd pkg && zip -qr ../meguarace-wiiu.zip .)
+          ls -la meguarace-wiiu.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meguarace-wiiu
+          path: meguarace-wiiu.zip
