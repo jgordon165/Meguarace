@@ -178,6 +178,15 @@ FetchContent_Declare(libwebp
     GIT_TAG        v1.6.0
     GIT_SHALLOW    TRUE)
 FetchContent_MakeAvailable(libwebp)
+if(MEGARACE_WIIU)
+    # libwebp asks for position-independent code, whose relocations the
+    # Wii U's .rpx format (elf2rpl) can't hold.
+    foreach(t webp webpdemux webpdecode webpdspdecode webputilsdecode webpencode webpdsp webputils sharpyuv)
+        if(TARGET ${t})
+            set_target_properties(${t} PROPERTIES POSITION_INDEPENDENT_CODE OFF)
+        endif()
+    endforeach()
+endif()
 
 if(MEGARACE_HD_CONVERTER)
     # Real-ESRGAN ncnn-vulkan (MIT; models BSD-3), the upscaler that adds
