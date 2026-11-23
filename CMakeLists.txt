@@ -31,6 +31,19 @@ else()
     set(MEGARACE_XENON OFF)
 endif()
 
+# ---- Wii U (Aroma) -------------------------------------------------------------
+# cmake -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/WiiU.cmake (devkitPro's
+# devkitPPC, wut and wiiu-sdl2) builds meguarace.wuhb for the Aroma
+# environment: the scripts and the SoundFont inside, the CD's files on the SD
+# card (README, "Wii U").
+if(WIIU)
+    set(MEGARACE_WIIU ON)
+    set(MEGARACE_TESTS OFF CACHE BOOL "" FORCE)
+    set(MEGARACE_HD_CONVERTER OFF CACHE BOOL "" FORCE)
+else()
+    set(MEGARACE_WIIU OFF)
+endif()
+
 # ---- SDL2 (static) ---------------------------------------------------------
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
 set(SDL_STATIC ON  CACHE BOOL "" FORCE)
@@ -44,6 +57,10 @@ if(MEGARACE_XENON)
     FetchContent_MakeAvailable(SDL2)
     set(SDL2_SRC ${sdl2_SOURCE_DIR})
     include(platform/xenon/sdl2_xenon.cmake)
+elseif(MEGARACE_WIIU)
+    # devkitPro's port (the wiiu-sdl2 package): GX2 rendering on the TV and
+    # the GamePad, the controllers, AX audio and the HOME button (ProcUI).
+    find_package(SDL2 REQUIRED)
 else()
     FetchContent_Declare(SDL2
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
@@ -64,7 +81,7 @@ list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/(lua|luac|onelua|ltests)\\.c$")
 add_library(lua_static STATIC ${LUA_SOURCES})
 target_include_directories(lua_static PUBLIC ${lua_SOURCE_DIR})
 set_target_properties(lua_static PROPERTIES LINKER_LANGUAGE C)
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT MEGARACE_WIIU)
     target_compile_definitions(lua_static PRIVATE LUA_USE_LINUX)
     target_link_libraries(lua_static PUBLIC m dl)
 elseif(APPLE)
@@ -151,8 +168,8 @@ if(XSDK)
         "$<$<COMPILE_LANGUAGE:CXX>:LLONG_MIN=(-__LONG_LONG_MAX__-1LL)>"
         "$<$<COMPILE_LANGUAGE:CXX>:ULLONG_MAX=(__LONG_LONG_MAX__*2ULL+1ULL)>")
 endif()
-if(MEGARACE_XENON_TARGET OR XSDK)
-    # The 360: no threads, and libwebp's SIMD is for other CPUs.
+if(MEGARACE_XENON_TARGET OR XSDK OR MEGARACE_WIIU)
+    # The consoles: no threads, and libwebp's SIMD is for other CPUs.
     set(WEBP_USE_THREAD OFF CACHE BOOL "" FORCE)
     set(WEBP_ENABLE_SIMD OFF CACHE BOOL "" FORCE)
 endif()
@@ -277,7 +294,11 @@ if(WIN32)
     # tools/make_icon.py; no game art).
     target_sources(megarace PRIVATE res/meguarace.rc)
 endif()
-target_link_libraries(megarace PRIVATE megarace_formats megarace_hdpack SDL2::SDL2-static SDL2::SDL2main lua_static)
+target_link_libraries(megarace PRIVATE megarace_formats megarace_hdpack SDL2::SDL2-static lua_static)
+if(NOT MEGARACE_WIIU)
+    # (On the Wii U the program's own main() is the entry point.)
+    target_link_libraries(megarace PRIVATE SDL2::SDL2main)
+endif()
 if(MEGARACE_XENON)
     # Paths and controls laid out for the console (src/main.cpp, lua_api.cpp).
     target_compile_definitions(megarace PRIVATE MEGARACE_XENON_LAYOUT=1)
@@ -303,6 +324,34 @@ if(XSDK)
                 "$<TARGET_FILE_DIR:megarace>/megarace.xex" --title-id ${MEGARACE_TITLE_ID}
         COMMENT "megarace.xex, Title ID ${MEGARACE_TITLE_ID}"
         VERBATIM)
+endif()
+if(MEGARACE_WIIU)
+    # Paths and controls laid out for the console (src/paths.h, main.cpp).
+    target_compile_definitions(megarace PRIVATE MEGARACE_WIIU_LAYOUT=1)
+    # The bundle's content (read-only on the console, /vol/content): the
+    # scripts and the SoundFont, refreshed on every build.
+    set(wuhb_content ${CMAKE_BINARY_DIR}/wuhb_content)
+    file(MAKE_DIRECTORY ${wuhb_content}/scripts ${wuhb_content}/soundfont)
+    add_custom_command(TARGET megarace POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts ${wuhb_content}/scripts
+        COMMENT "Scripts into the .wuhb's content")
+    if(MEGARACE_FETCH_SOUNDFONT AND EXISTS ${gugs_dir}/GeneralUser-GS.sf2)
+        add_custom_command(TARGET megarace POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${gugs_dir}/GeneralUser-GS.sf2 ${gugs_dir}/LICENSE.txt
+                    ${wuhb_content}/soundfont
+            COMMENT "GeneralUser GS into the .wuhb's content")
+    endif()
+    set_target_properties(megarace PROPERTIES OUTPUT_NAME meguarace)
+    wut_create_rpx(megarace)
+    # Artwork: tools/make_wiiu_art.py (the port's own design, no game art).
+    wut_create_wuhb(megarace
+        NAME      "Meguarace"
+        SHORTNAME "Meguarace"
+        AUTHOR    "Meguarace contributors"
+        CONTENT   ${wuhb_content}
+        ICON      ${CMAKE_SOURCE_DIR}/platform/wiiu/icon.png
+        TVSPLASH  ${CMAKE_SOURCE_DIR}/platform/wiiu/tv-splash.png
+        DRCSPLASH ${CMAKE_SOURCE_DIR}/platform/wiiu/drc-splash.png)
 endif()
 megarace_warnings(megarace)
 if(MSVC)

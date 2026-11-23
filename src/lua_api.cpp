@@ -1,4 +1,5 @@
 #include "lua_api.h"
+#include "paths.h"
 #include "engine.h"
 #include "hd/hdconfig.h"
 #include "hd/hdpack.h"
@@ -382,12 +383,7 @@ static int input_key(lua_State* L) {
 // --------------------------------------------------------------- sys ------
 
 // ---- HD folder (Options > HD FOLDER) ----
-static std::string userDir() {
-    char* base = SDL_GetPrefPath("Meguarace", "Meguarace");
-    std::string r = base ? base : "";
-    SDL_free(base);
-    return r;
-}
+static std::string userDir() { return paths::pref(); }
 
 bool loadHd(Engine& e) {
     e.hdDir.clear();
@@ -463,11 +459,9 @@ static int sys_set_hd_folder(lua_State* L) {
 static std::string prefFile(const char* name) {
     std::string n = name;
     if (n.empty() || n.find_first_of("/\\:") != std::string::npos || n[0] == '.') return {};
-    char* base = SDL_GetPrefPath("Meguarace", "Meguarace");
-    if (!base) return {};
-    std::string path = std::string(base) + n;
-    SDL_free(base);
-    return path;
+    const std::string base = paths::pref();
+    if (base.empty()) return {};
+    return base + n;
 }
 static int sys_save(lua_State* L) {
     size_t len = 0;
@@ -1040,9 +1034,12 @@ void registerLuaApi(lua_State* L, Engine& e) {
     lua_pushstring(L, e.displayArg.c_str());   lua_setfield(L, -2, "display_arg");
     lua_pushboolean(L, e.classic);             lua_setfield(L, -2, "classic");
     lua_pushstring(L, e.hdArg.c_str());        lua_setfield(L, -2, "hd_arg");
-    // "xenon" on the Xbox 360 (a controller, no keyboard), else "pc".
-#ifdef MEGARACE_XENON_LAYOUT
+    // "xenon" on the Xbox 360, "wiiu" on the Wii U (controllers, no
+    // keyboard), else "pc".
+#if defined(MEGARACE_XENON_LAYOUT)
     lua_pushstring(L, "xenon");
+#elif defined(MEGARACE_WIIU_LAYOUT)
+    lua_pushstring(L, "wiiu");
 #else
     lua_pushstring(L, "pc");
 #endif

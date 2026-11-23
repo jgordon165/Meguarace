@@ -659,7 +659,7 @@ test("osk: the on-screen keyboard", function()
     check(k:press("A", "SPACE") == "A", "no space where the name takes none")
     local s = K.new(8, K.LETTERS .. " ")
     check(s:press("A", "SPACE") == "A " and s:press("", "SPACE") == "", "a space, not first")
-    check(K.active() == (sys.platform == "xenon"), "only where there's no keyboard")
+    check(K.active() == (sys.platform == "xenon" or sys.platform == "wiiu"), "only where there's no keyboard")
 end)
 
 test("keys: bindings and names (0x611D)", function()

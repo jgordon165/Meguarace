@@ -160,6 +160,32 @@ LibXenon. The engine and the Lua game are the same as on a PC. With
 `-DMEGARACE_XENON_SIM=ON` the same SDL build and folder layout run on Linux
 (`platform/xenon/xenon_platform_sim.c`), which CI runs as well.
 
+## Wii U
+
+A build for the Wii U runs from the **Aroma** homebrew environment as a
+homebrew bundle, `meguarace.wuhb`. The `wiiu` workflow makes it with
+devkitPro's devkitPPC, wut and SDL2 port, and uploads `meguarace-wiiu.zip`.
+
+1. Copy the zip's `wiiu` folder to the root of the SD card (it merges with
+   the one there): `wiiu/apps/meguarace.wuhb` and `wiiu/apps/meguarace/`.
+2. Copy your MegaRace CD's files into `wiiu/apps/meguarace/data/` (and, if you
+   have them, ripped music tracks into `data/music/` and HD packs into
+   `wiiu/apps/meguarace/hd/`).
+3. Start Meguarace from the Wii U Menu.
+
+The picture is on the TV and the GamePad. Controls (GamePad or Pro
+Controller) are the Xbox 360's: left stick or D-pad steers, ZR accelerates,
+ZL brakes, X or R fires, A or + chooses (+ pauses a race), B or − goes back,
+Y turns HD pictures on and off, L turns the menu music on and off. Names are
+typed on the same on-screen keyboard. Saves go in `wiiu/apps/meguarace/save/`.
+
+Build it yourself with devkitPro (`wiiu-dev`, `wiiu-sdl2`):
+`cmake -S . -B build-wiiu -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/WiiU.cmake && cmake --build build-wiiu`.
+The scripts and the SoundFont go inside the bundle (`/vol/content`), so the
+SD card only needs your CD's files (`src/paths.h`). Controllers on a PC work
+the same way now: any pad SDL knows maps to the same keys (`src/input.cpp`).
+Artwork: `tools/make_wiiu_art.py` (the port's own design, no game art).
+
 ## HD videos and display modes
 
 The game plays upscaled videos at 1440×1080 (the 4:3 picture of 1080p). You
