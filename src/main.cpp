@@ -188,6 +188,7 @@ int main(int argc, char** argv) {
             }
             eng.input.handle(ev);
         }
+        eng.input.endEvents();
         Uint64 now = SDL_GetPerformanceCounter();
         double dt = headless ? 1.0 / 70.0 : (now - last) / freq;
         last = now;

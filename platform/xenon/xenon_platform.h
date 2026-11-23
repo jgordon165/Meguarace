@@ -34,6 +34,16 @@ typedef struct xp_pad {
     int lt, rt;                          /* triggers, 0..255 */
 } xp_pad;
 
+/* The buttons as bits (SDL_xenon_video.c's XENON_PadButtons). UP, DOWN,
+ * LEFT and RIGHT are the D-pad or the left stick; LT and RT are the
+ * triggers pulled past a quarter. */
+enum {
+    XP_BTN_A = 1u << 0, XP_BTN_B = 1u << 1, XP_BTN_X = 1u << 2, XP_BTN_Y = 1u << 3,
+    XP_BTN_LB = 1u << 4, XP_BTN_RB = 1u << 5, XP_BTN_LT = 1u << 6, XP_BTN_RT = 1u << 7,
+    XP_BTN_LS = 1u << 8, XP_BTN_RS = 1u << 9, XP_BTN_START = 1u << 10, XP_BTN_BACK = 1u << 11,
+    XP_BTN_UP = 1u << 12, XP_BTN_DOWN = 1u << 13, XP_BTN_LEFT = 1u << 14, XP_BTN_RIGHT = 1u << 15
+};
+
 /* Polls USB; then xp_get_pad() returns the latest state. */
 void xp_poll(void);
 void xp_get_pad(int port, xp_pad *out);

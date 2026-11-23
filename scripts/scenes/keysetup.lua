@@ -54,13 +54,15 @@ local function draw_text(f, x, y, s)
     end
 end
 
-function S:draw()
+-- The panel and its six rows; row(i) gives row i's 13 characters (the
+-- controller setup, scenes/padsetup.lua, draws with this too).
+function S.draw_rows(self, row)
     if self.panel then
         local w, h = self.panel:size(2)
         if w then self.panel:draw(2, 160 - w // 2, 100 - h // 2) end
     end
     for i = 1, 6 do
-        local text = keys.row(i, self.new)
+        local text = row(i)
         local y = S.Y + (i - 1) * S.ROW
         local f = self.fonts[i == self.row and 2 or 1]
         if f then
@@ -72,6 +74,10 @@ function S:draw()
             end
         end
     end
+end
+
+function S:draw()
+    S.draw_rows(self, function(i) return keys.row(i, self.new) end)
 end
 
 return S

@@ -2,6 +2,7 @@
 #include <SDL.h>
 #include <array>
 #include <string>
+#include <vector>
 
 // Keyboard state with edge detection. Keys are named the SDL way
 // ("Left", "Return", "Space", "A", ...); names are case-insensitive.
@@ -20,7 +21,21 @@ public:
     void textStop() { SDL_StopTextInput(); }
     const std::string& text() const { return text_; }
 
+    // The Xbox 360's controller buttons by name (Options > CONTROLLER,
+    // scripts/game/pad.lua): "A", "B", "X", "Y", "LB", "RB", "LT", "RT",
+    // "LS", "RS", "START", "BACK", and "UP", "DOWN", "LEFT", "RIGHT" (the
+    // D-pad or the left stick). Elsewhere there are none: all false.
+    void endEvents();                               // call after polling events
+    bool padDown(const std::string& button) const;
+    bool padPressed(const std::string& button) const;
+    std::string padFirstPressed() const;            // a button that went down this frame, or ""
+    // Buttons in the list stop being keys too (the race's own), until the
+    // next call; an empty list gives them all back.
+    void padTake(const std::vector<std::string>& buttons);
+
 private:
+    unsigned padCur_ = 0, padPrev_ = 0;
+    static unsigned padBit(const std::string& button);
     std::array<bool, SDL_NUM_SCANCODES> cur_{}, prev_{};
     std::string text_;
     static SDL_Scancode lookup(const std::string& key);

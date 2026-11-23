@@ -641,6 +641,36 @@ test("rival: steering (0x4210) and sideways step (0x38EF)", function()
     check(V.side_step(r, 100, 20, 10) == 0, "road under 32 pixels: no move")
 end)
 
+test("pad: the Xbox 360 controller's bindings and setup", function()
+    local P = require("game.pad")
+    check(P.active() == (sys.platform == "xenon"), "only on the Xbox 360")
+    local st = { pad = { left = "START", fire = "Y", brake = "NOPE" } }
+    local b = P.of(st)
+    check(b.left == "LEFT" and b.fire == "Y" and b.brake == "LT" and b.accel == "RT", "defaults fill the rest")
+    check(not P.accepts("START") and not P.accepts("BACK") and P.accepts("LS"), "START and BACK are kept")
+    check(P.row(1, b) == "LEFT    :\27   ", "arrow glyph")
+    check(P.row(5, b) == "FIRE    :Y   ", "button name")
+    check(#P.row(6, b) == 13 and #P.row(3, b) == 13, "13 characters a row")
+    local used = P.used({ left = "A", right = "A", accel = "RT", brake = "LT", fire = "X" })
+    check(#used == 4, "each button once")
+    -- The setup: five buttons in turn, then any to keep; BACK reverts.
+    local S = require("scenes.padsetup")
+    local cur = { pad = P.of({}) }
+    local o = setmetatable({ state = cur, old = {}, new = {}, row = 1 }, { __index = S })
+    for k, v in pairs(cur.pad) do o.old[k] = v; o.new[k] = v end
+    check(o:press("START") == nil and o.row == 1, "START refused")
+    for _, x in ipairs({ "LEFT", "RIGHT", "A", "B", "RB" }) do check(o:press(x) == nil, "asks on") end
+    check(o.row == 6 and o:press("Y") == "keep", "kept")
+    check(cur.pad.accel == "A" and cur.pad.fire == "RB", "the new buttons")
+    o = setmetatable({ state = cur, old = { fire = "X" }, new = {}, row = 3 }, { __index = S })
+    check(o:press("BACK") == "cancel" and cur.pad.fire == "X", "BACK puts the old ones back")
+    -- The Xbox 360's options panel: four items over the six's height.
+    local O = require("scenes.options")
+    local at, full = O.pad_layout(), O.layout("options")
+    check(#at == 4 and at[1][2] == full[1][2] and at[4][2] == full[6][2], "first to last")
+    check(O.PAD_OPTIONS.acts[3] == "controller" and O.PAD_OPTIONS.items[3] == false, "CONTROLLER line")
+end)
+
 test("osk: the on-screen keyboard", function()
     local K = require("ui.osk")
     local rows = K.layout()
