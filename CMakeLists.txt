@@ -159,7 +159,7 @@ if(APPLE AND _megarace_archs GREATER 1)
         set(FLAG_${flag} 0 CACHE INTERNAL "")
     endforeach()
 endif()
-if(XSDK)
+if(XSDK OR MEGARACE_WIIU)
     # newlib's <limits.h> leaves LLONG_MAX out of C++ here, and Lua then refuses
     # 64-bit integers (luaconf.h); C sees it, so give C++ the same (as
     # platform/xenon/toolchain.cmake does for LibXenon).
