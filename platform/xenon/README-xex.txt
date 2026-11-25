@@ -49,11 +49,15 @@ Controls
 --------
   Left stick / D-pad     steer, move in menus
   Right trigger          accelerate          Left trigger    brake
-  X or RB                fire
+  X                      fire
   A or START             choose / continue   B or BACK       back / quit
-  START (in a race)      pause / go on
+  START (in a race)      pause / go on       BACK (in a race) give up
   Y                      HD pictures on/off (with HD packs)
   LB                     music on/off (menu)
+  The race buttons (steer, accelerate, brake, fire) can be changed:
+  Options > CONTROLLER asks for a button for each in turn; on the last
+  row any button keeps them, BACK puts the old ones back. START and BACK
+  can't be taken (they pause and give up).
   Names (Hall of Fame, saves): an on-screen keyboard. D-pad moves between
   the keys, A types one (or SPACE / DEL / DONE), B rubs out a letter (with
   nothing typed, it leaves), X a space, START done.

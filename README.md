@@ -147,8 +147,13 @@ the LibXenon (Free60) toolchain and uploads `meguarace-xbox360.zip`.
 3. Start XeLL and load `meguarace/meguarace.elf32` from the stick.
 
 Controls: left stick or D-pad steers and moves in menus, RT accelerates, LT
-brakes, X or RB fires, A or START chooses (START pauses a race), B or BACK goes back, Y turns HD
-pictures on and off, LB turns the menu music on and off. Names (Hall of
+brakes, X fires, A or START chooses (START pauses a race), B or BACK goes back, Y turns HD
+pictures on and off, LB turns the menu music on and off. On the 360 the options
+panel has CONTROLLER in place of KEYBOARD, JOYSTICK and MOUSE: it sets the race
+buttons (steer, accelerate, brake, fire) the way the key setup sets keys, one
+button for each in turn (`scripts/game/pad.lua`, `scripts/scenes/padsetup.lua`);
+START and BACK stay pause and give up. A bound button is the race's alone while
+racing (B as fire doesn't also give up). Names (Hall of
 Fame, saves) are typed on an on-screen keyboard: the D-pad moves between the
 keys, A types one (or SPACE, DEL, DONE), B rubs out a letter (with nothing
 typed, it leaves), X types a space, START is done. Saves go in `meguarace/save/`.

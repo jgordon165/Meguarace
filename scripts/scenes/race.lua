@@ -89,6 +89,11 @@ function S:enter(name, opts)
     self.demo_fire_at = 0
     self.on_done = opts.on_done
     self.keys = opts.keys or require("game.keys").DEFAULT   -- game/keys.lua
+    -- The Xbox 360: the controller's buttons (game/pad.lua), which stop
+    -- being keys while the race runs (B as fire mustn't give up as ESC).
+    local pad = require("game.pad")
+    self.pad = pad.active() and not opts.demo and (opts.pad or pad.DEFAULT) or nil
+    if self.pad then input.pad_take(pad.used(self.pad)) end
     self.ticks = 0
     self.clock = -COUNTDOWN
     self.last_section = nil
@@ -105,9 +110,23 @@ function S:enter(name, opts)
     music.play(music.song_for_video(name))          -- the round's song (RACEPRG 0x02AA)
 end
 
-function S:leave() self.ahead = nil; self.paused = false; audio.pause(false); gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
-function S:pause() gfx.video_grade(0) end
-function S:resume() gfx.video_grade(S.track_color) end
+function S:leave() input.pad_take(); self.ahead = nil; self.paused = false; audio.pause(false); gfx.video_grade(0); ui.install(); audio.stop_all(); music.stop(true) end
+function S:pause() gfx.video_grade(0); input.pad_take() end
+function S:resume()
+    gfx.video_grade(S.track_color)
+    if self.pad then input.pad_take(require("game.pad").used(self.pad)) end
+end
+
+-- A control held / pressed this frame: its button on the Xbox 360
+-- (game/pad.lua), else its key (game/keys.lua).
+function S:held(action)
+    if self.pad then return input.pad_down(self.pad[action]) end
+    return input.down(self.keys[action])
+end
+function S:hit(action)
+    if self.pad then return input.pad_pressed(self.pad[action]) end
+    return input.pressed(self.keys[action])
+end
 
 -- Puts rival r on the road (the only one: they come one at a time).
 function S:spawn(r)
@@ -150,8 +169,7 @@ function S:update(dt)
     local s = self.rules
     local alive = not s.destroyed
     self.steer = 0
-    local K = self.keys
-    local left, right = input.down(K.left), input.down(K.right)
+    local left, right = self:held("left"), self:held("right")
     if self.demo then left, right = self:autopilot_steer() end
     if alive and left then self.steer = self.steer + 1 end
     if alive and right then self.steer = self.steer - 1 end   -- both cancel (0x2860)
@@ -170,7 +188,7 @@ function S:update(dt)
             self.spin = self.spin - 1
             if self.spin < 0 then self.spin = 2 end
         end
-        local accel, brake = input.down(K.accel), input.down(K.brake)
+        local accel, brake = self:held("accel"), self:held("brake")
         if self.demo then accel, brake = s.slide == nil, false end   -- full throttle unless spinning (0x2D0F)
         local _, drift = rules.step(s, { accel = alive and accel, brake = not alive or brake })
         if self.demo then self:autopilot_fire() end
@@ -239,7 +257,7 @@ function S:update(dt)
         end
     end
 
-    if alive and input.pressed(self.keys.fire) then
+    if alive and self:hit("fire") then
         if rules.fire(s) then sfx.shot() end
     end
     self.fx_t = self.fx_t + dt

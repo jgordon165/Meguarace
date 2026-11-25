@@ -158,6 +158,7 @@ function S:launch()
         scenes.push(require("scenes.race"), round.video, {
             car = car, rival = rival, level = st.level, total = st.total, round = st.round,
             keys = require("game.keys").of(st),
+            pad = require("game.pad").of(st),
             title = data.track_names()[st.round],
             on_done = function(result) me:race_done(result) end,
         })

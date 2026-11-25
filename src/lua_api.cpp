@@ -16,6 +16,7 @@ extern "C" {
 #include "fsx.h"
 #include <memory>
 #include <string>
+#include <vector>
 #include <fcntl.h>
 #include <sys/stat.h>
 #ifdef _WIN32
@@ -377,6 +378,37 @@ static int input_key(lua_State* L) {
     auto k = E(L).input.firstPressed();
     if (k.empty()) lua_pushnil(L); else lua_pushstring(L, k.c_str());
     return 1;
+}
+
+// Controller buttons (the Xbox 360's; none elsewhere): input.pad_down(name),
+// input.pad_pressed(name), input.pad_button() -> a button that went down
+// this frame or nil, input.pad_take({names}) -> those buttons stop also
+// being keys (a race's bound ones); pad_take() gives them back.
+static int input_pad_down(lua_State* L) {
+    lua_pushboolean(L, E(L).input.padDown(luaL_checkstring(L, 1)));
+    return 1;
+}
+static int input_pad_pressed(lua_State* L) {
+    lua_pushboolean(L, E(L).input.padPressed(luaL_checkstring(L, 1)));
+    return 1;
+}
+static int input_pad_button(lua_State* L) {
+    auto b = E(L).input.padFirstPressed();
+    if (b.empty()) lua_pushnil(L); else lua_pushstring(L, b.c_str());
+    return 1;
+}
+static int input_pad_take(lua_State* L) {
+    std::vector<std::string> names;
+    if (lua_istable(L, 1)) {
+        const lua_Integer n = luaL_len(L, 1);
+        for (lua_Integer i = 1; i <= n; ++i) {
+            lua_geti(L, 1, i);
+            if (const char* s = lua_tostring(L, -1)) names.emplace_back(s);
+            lua_pop(L, 1);
+        }
+    }
+    E(L).input.padTake(names);
+    return 0;
 }
 
 // --------------------------------------------------------------- sys ------
@@ -997,6 +1029,8 @@ void registerLuaApi(lua_State* L, Engine& e) {
         {"any", input_any}, {"key", input_key},
         {"text_start", input_text_start}, {"text_stop", input_text_stop}, {"text", input_text},
         {"paste", input_paste},
+        {"pad_down", input_pad_down}, {"pad_pressed", input_pad_pressed},
+        {"pad_button", input_pad_button}, {"pad_take", input_pad_take},
         {nullptr, nullptr}};
     static const luaL_Reg sys[] = {
         {"ticks", sys_ticks}, {"quit", sys_quit}, {"log", sys_log},
